@@ -27,9 +27,24 @@ jobs:
       # défaut et expose Postgres sur le port 5434 de l'hôte — synchronize:true
       # côté TypeORM crée le schéma tout seul, pas de migration à lancer.
       - name: Démarrage de l'infrastructure Docker (DB + API + Front)
+        run: docker compose up -d --build
+
+      # Un `sleep` fixe ne suffit pas : le compte de test ci-dessous ouvre sa
+      # propre connexion TypeORM (synchronize:true) en parallèle de celle de
+      # l'API — sans attendre que l'API ait fini SA synchronisation de schéma
+      # au tout premier démarrage, les deux peuvent se marcher dessus.
+      - name: Attente de la disponibilité de l'API
         run: |
-          docker compose up -d --build
-          sleep 15
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:80/api > /dev/null; then
+              echo "API prête."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "L'API n'a jamais répondu à temps."
+          docker compose logs api
+          exit 1
 
       # Compte de test créé via le script existant apps/api/src/seed-coach.ts
       # (exécuté ici sur l'hôte plutôt que dans le conteneur API, puisque ce
