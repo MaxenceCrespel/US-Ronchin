@@ -47,6 +47,11 @@ jobs:
           format: "sarif"
           output: "trivy-results-${{ matrix.name }}.sarif"
           severity: "CRITICAL,HIGH"
+          # Sans ça, les CVE documentées/acceptées dans .trivyignore (scan
+          # bloquant plus bas) réapparaissaient quand même dans l'onglet
+          # Security de GitHub — les deux scans doivent utiliser la même
+          # liste d'exceptions.
+          trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
