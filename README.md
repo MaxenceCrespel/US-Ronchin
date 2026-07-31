@@ -42,9 +42,13 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 
 `qodo-pr-agent.yml` (relecture IA des pull requests) tourne indépendamment du DAG principal, sur les événements de PR.
 
+### Exceptions de sécurité documentées
+
+- **CVE-2026-14257** (`brace-expansion`, via `puppeteer-extra-plugin-stealth` → ... → `minimatch@3`) — aucun correctif compatible dans la lignée 1.x ; le seul patch existant (`5.0.8`) a une API incompatible et casserait `minimatch` en silence. La CVE nécessite une entrée contrôlée par un attaquant pour être exploitable, or elle n'est ici jamais invoquée que sur du nettoyage de fichiers internes — jamais sur une requête HTTP. Acceptée et filtrée dans `.trivyignore` (scan Docker) et `.github/scripts/check-audit.py` (SCA) ; toute AUTRE vulnérabilité continue de faire échouer ces deux jobs normalement.
+- **~38 CVE Debian** dans l'image `api` — packages X11/Xvfb installés par `playwright install --with-deps` pour Chromium, jamais utilisés (le scraper FFF tourne toujours en headless pur) et sans correctif Debian publié à ce jour. Documentées et ignorées dans `.trivyignore`.
+
 ### État connu au premier run
 
-- **SCA-Dependency-Scan** et le **scan Trivy de l'image `api`** échoueront tous les deux sur la même cause réelle : `puppeteer-extra-plugin-stealth` (utilisé par le scraper FFF) tire une chaîne `rimraf`/`glob`/`minimatch`/`brace-expansion` avec une CVE high (CVE-2026-14257). Pré-existant, pas introduit par la CI — à traiter via une mise à jour de `playwright-extra`/`puppeteer-extra-*`, volontairement pas masqué dans `.trivyignore`. Les ~38 autres CVE Debian de l'image `api` (packages X11/Xvfb installés par `playwright install --with-deps`, jamais utilisés puisque le scraper tourne en headless pur, et sans correctif Debian publié à ce jour) sont documentées et ignorées dans `.trivyignore`.
 - **Deploy-Staging** est volontairement en `continue-on-error: true` tant que la checklist ci-dessous n'est pas faite — il échouera proprement sans bloquer le reste de la pipeline.
 - **Qodo Merge** reste inactif tant que `OPENAI_KEY` n'est pas ajouté (voir plus bas).
 

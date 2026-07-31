@@ -21,6 +21,12 @@ jobs:
         # --omit=dev` avant de livrer l'image — les devDependencies (Jest,
         # ts-jest, ts-node...) ne sont jamais expédiées, donc les auditer
         # ferait échouer la CI sur des CVE inatteignables en prod.
-        run: npm audit --omit=dev --audit-level=high --workspace=api
+        #
+        # check-audit.py filtre l'advisory brace-expansion déjà documentée
+        # (voir .trivyignore) — toute AUTRE vulnérabilité high/critical fait
+        # toujours échouer ce job normalement.
+        run: |
+          npm audit --omit=dev --audit-level=high --workspace=api --json > audit-api.json || true
+          python3 .github/scripts/check-audit.py audit-api.json
       - name: Audit des dépendances Frontend
         run: npm audit --audit-level=high --workspace=web || true

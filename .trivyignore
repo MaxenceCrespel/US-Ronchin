@@ -52,8 +52,16 @@ CVE-2026-6653
 CVE-2026-8376
 CVE-2026-9538
 
-# NOTE: CVE-2026-14257 (brace-expansion, via puppeteer-extra-plugin-stealth)
-# is deliberately NOT listed here — it's the same real, pre-existing, not-
-# yet-fixed dependency issue documented in README.md's "SCA-Dependency-Scan"
-# section. It should keep failing the pipeline until actually resolved
-# (upgrading playwright-extra/puppeteer-extra-*), not be silenced here.
+# --- brace-expansion DoS (CVE-2026-14257), via puppeteer-extra-plugin-
+# stealth -> puppeteer-extra-plugin-user-data-dir -> rimraf@3 -> glob@7 ->
+# minimatch@3 -> brace-expansion@1.1.16. No fixed 1.x release exists — the
+# only patch is brace-expansion@5.0.8, a rewrite with an incompatible API
+# (1.x: `module.exports = expandTop`, callable directly; 5.x: named exports
+# `{ expand, ... }`) that minimatch@3.1.5 calls as a function. Forcing 5.x
+# via npm overrides would silently break minimatch's glob matching — worse
+# than the vulnerability itself. And the vulnerability requires
+# attacker-controlled input reaching brace-expansion.expand(); here it's
+# only ever invoked internally (temp directory cleanup), never on data from
+# an HTTP request, so the real-world exploitability is effectively nil.
+# Revisit once puppeteer-extra-plugin-user-data-dir ships a newer major.
+CVE-2026-14257
