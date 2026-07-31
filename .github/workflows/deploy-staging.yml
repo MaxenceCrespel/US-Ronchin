@@ -1,0 +1,25 @@
+name: Deploy Staging
+
+on:
+  workflow_call:
+
+jobs:
+  Deploy-Staging:
+    runs-on: ubuntu-latest
+    # Le VPS n'est pas encore prêt (Docker + clone du repo + secrets SSH à
+    # configurer côté utilisateur — voir la checklist dans le README). Ce
+    # job échouera donc pour de vraies raisons tant que ça n'est pas fait,
+    # sans pour autant faire échouer le reste de la pipeline.
+    continue-on-error: true
+    steps:
+      - name: Déploiement Continu via SSH sur le VPS (staging)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/ronchin-us-app
+            git pull
+            docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build

@@ -1,0 +1,22 @@
+# Override de staging — s'utilise EN PLUS de docker-compose.yml, jamais seul:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
+#
+# Postgres n'est plus exposé publiquement (le port 5434 du fichier de base
+# n'existe qu'en dev local) ; l'API prend ses vrais secrets depuis les
+# variables d'environnement du shell/CI plutôt que les placeholders
+# insecure du fichier de base ; le service `web` n'écoute que sur
+# 127.0.0.1 (le reverse proxy HTTPS du VPS — Caddy/nginx — fait le lien
+# avec l'extérieur, ce conteneur ne doit jamais être exposé directement).
+services:
+  postgres:
+    ports: !override []
+
+  api:
+    environment:
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      WEB_APP_URL: ${WEB_APP_URL}
+
+  web:
+    ports: !override
+      - '127.0.0.1:8080:80'

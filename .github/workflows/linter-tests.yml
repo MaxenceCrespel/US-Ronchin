@@ -1,0 +1,70 @@
+name: Linter & Tests
+
+on:
+  workflow_call:
+
+jobs:
+  Linter-and-Tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ronchin
+          POSTGRES_PASSWORD: ronchin
+          POSTGRES_DB: ronchin_us_app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: ronchin
+      DB_PASSWORD: ronchin
+      DB_NAME: ronchin_us_app
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else-1234567890
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else-1234567890
+      WEB_APP_URL: http://localhost:5173
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installation des dépendances (monorepo npm workspaces)
+        run: npm ci
+
+      - name: Vérification des types (API)
+        run: npm run typecheck --workspace=api
+
+      # TypeORM tourne en synchronize:true dans ce projet (pas de migrations) —
+      # le schéma se crée tout seul au premier appel à la base par les tests.
+      - name: Tests unitaires (API)
+        run: npm run test:cov --workspace=api
+
+      - name: Build de l'API
+        run: npm run build --workspace=api
+
+      - name: Tests d'intégration (API)
+        run: npm run test:e2e --workspace=api
+
+      - name: Sauvegarde des rapports de couverture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-coverage-reports
+          path: apps/api/coverage/lcov-report/
+
+      - name: Lint et build du frontend
+        run: |
+          npm run lint --workspace=web
+          npm run build --workspace=web

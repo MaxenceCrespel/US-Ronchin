@@ -1,0 +1,28 @@
+name: Load Testing
+
+on:
+  workflow_call:
+
+jobs:
+  Load-Testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+      # docker-compose.yml embarque des placeholders JWT/DB fonctionnels par
+      # défaut (synchronize:true côté TypeORM — pas de migration à lancer).
+      - name: Démarrage de l'infrastructure
+        run: |
+          docker compose up -d --build
+          sleep 15
+      - name: Exécution du test de charge Siege (Mode Sidecar Ubuntu)
+        run: |
+          APP_CONTAINER=$(docker compose ps -q web)
+          docker run --rm --network container:$APP_CONTAINER ubuntu:22.04 sh -c "\
+            apt-get update && \
+            apt-get install -y siege && \
+            mkdir -p ~/.siege && \
+            siege -c 20 -t 10s http://localhost:80/"
+      - name: Arrêt des services
+        if: always()
+        run: docker compose down -v

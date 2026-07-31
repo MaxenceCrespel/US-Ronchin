@@ -1,0 +1,56 @@
+name: Pipeline CI/CD Ronchin US App
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: "0 7 * * *"
+
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+  issues: write
+  packages: write
+
+jobs:
+  Linter-and-Tests:
+    uses: ./.github/workflows/linter-tests.yml
+
+  Secret-Scanning:
+    uses: ./.github/workflows/secret-scan.yml
+
+  SAST-Semgrep:
+    needs: Linter-and-Tests
+    uses: ./.github/workflows/sast-semgrep.yml
+
+  SCA-Dependency-Scan:
+    needs: Linter-and-Tests
+    uses: ./.github/workflows/sca-audit.yml
+
+  IaC-Security-Checkov:
+    uses: ./.github/workflows/iac-checkov.yml
+
+  Docker-Build-and-Security:
+    needs: Linter-and-Tests
+    uses: ./.github/workflows/docker-build.yml
+
+  Load-Testing:
+    needs: Docker-Build-and-Security
+    uses: ./.github/workflows/load-testing.yml
+
+  DAST-OWASP-ZAP:
+    needs: Docker-Build-and-Security
+    uses: ./.github/workflows/dast-zap.yml
+
+  E2E-Cypress:
+    needs: Docker-Build-and-Security
+    uses: ./.github/workflows/e2e-cypress.yml
+
+  Deploy-Staging:
+    needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    uses: ./.github/workflows/deploy-staging.yml
+    secrets: inherit

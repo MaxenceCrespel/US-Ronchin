@@ -1,0 +1,34 @@
+name: SAST Semgrep
+
+on:
+  workflow_call:
+
+permissions:
+  security-events: write
+  contents: read
+  actions: read
+
+jobs:
+  SAST-Semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep SAST
+        run: |
+          semgrep ci \
+            --config p/nodejs \
+            --config p/javascript \
+            --config p/owasp-top-ten \
+            --sarif \
+            --output semgrep.sarif
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep

@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/build
+**/coverage
+.git
+*.log
+.env
+.env.local
+apps/web/cypress/videos
+apps/web/cypress/screenshots

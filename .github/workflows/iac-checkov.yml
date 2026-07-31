@@ -1,0 +1,23 @@
+name: IaC Checkov
+
+on:
+  workflow_call:
+
+jobs:
+  IaC-Security-Checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+      - name: Scan de l'Infrastructure (Dockerfile & Compose)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: dockerfile,yaml
+          output_format: sarif
+          soft_fail: true
+      - name: Sauvegarde du rapport Checkov
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-report
+          path: results.sarif

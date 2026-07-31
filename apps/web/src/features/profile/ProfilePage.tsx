@@ -1,0 +1,391 @@
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Copy, Link2, RefreshCw, Check, Camera } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { useAuthStore } from '@/lib/auth-store'
+import { cn } from '@/lib/utils'
+import { updateProfile, uploadAvatar, deleteAvatar } from './api'
+import type { PlayerPosition, PreferredFoot } from '@/lib/types'
+import { POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
+import { fetchSettings, updateSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
+import { BadgesGrid } from '@/features/badges/BadgesGrid'
+import { PlayerAvatar } from '@/components/PlayerAvatar'
+import {
+  AccountLevelRing,
+  TIER_BADGE_CLASS,
+  TIER_LABELS,
+  useAccountLevel,
+} from '@/components/AccountLevelRing'
+import { FootballSpinner } from '@/components/FootballSpinner'
+
+function ClubSettingsCard() {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
+  const [fffTeamUrl, setFffTeamUrl] = useState('')
+
+  useEffect(() => {
+    if (settingsQuery.data) setFffTeamUrl(settingsQuery.data.fffTeamUrl ?? '')
+  }, [settingsQuery.data])
+
+  const mutation = useMutation({
+    mutationFn: () => updateSettings(fffTeamUrl),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  return (
+    <Card className="mx-auto w-full max-w-xl">
+      <CardHeader>
+        <CardTitle>Paramètres du club</CardTitle>
+        <CardDescription>Visible uniquement par le coach</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            mutation.mutate()
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="fffTeamUrl">URL de l'équipe sur epreuves.fff.fr</Label>
+            <Input
+              id="fffTeamUrl"
+              type="url"
+              placeholder="https://epreuves.fff.fr/competition/club/.../equipe/..."
+              value={fffTeamUrl}
+              onChange={(e) => setFffTeamUrl(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              Change chaque saison — utilisée pour synchroniser le calendrier officiel depuis la
+              page Matchs.
+            </p>
+          </div>
+          <Button type="submit" className="w-fit" size="sm" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+          </Button>
+          {mutation.isSuccess && (
+            <span className="text-muted-foreground text-sm">Paramètres mis à jour.</span>
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function JoinLinkCard() {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
+  const [copied, setCopied] = useState(false)
+
+  const regenerateMutation = useMutation({
+    mutationFn: regenerateJoinLink,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  const disableMutation = useMutation({
+    mutationFn: disableJoinLink,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  const joinUrl = settingsQuery.data?.joinToken
+    ? `${window.location.origin}/join?token=${settingsQuery.data.joinToken}`
+    : null
+
+  return (
+    <Card className="mx-auto w-full max-w-xl">
+      <CardHeader>
+        <CardTitle>Lien d'invitation</CardTitle>
+        <CardDescription>
+          Partage ce lien (WhatsApp, SMS...) pour que les joueurs créent eux-mêmes leur compte —
+          tu devras ensuite valider chaque nouveau compte dans l'effectif.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {joinUrl ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                navigator.clipboard.writeText(joinUrl)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+              aria-label="Copier le lien"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">Aucun lien actif pour le moment.</p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={regenerateMutation.isPending}
+            onClick={() => regenerateMutation.mutate()}
+          >
+            <RefreshCw className="size-4" />
+            {joinUrl ? 'Régénérer' : 'Générer un lien'}
+          </Button>
+          {joinUrl && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={disableMutation.isPending}
+              onClick={() => disableMutation.mutate()}
+            >
+              Désactiver
+            </Button>
+          )}
+        </div>
+        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+          <Link2 className="mt-0.5 size-3.5 shrink-0" />
+          Régénérer le lien invalide immédiatement l'ancien — utile si tu penses qu'il a fuité en
+          dehors du groupe.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function ProfilePage() {
+  const user = useAuthStore((s) => s.user)
+  const setUser = useAuthStore((s) => s.setUser)
+
+  const [position, setPosition] = useState<PlayerPosition | ''>(user?.position ?? '')
+  const [jerseyNumber, setJerseyNumber] = useState(user?.jerseyNumber?.toString() ?? '')
+  const [preferredFoot, setPreferredFoot] = useState<PreferredFoot | ''>(
+    user?.preferredFoot ?? '',
+  )
+  const [heightCm, setHeightCm] = useState(user?.heightCm?.toString() ?? '')
+  const [weightKg, setWeightKg] = useState(user?.weightKg?.toString() ?? '')
+  const [birthDate, setBirthDate] = useState(user?.birthDate ?? '')
+  const [phone, setPhone] = useState(user?.phone ?? '')
+
+  const levelQuery = useAccountLevel(user?.id ?? '')
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateProfile({
+        position: position || undefined,
+        jerseyNumber: jerseyNumber ? Number(jerseyNumber) : undefined,
+        preferredFoot: preferredFoot || undefined,
+        heightCm: heightCm ? Number(heightCm) : undefined,
+        weightKg: weightKg ? Number(weightKg) : undefined,
+        birthDate: birthDate || undefined,
+        phone: phone || undefined,
+      }),
+    onSuccess: (updated) => setUser(updated),
+  })
+
+  const avatarMutation = useMutation({
+    mutationFn: uploadAvatar,
+    onSuccess: (updated) => setUser(updated),
+  })
+  const removeAvatarMutation = useMutation({
+    mutationFn: deleteAvatar,
+    onSuccess: (updated) => setUser(updated),
+  })
+
+  if (!user) return null
+
+  return (
+    <div className="flex flex-col gap-6">
+    <Card className="mx-auto w-full max-w-xl" data-tour="profile-form">
+      <CardHeader>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <AccountLevelRing userId={user.id} ringWidth={4}>
+              <PlayerAvatar
+                avatarUrl={user.avatarUrl}
+                firstName={user.firstName}
+                lastName={user.lastName}
+                size="xl"
+              />
+            </AccountLevelRing>
+            {avatarMutation.isPending && (
+              <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded-full">
+                <FootballSpinner className="text-xs" />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="w-fit">
+              <span className="border-input hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium">
+                <Camera className="size-4" />
+                {user.avatarUrl ? 'Changer la photo' : 'Ajouter une photo'}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) avatarMutation.mutate(file)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+            {user.avatarUrl && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-destructive w-fit text-xs underline decoration-dotted"
+                disabled={removeAvatarMutation.isPending}
+                onClick={() => removeAvatarMutation.mutate()}
+              >
+                Supprimer la photo
+              </button>
+            )}
+          </div>
+        </div>
+        <CardTitle className="flex items-center gap-2">
+          {user.firstName} {user.lastName}
+          {levelQuery.data && (
+            <span
+              className={cn(
+                'rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase',
+                TIER_BADGE_CLASS[levelQuery.data.tier],
+              )}
+            >
+              {TIER_LABELS[levelQuery.data.tier]}
+            </span>
+          )}
+        </CardTitle>
+        <CardDescription>
+          {user.isLicensed ? 'Joueur licencié' : 'Joueur non licencié'} — {user.email}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            mutation.mutate()
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label>Poste</Label>
+            <Select value={position} onValueChange={(v) => setPosition(v as PlayerPosition)}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sélectionner un poste" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(POSITION_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="jerseyNumber">Numéro de maillot</Label>
+            <Input
+              id="jerseyNumber"
+              type="number"
+              min={0}
+              max={99}
+              value={jerseyNumber}
+              onChange={(e) => setJerseyNumber(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Pied fort</Label>
+            <Select
+              value={preferredFoot}
+              onValueChange={(v) => setPreferredFoot(v as PreferredFoot)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sélectionner" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(FOOT_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="birthDate">Date de naissance</Label>
+            <Input
+              id="birthDate"
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="heightCm">Taille (cm)</Label>
+            <Input
+              id="heightCm"
+              type="number"
+              min={100}
+              max={230}
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="weightKg">Poids (kg)</Label>
+            <Input
+              id="weightKg"
+              type="number"
+              min={30}
+              max={200}
+              value={weightKg}
+              onChange={(e) => setWeightKg(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="phone">Téléphone</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="06 12 34 56 78"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Enregistrement...' : 'Enregistrer mon profil'}
+            </Button>
+            {mutation.isSuccess && (
+              <span className="text-muted-foreground ml-3 text-sm">Profil mis à jour.</span>
+            )}
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+    <BadgesGrid userId={user.id} />
+    {user.role === 'COACH' && <JoinLinkCard />}
+    {user.role === 'COACH' && <ClubSettingsCard />}
+    </div>
+  )
+}

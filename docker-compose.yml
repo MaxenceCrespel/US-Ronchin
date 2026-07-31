@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ronchin-us-app-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ronchin
+      POSTGRES_PASSWORD: ronchin
+      POSTGRES_DB: ronchin_us_app
+    ports:
+      - '5434:5432'
+    volumes:
+      - ronchin-us-app-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ronchin']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ronchin-us-app-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ronchin
+      DB_PASSWORD: ronchin
+      DB_NAME: ronchin_us_app
+      # Insecure placeholders so a bare `docker compose up` boots with zero
+      # config. Replace both before exposing this beyond your own machine —
+      # `openssl rand -hex 64` for each, and set them for real in
+      # docker-compose.staging.yml (or an .env file) rather than here.
+      JWT_ACCESS_SECRET: dev-only-insecure-access-secret-change-me-before-any-real-deploy
+      JWT_REFRESH_SECRET: dev-only-insecure-refresh-secret-change-me-before-any-real-deploy
+      WEB_APP_URL: http://localhost
+      CLUB_NAME: Ronchin
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: ronchin-us-app-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '80:80'
+
+volumes:
+  ronchin-us-app-postgres-data:

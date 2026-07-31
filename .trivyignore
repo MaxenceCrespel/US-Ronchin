@@ -1,0 +1,3 @@
+# Trivy vulnerability exceptions — one CVE ID per line, with a comment
+# explaining why it's safe to ignore. Empty for now; add entries here
+# instead of lowering the pipeline's severity threshold.

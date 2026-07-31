@@ -1,0 +1,69 @@
+name: E2E Cypress Tests
+
+on:
+  workflow_call:
+
+env:
+  COACH_EMAIL: e2e-coach@ronchin-us.fr
+  COACH_PASSWORD: E2eCoachPassword123!
+
+jobs:
+  Cypress-Tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Configuration de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installation des dépendances (monorepo npm workspaces)
+        run: npm ci
+
+      # docker-compose.yml embarque des placeholders JWT/DB fonctionnels par
+      # défaut et expose Postgres sur le port 5434 de l'hôte — synchronize:true
+      # côté TypeORM crée le schéma tout seul, pas de migration à lancer.
+      - name: Démarrage de l'infrastructure Docker (DB + API + Front)
+        run: |
+          docker compose up -d --build
+          sleep 15
+
+      # Compte de test créé via le script existant apps/api/src/seed-coach.ts
+      # (exécuté ici sur l'hôte plutôt que dans le conteneur API, puisque ce
+      # dernier est une image de prod allégée de ses devDependencies comme
+      # ts-node — voir apps/api/Dockerfile).
+      - name: Création du compte coach de test
+        working-directory: apps/api
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5434
+          DB_USER: ronchin
+          DB_PASSWORD: ronchin
+          DB_NAME: ronchin_us_app
+          SEED_COACH_EMAIL: ${{ env.COACH_EMAIL }}
+          SEED_COACH_PASSWORD: ${{ env.COACH_PASSWORD }}
+        run: npm run seed:coach
+
+      - name: Exécution des tests Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: apps/web
+          wait-on: "http://localhost:80"
+          wait-on-timeout: 60
+        env:
+          CYPRESS_COACH_EMAIL: ${{ env.COACH_EMAIL }}
+          CYPRESS_COACH_PASSWORD: ${{ env.COACH_PASSWORD }}
+
+      - name: Sauvegarde de la vidéo en cas d'échec
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: cypress-video
+          path: apps/web/cypress/videos
+
+      - name: Extinction de l'infrastructure
+        if: always()
+        run: docker compose down -v
