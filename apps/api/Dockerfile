@@ -44,18 +44,68 @@ COPY --from=api-build /build/apps/api/package.json ./package.json
 # without waiting on a base image rebuild.
 RUN npm install -g npm@latest
 
-# Chromium + its system libs, matching whatever playwright version is in
-# node_modules — required at runtime by the FFF calendar scraper (cron job
-# + manual POST /fff-sync/run), not by the rest of the API. Debian's own
-# packages (not just the ones Playwright pulls in) drift out of date on the
-# pinned base image the same way Alpine's do — patch them too before
-# installing anything else.
+# Chromium, matching whatever playwright version is in node_modules —
+# required at runtime by the FFF calendar scraper (cron job + manual POST
+# /fff-sync/run), not by the rest of the API. Debian's own packages drift
+# out of date on the pinned base image the same way Alpine's do — patch
+# them too before installing anything else.
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
-RUN npx playwright install --with-deps chromium \
+
+# `playwright install --with-deps` pulls Playwright's full recommended
+# package set, which includes a lot the FFF scraper never touches — a
+# virtual X server (Xvfb), Perl compression/socket tooling, ncurses,
+# util-linux mount utilities... none of it reachable since the scraper
+# always launches Chromium in pure headless mode (no display, ever). That
+# bloat was showing up as a wall of unrelated, unfixable CVEs in scans for
+# packages the app never runs. Installing only the actual shared libraries
+# headless Chromium links against keeps the same real functionality with a
+# much smaller, much more honest attack surface.
+# Fixed, explicit install path — otherwise Playwright installs to
+# $HOME/.cache/ms-playwright (root's $HOME at build time), but the
+# container runs as the unprivileged `app` user below whose $HOME
+# (/nonexistent) it can never read from, and the browser silently "goes
+# missing" at runtime.
+# fff-scraper.service.ts requests `channel: 'chrome'` specifically (real
+# Google Chrome, not the open-source Chromium build) — installing the
+# wrong one leaves a browser present but unusable at runtime
+# ("Chromium distribution 'chrome' is not found").
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install chrome
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libgbm1 \
+    libglib2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxkbcommon0 \
+    libxshmfence1 \
+    libxtst6 \
   && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup --system app && adduser --system --ingroup app app \
-  && chown -R app:app /app
+# --home /home/app rather than the default /nonexistent — Chrome's crash
+# reporter (crashpad) needs a real, writable $HOME to set up its database
+# and fails to launch at all without one.
+RUN addgroup --system app && adduser --system --home /home/app --ingroup app app \
+  && mkdir -p /home/app && chown -R app:app /app /ms-playwright /home/app
 USER app
 
 EXPOSE 3001

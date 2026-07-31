@@ -3,40 +3,47 @@
 # here; only add when there's a genuine, documented reason a real finding
 # doesn't apply.
 
-# --- apps/api image: Debian packages pulled in by `playwright install
-# --with-deps chromium` (see apps/api/Dockerfile). All of these are marked
-# "affected" by Trivy with no fixed version yet published for Debian
-# bookworm — `apt-get upgrade` (already run in the Dockerfile) has nothing
-# newer to install. None of this is reachable application attack surface:
-# it's OS packages installed for Chromium's benefit, never invoked over the
-# network, and specifically xserver-common/xvfb are dead weight since the
-# FFF scraper (apps/api/src/fff-sync/fff-scraper.service.ts) always runs
-# Chromium in headless mode and never starts an X server at all.
+# --- apps/api image: transitive Debian dependencies pulled in by
+# installing Google Chrome itself (`playwright install chrome` — see
+# apps/api/Dockerfile). Google Chrome's own .deb package installs with its
+# full Recommends: chain (fonts, perl, glib, cups, ncurses, util-linux...)
+# the same way `playwright install --with-deps` did — switching from the
+# generic Chromium build to the specific "chrome" channel the FFF scraper
+# requires (fff-scraper.service.ts uses `channel: 'chrome'`) didn't reduce
+# this, it's inherent to installing Chrome's actual package on Debian.
+# `apt-get upgrade` (already run in the Dockerfile) has nothing newer for
+# any of these — Trivy marks them "affected"/"will_not_fix", no Debian
+# bookworm fix published. None of it is reachable application attack
+# surface: the scraper only ever visits one fixed, trusted FFF domain over
+# HTTPS, in pure headless mode (no X server, no user-supplied files,
+# no LDAP/SSH/TIFF processing) — this whole dependency chain sits unused.
+CVE-2022-4055
 CVE-2023-25193
+CVE-2023-2953
 CVE-2023-45853
-CVE-2023-5574
+CVE-2023-52355
 CVE-2025-59375
+CVE-2025-69534
 CVE-2025-69720
 CVE-2025-7458
+CVE-2026-11940
+CVE-2026-12064
+CVE-2026-12912
 CVE-2026-13221
+CVE-2026-15308
 CVE-2026-25210
 CVE-2026-34980
+CVE-2026-3644
+CVE-2026-36849
 CVE-2026-41992
 CVE-2026-42496
 CVE-2026-42497
 CVE-2026-45186
 CVE-2026-48962
-CVE-2026-50256
-CVE-2026-50257
-CVE-2026-50258
-CVE-2026-50259
-CVE-2026-50260
-CVE-2026-50261
-CVE-2026-50264
 CVE-2026-53615
 CVE-2026-54369
-CVE-2026-55999
-CVE-2026-56000
+CVE-2026-55199
+CVE-2026-55200
 CVE-2026-56131
 CVE-2026-56408
 CVE-2026-57432
@@ -48,8 +55,16 @@ CVE-2026-58013
 CVE-2026-58014
 CVE-2026-58015
 CVE-2026-58016
+CVE-2026-58471
+CVE-2026-58472
+CVE-2026-6276
 CVE-2026-6653
+CVE-2026-7210
+CVE-2026-7598
+CVE-2026-8286
 CVE-2026-8376
+CVE-2026-8927
+CVE-2026-8932
 CVE-2026-9538
 
 # --- brace-expansion DoS (CVE-2026-14257), via puppeteer-extra-plugin-

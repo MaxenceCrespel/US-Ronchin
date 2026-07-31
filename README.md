@@ -21,7 +21,7 @@ SEED_COACH_EMAIL=toi@exemple.fr SEED_COACH_PASSWORD='...' npm run seed:coach
 ## Build & déploiement Docker
 
 L'app tourne en deux images distinctes derrière nginx (voir `apps/api/Dockerfile`, `apps/web/Dockerfile`, `apps/web/nginx.conf`) :
-- `api` — NestJS, sert `/api/*`. Inclut Chromium (Playwright) pour la synchronisation automatique du calendrier FFF (`fff-sync`).
+- `api` — NestJS, sert `/api/*`. Inclut Google Chrome (Playwright, `channel: 'chrome'`) pour la synchronisation automatique du calendrier FFF (`fff-sync`) — vérifié en lançant réellement un navigateur et en naviguant vers une page dans l'image buildée, pas seulement en confirmant que le build passe.
 - `web` — build statique React servi par nginx, qui reverse-proxy `/api/*` vers le service `api` (même rôle que le proxy Vite en dev).
 
 ```bash
@@ -45,7 +45,7 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 ### Exceptions de sécurité documentées
 
 - **CVE-2026-14257** (`brace-expansion`, via `puppeteer-extra-plugin-stealth` → ... → `minimatch@3`) — aucun correctif compatible dans la lignée 1.x ; le seul patch existant (`5.0.8`) a une API incompatible et casserait `minimatch` en silence. La CVE nécessite une entrée contrôlée par un attaquant pour être exploitable, or elle n'est ici jamais invoquée que sur du nettoyage de fichiers internes — jamais sur une requête HTTP. Acceptée et filtrée dans `.trivyignore` (scan Docker) et `.github/scripts/check-audit.py` (SCA) ; toute AUTRE vulnérabilité continue de faire échouer ces deux jobs normalement.
-- **~38 CVE Debian** dans l'image `api` — packages X11/Xvfb installés par `playwright install --with-deps` pour Chromium, jamais utilisés (le scraper FFF tourne toujours en headless pur) et sans correctif Debian publié à ce jour. Documentées et ignorées dans `.trivyignore`.
+- **~48 CVE Debian** dans l'image `api` — dépendances (perl, glib, ncurses, util-linux, python3, curl, libtiff, libldap, libssh2...) que le paquet `.deb` de Google Chrome installe lui-même via ses propres `Recommends:`, indépendamment de ce que le Dockerfile installe explicitement. Aucune n'est un chemin d'attaque atteignable : le scraper FFF ne visite qu'un seul domaine fixe et de confiance, en headless pur, sans jamais traiter de fichier, de connexion LDAP/SSH ni d'image TIFF fournis par un tiers. Documentées et ignorées dans `.trivyignore`.
 
 ### État connu au premier run
 
