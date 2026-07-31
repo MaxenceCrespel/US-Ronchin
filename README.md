@@ -54,11 +54,21 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 
 ## Checklist : activer le déploiement automatique sur le VPS
 
-1. Sur le VPS : installer Docker + Docker Compose, puis cloner le repo dans `/opt/ronchin-us-app`.
-2. Sur GitHub (Settings → Secrets and variables → Actions), ajouter :
+1. **Swap** (le VPS cible fait 4 Go de RAM, partagés avec un autre site — de la marge, mais le swap reste une assurance peu coûteuse) — sans ça, un pic mémoire (Chrome, lancé par le scraper FFF) risque de faire tomber n'importe quel processus sur la machine, pas forcément le bon :
+   ```bash
+   sudo fallocate -l 2G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # persiste au redémarrage
+   ```
+2. Sur le VPS : installer Docker + Docker Compose, puis cloner le repo dans `/opt/ronchin-us-app`.
+3. Sur GitHub (Settings → Secrets and variables → Actions), ajouter :
    - `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_KEY` (clé privée SSH dédiée, accès en écriture sur `/opt/ronchin-us-app` uniquement)
    - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (`openssl rand -hex 64` chacun) et `WEB_APP_URL` (URL publique réelle du site) — lus par `docker-compose.staging.yml`
-3. Une fois testé et stable, retirer `continue-on-error: true` de `.github/workflows/deploy-staging.yml` pour que la pipeline échoue vraiment si le déploiement casse.
+4. Une fois testé et stable, retirer `continue-on-error: true` de `.github/workflows/deploy-staging.yml` pour que la pipeline échoue vraiment si le déploiement casse.
+
+> `docker-compose.staging.yml` limite déjà la RAM de chaque conteneur (`mem_limit` — 1 Go pour `api`, 300 Mo pour `postgres`, 128 Mo pour `web`) : si le scraper FFF s'emballe, seul son propre conteneur peut en faire les frais, jamais un service d'un autre projet hébergé sur le même VPS (CarlaCréation, par exemple).
 
 ## Activer Qodo Merge (relecture IA des PR)
 

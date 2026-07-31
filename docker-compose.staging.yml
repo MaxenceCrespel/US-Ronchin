@@ -7,16 +7,31 @@
 # insecure du fichier de base ; le service `web` n'écoute que sur
 # 127.0.0.1 (le reverse proxy HTTPS du VPS — Caddy/nginx — fait le lien
 # avec l'extérieur, ce conteneur ne doit jamais être exposé directement).
+#
+# mem_limit sur chaque service : le VPS cible (4 Go de RAM) est partagé
+# avec un autre site (CarlaCréation) — sans limite, un pic mémoire ici
+# (Chrome, lancé par le scraper FFF) pourrait pousser le noyau à tuer un
+# processus de L'AUTRE site plutôt que le nôtre (l'OOM killer ne sait pas
+# qui est "responsable", juste qui utilise de la mémoire). Une limite dure
+# garantit qu'un cgroup qui déborde ne peut faire tuer que CE qui est
+# dedans — jamais un conteneur d'un autre projet. Avec 4 Go au total, pas
+# besoin d'être aussi strict qu'avec 2 Go — ces valeurs laissent une bonne
+# marge à Chrome tout en gardant un plafond ferme.
 services:
   postgres:
     ports: !override []
+    mem_limit: 300m
 
   api:
     environment:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       WEB_APP_URL: ${WEB_APP_URL}
+    # Le plus généreux des trois : c'est ici que Chrome se lance
+    # (fff-scraper.service.ts), le seul vrai pic mémoire de toute l'appli.
+    mem_limit: 1024m
 
   web:
     ports: !override
       - '127.0.0.1:8080:8080'
+    mem_limit: 128m
