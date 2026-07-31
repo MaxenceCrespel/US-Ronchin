@@ -58,6 +58,12 @@ jobs:
           DB_USER: ronchin
           DB_PASSWORD: ronchin
           DB_NAME: ronchin_us_app
+          # The seed script boots the whole AppModule (NestFactory.
+          # createApplicationContext), which includes AuthModule -> JwtStrategy
+          # -> ConfigService.getOrThrow('JWT_ACCESS_SECRET') — required even
+          # though the seed script itself never issues a token.
+          JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else-1234567890
+          JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else-1234567890
           SEED_COACH_EMAIL: ${{ env.COACH_EMAIL }}
           SEED_COACH_PASSWORD: ${{ env.COACH_PASSWORD }}
         run: npm run seed:coach
