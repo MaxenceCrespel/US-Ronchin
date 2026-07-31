@@ -1,3 +1,59 @@
 # Trivy vulnerability exceptions — one CVE ID per line, with a comment
-# explaining why it's safe to ignore. Empty for now; add entries here
-# instead of lowering the pipeline's severity threshold.
+# explaining why it's safe to ignore. Prefer fixing over adding entries
+# here; only add when there's a genuine, documented reason a real finding
+# doesn't apply.
+
+# --- apps/api image: Debian packages pulled in by `playwright install
+# --with-deps chromium` (see apps/api/Dockerfile). All of these are marked
+# "affected" by Trivy with no fixed version yet published for Debian
+# bookworm — `apt-get upgrade` (already run in the Dockerfile) has nothing
+# newer to install. None of this is reachable application attack surface:
+# it's OS packages installed for Chromium's benefit, never invoked over the
+# network, and specifically xserver-common/xvfb are dead weight since the
+# FFF scraper (apps/api/src/fff-sync/fff-scraper.service.ts) always runs
+# Chromium in headless mode and never starts an X server at all.
+CVE-2023-25193
+CVE-2023-45853
+CVE-2023-5574
+CVE-2025-59375
+CVE-2025-69720
+CVE-2025-7458
+CVE-2026-13221
+CVE-2026-25210
+CVE-2026-34980
+CVE-2026-41992
+CVE-2026-42496
+CVE-2026-42497
+CVE-2026-45186
+CVE-2026-48962
+CVE-2026-50256
+CVE-2026-50257
+CVE-2026-50258
+CVE-2026-50259
+CVE-2026-50260
+CVE-2026-50261
+CVE-2026-50264
+CVE-2026-53615
+CVE-2026-54369
+CVE-2026-55999
+CVE-2026-56000
+CVE-2026-56131
+CVE-2026-56408
+CVE-2026-57432
+CVE-2026-57433
+CVE-2026-58010
+CVE-2026-58011
+CVE-2026-58012
+CVE-2026-58013
+CVE-2026-58014
+CVE-2026-58015
+CVE-2026-58016
+CVE-2026-6653
+CVE-2026-8376
+CVE-2026-9538
+
+# NOTE: CVE-2026-14257 (brace-expansion, via puppeteer-extra-plugin-stealth)
+# is deliberately NOT listed here — it's the same real, pre-existing, not-
+# yet-fixed dependency issue documented in README.md's "SCA-Dependency-Scan"
+# section. It should keep failing the pipeline until actually resolved
+# (upgrading playwright-extra/puppeteer-extra-*), not be silenced here.

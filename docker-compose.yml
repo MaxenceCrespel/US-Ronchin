@@ -51,7 +51,7 @@ services:
     depends_on:
       - api
     ports:
-      - '80:80'
+      - '80:8080'
 
 volumes:
   ronchin-us-app-postgres-data:

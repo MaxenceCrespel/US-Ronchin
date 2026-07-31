@@ -4,17 +4,18 @@
 # Alpine's musl libc has a long history of Chromium compatibility issues,
 # Debian doesn't.
 #
-# This is an npm workspaces monorepo (single root package-lock.json for
-# both apps/api and apps/web) — `npm ci` therefore needs both workspaces'
-# package.json files present, and installs into one hoisted root
-# node_modules rather than a per-app one. Built from the repo root as
-# context (see docker-compose.yml's `context: .`).
+# npm workspaces monorepo, single root package-lock.json — but `npm ci`
+# doesn't require every workspace's package.json to be present, it just
+# installs whatever workspaces it can see. Deliberately NOT copying
+# apps/web/package.json here: including it would pull the entire frontend
+# dependency tree (react, react-router...) into this image for nothing,
+# widening both the image size and the surface Trivy scans. Built from the
+# repo root as context (see docker-compose.yml's `context: .`).
 
 FROM node:22-alpine AS api-build
 WORKDIR /build
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
-COPY apps/web/package.json apps/web/package.json
 # Playwright's postinstall tries to download a browser during `npm ci` —
 # skip it here, the runtime stage below installs the matching one itself.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -36,9 +37,20 @@ COPY --from=api-build /build/node_modules ./node_modules
 COPY --from=api-build /build/apps/api/dist ./dist
 COPY --from=api-build /build/apps/api/package.json ./package.json
 
+# The npm version bundled with the base image vendors its own (occasionally
+# vulnerable) copies of tar/picomatch/sigstore/brace-expansion — irrelevant
+# to our app code, but still part of the image Trivy scans, and `npx` below
+# invokes this npm at build time. Upgrading it keeps that surface current
+# without waiting on a base image rebuild.
+RUN npm install -g npm@latest
+
 # Chromium + its system libs, matching whatever playwright version is in
 # node_modules — required at runtime by the FFF calendar scraper (cron job
-# + manual POST /fff-sync/run), not by the rest of the API.
+# + manual POST /fff-sync/run), not by the rest of the API. Debian's own
+# packages (not just the ones Playwright pulls in) drift out of date on the
+# pinned base image the same way Alpine's do — patch them too before
+# installing anything else.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 RUN npx playwright install --with-deps chromium \
   && rm -rf /var/lib/apt/lists/*
 

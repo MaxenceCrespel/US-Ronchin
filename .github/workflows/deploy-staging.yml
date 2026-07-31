@@ -2,6 +2,13 @@ name: Deploy Staging
 
 on:
   workflow_call:
+    secrets:
+      STAGING_SSH_HOST:
+        required: false
+      STAGING_SSH_USER:
+        required: false
+      STAGING_SSH_KEY:
+        required: false
 
 jobs:
   Deploy-Staging:
@@ -13,7 +20,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Déploiement Continu via SSH sur le VPS (staging)
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
         with:
           host: ${{ secrets.STAGING_SSH_HOST }}
           username: ${{ secrets.STAGING_SSH_USER }}

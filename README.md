@@ -44,7 +44,7 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 
 ### État connu au premier run
 
-- **SCA-Dependency-Scan** échouera probablement sur `apps/api` : `puppeteer-extra-plugin-stealth` (utilisé par le scraper FFF) tire une chaîne `rimraf`/`glob`/`minimatch`/`brace-expansion` avec une CVE high. Vulnérabilité réelle et pré-existante, pas introduite par la CI — à traiter via une mise à jour de `playwright-extra`/`puppeteer-extra-*` ou une exception documentée dans une future itération, pas masquée en abaissant le seuil.
+- **SCA-Dependency-Scan** et le **scan Trivy de l'image `api`** échoueront tous les deux sur la même cause réelle : `puppeteer-extra-plugin-stealth` (utilisé par le scraper FFF) tire une chaîne `rimraf`/`glob`/`minimatch`/`brace-expansion` avec une CVE high (CVE-2026-14257). Pré-existant, pas introduit par la CI — à traiter via une mise à jour de `playwright-extra`/`puppeteer-extra-*`, volontairement pas masqué dans `.trivyignore`. Les ~38 autres CVE Debian de l'image `api` (packages X11/Xvfb installés par `playwright install --with-deps`, jamais utilisés puisque le scraper tourne en headless pur, et sans correctif Debian publié à ce jour) sont documentées et ignorées dans `.trivyignore`.
 - **Deploy-Staging** est volontairement en `continue-on-error: true` tant que la checklist ci-dessous n'est pas faite — il échouera proprement sans bloquer le reste de la pipeline.
 - **Qodo Merge** reste inactif tant que `OPENAI_KEY` n'est pas ajouté (voir plus bas).
 

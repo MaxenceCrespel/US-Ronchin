@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout du code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Démarrage de l'infrastructure
         run: |
           docker compose up -d --build
@@ -22,7 +22,7 @@ jobs:
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:80 -r zap-report.html -I
       - name: Sauvegarde du rapport ZAP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zap-scan-report
           path: zap-reports/zap-report.html

@@ -18,7 +18,7 @@ jobs:
       contents: write
     steps:
       - name: Exécution du moteur Qodo Merge (PR-Agent)
-        uses: the-pr-agent/pr-agent@main
+        uses: the-pr-agent/pr-agent@b249e568e0c0fb6c674ace55fe95d02f62f8f3b3 # main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
