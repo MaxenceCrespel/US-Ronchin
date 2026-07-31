@@ -71,6 +71,11 @@ jobs:
       - name: Exécution des tests Cypress
         uses: cypress-io/github-action@f790eee7a50d9505912f50c2095510be7de06aa7 # v6
         with:
+          # install: false — l'action cherche par défaut un lockfile local à
+          # working-directory pour faire son propre `npm ci`, ce qui n'existe
+          # pas dans un monorepo npm workspaces (un seul lockfile à la
+          # racine, déjà installé plus haut dans ce job).
+          install: false
           working-directory: apps/web
           wait-on: "http://localhost:80"
           wait-on-timeout: 60
