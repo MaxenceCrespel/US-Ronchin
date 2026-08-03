@@ -1,0 +1,11 @@
+# Empreintes Gitleaks à ignorer définitivement — Gitleaks scanne tout
+# l'historique git (fetch-depth: 0 dans secret-scan.yml), donc un faux
+# positif corrigé dans un commit ultérieur continue d'être détecté dans
+# l'ancien commit pour toujours, sauf à le lister ici. Format :
+# <commit-sha>:<fichier>:<règle>:<ligne>
+
+# apps/api/README.md, commit 2a36a4a : URL de badge CircleCI issue du
+# boilerplate par défaut de `nest new`, avec un faux token placeholder
+# ("abc123def456") — jamais un vrai secret. Corrigé (ligne supprimée) dans
+# le commit ecceef4, mais reste présent dans l'historique de 2a36a4a.
+2a36a4a0fa6205322c9c98493e52c7a9cb3298e4:apps/api/README.md:generic-api-key:5
