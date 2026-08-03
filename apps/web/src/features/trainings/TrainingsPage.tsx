@@ -429,7 +429,12 @@ function TeamsSection({ sessionId, isCoach }: { sessionId: string; isCoach: bool
   })
 
   const teams = teamsQuery.data ?? []
-  const teamCount = teams.length > 0 ? Math.max(...teams.map((t) => t.teamIndex)) + 1 : 0
+  // Fixed at TEAM_LABELS.length (generateTeams always creates exactly 2 teams,
+  // see the call above) rather than derived from which teamIndex values are
+  // currently present — otherwise moving every player out of a team makes it
+  // vanish from the assignment rows, and with it the column/drop-target to
+  // move anyone back into it.
+  const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
 
   if (teams.length === 0 && !isCoach) return null
 
