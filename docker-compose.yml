@@ -41,6 +41,13 @@ services:
       JWT_REFRESH_SECRET: dev-only-insecure-refresh-secret-change-me-before-any-real-deploy
       WEB_APP_URL: http://localhost
       CLUB_NAME: Ronchin
+      # Placeholder VAPID pair so notifications push fonctionnent en local
+      # sans configuration — génère les tiennes avec `npx web-push
+      # generate-vapid-keys` et remplace-les avant tout déploiement réel
+      # (voir docker-compose.staging.yml).
+      VAPID_SUBJECT: mailto:contact@ronchin-us.fr
+      VAPID_PUBLIC_KEY: BBs7ltAwQnytBpqZvMn6S5hBFSpD8PB96Dpl8d3Z6ZBsvMB2xk-q-eacF5Xb2qyRARmiSPWI7MGDoqCFoosSh2s
+      VAPID_PRIVATE_KEY: 7wHLy40CBr53gzauPviqHJw2_Fu5A-I1Xb6zVnKOKSY
 
   web:
     build:

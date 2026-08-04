@@ -65,6 +65,13 @@ export class Match {
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy: string | null;
 
+  @Column({
+    name: 'result_reminder_sent_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  resultReminderSentAt: Date | null;
+
   @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'created_by' })
   creator: User;

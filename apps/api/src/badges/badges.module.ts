@@ -10,6 +10,7 @@ import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { BadgesService } from './badges.service';
 import { BadgesController } from './badges.controller';
 import { StatsModule } from '../stats/stats.module';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { StatsModule } from '../stats/stats.module';
       MatchMotmVote,
     ]),
     StatsModule,
+    PushNotificationsModule,
   ],
   controllers: [BadgesController],
   providers: [BadgesService],

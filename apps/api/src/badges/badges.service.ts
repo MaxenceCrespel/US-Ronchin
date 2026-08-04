@@ -12,6 +12,7 @@ import { User } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 /** What actually happened at training, not what the player declared beforehand. */
 function effectiveStatus(a: Attendance): AttendanceStatus | null {
@@ -99,6 +100,7 @@ export class BadgesService {
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
     private readonly statsService: StatsService,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   async getForUser(userId: string): Promise<BadgeStatus[]> {
@@ -470,6 +472,13 @@ export class BadgesService {
         await this.badgesRepository.save(
           toAward.map((d) => this.badgesRepository.create({ userId, badgeKey: d.key })),
         );
+        for (const badge of toAward) {
+          await this.pushNotificationsService.sendToUser(userId, {
+            title: 'Badge débloqué !',
+            body: badge.title,
+            url: '/profile',
+          });
+        }
       }
     }
 

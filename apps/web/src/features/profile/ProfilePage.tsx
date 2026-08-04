@@ -19,6 +19,7 @@ import type { PlayerPosition, PreferredFoot } from '@/lib/types'
 import { POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
 import { fetchSettings, updateSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
+import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import {
   AccountLevelRing,
@@ -383,6 +384,7 @@ export function ProfilePage() {
         </form>
       </CardContent>
     </Card>
+    <NotificationSettingsCard />
     <BadgesGrid userId={user.id} />
     {user.role === 'COACH' && <JoinLinkCard />}
     {user.role === 'COACH' && <ClubSettingsCard />}

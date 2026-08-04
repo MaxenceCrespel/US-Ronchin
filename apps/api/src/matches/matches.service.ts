@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Match, MatchSource } from './entities/match.entity';
+import { Match, MatchSource, MatchStatus } from './entities/match.entity';
 import { MatchComposition } from './entities/match-composition.entity';
 import { MatchEvent } from './entities/match-event.entity';
 import { PlayerRating } from './entities/player-rating.entity';
@@ -16,6 +16,7 @@ import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
 import { isMotmRevealed } from './motm-utils';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 export interface RatingSummaryEntry {
   userId: string;
@@ -57,6 +58,7 @@ export class MatchesService {
     private readonly attendancesRepository: Repository<MatchAttendance>,
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   findAll(): Promise<Match[]> {
@@ -82,8 +84,23 @@ export class MatchesService {
 
   async update(id: string, dto: UpdateMatchDto): Promise<Match> {
     const match = await this.findById(id);
+    const wasPlayed = match.status === MatchStatus.PLAYED;
     Object.assign(match, dto);
-    return this.matchesRepository.save(match);
+    const saved = await this.matchesRepository.save(match);
+
+    if (!wasPlayed && saved.status === MatchStatus.PLAYED) {
+      const composition = await this.getComposition(saved.id);
+      await this.pushNotificationsService.sendToUsers(
+        composition.map((c) => c.userId),
+        {
+          title: 'Match terminé',
+          body: `Le match contre ${saved.opponent} est marqué comme joué : votez pour l'homme du match et notez vos coéquipiers.`,
+          url: `/matches/${saved.id}`,
+        },
+      );
+    }
+
+    return saved;
   }
 
   async delete(id: string): Promise<void> {

@@ -44,7 +44,6 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 
 ### Exceptions de sécurité documentées
 
-- **CVE-2026-14257** (`brace-expansion`, via `puppeteer-extra-plugin-stealth` → ... → `minimatch@3`) — aucun correctif compatible dans la lignée 1.x ; le seul patch existant (`5.0.8`) a une API incompatible et casserait `minimatch` en silence. La CVE nécessite une entrée contrôlée par un attaquant pour être exploitable, or elle n'est ici jamais invoquée que sur du nettoyage de fichiers internes — jamais sur une requête HTTP. Acceptée et filtrée dans `.trivyignore` (scan Docker) et `.github/scripts/check-audit.py` (SCA) ; toute AUTRE vulnérabilité continue de faire échouer ces deux jobs normalement.
 - **~48 CVE Debian** dans l'image `api` — dépendances (perl, glib, ncurses, util-linux, python3, curl, libtiff, libldap, libssh2...) que le paquet `.deb` de Google Chrome installe lui-même via ses propres `Recommends:`, indépendamment de ce que le Dockerfile installe explicitement. Aucune n'est un chemin d'attaque atteignable : le scraper FFF ne visite qu'un seul domaine fixe et de confiance, en headless pur, sans jamais traiter de fichier, de connexion LDAP/SSH ni d'image TIFF fournis par un tiers. Documentées et ignorées dans `.trivyignore`.
 
 ### État connu au premier run
@@ -66,7 +65,10 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 3. Sur GitHub (Settings → Secrets and variables → Actions), ajouter :
    - `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_KEY` (clé privée SSH dédiée, accès en écriture sur `/opt/ronchin-us-app` uniquement)
    - `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (`openssl rand -hex 64` chacun) et `WEB_APP_URL` (URL publique réelle du site) — lus par `docker-compose.staging.yml`
+   - `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (notifications push — génère une vraie paire avec `npx web-push generate-vapid-keys` depuis `apps/api`, ne réutilise pas celle du dev local)
 4. Une fois testé et stable, retirer `continue-on-error: true` de `.github/workflows/deploy-staging.yml` pour que la pipeline échoue vraiment si le déploiement casse.
+
+> **Notifications push** — sur iPhone, elles ne fonctionnent que si l'app est installée sur l'écran d'accueil (PWA), et uniquement à partir d'iOS 16.4 ; ce n'est pas un bug, c'est une limitation de Safari.
 
 > `docker-compose.staging.yml` limite déjà la RAM de chaque conteneur (`mem_limit` — 1 Go pour `api`, 300 Mo pour `postgres`, 128 Mo pour `web`) : si le scraper FFF s'emballe, seul son propre conteneur peut en faire les frais, jamais un service d'un autre projet hébergé sur le même VPS (CarlaCréation, par exemple).
 

@@ -9,6 +9,7 @@ import { MatchAttendance } from './entities/match-attendance.entity';
 import { MatchMotmVote } from './entities/match-motm-vote.entity';
 import { MatchesService } from './matches.service';
 import { MatchesController } from './matches.controller';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { MatchesController } from './matches.controller';
       MatchAttendance,
       MatchMotmVote,
     ]),
+    PushNotificationsModule,
   ],
   controllers: [MatchesController],
   providers: [MatchesService],

@@ -6,6 +6,7 @@ import { Attendance, AttendanceStatus } from '../attendances/entities/attendance
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 @Injectable()
 export class UsersService {
@@ -16,6 +17,7 @@ export class UsersService {
     private readonly attendancesRepository: Repository<Attendance>,
     @InjectRepository(MatchComposition)
     private readonly compositionsRepository: Repository<MatchComposition>,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   /** Most regular/assiduous first — real training presences (coach-validated when available)
@@ -104,7 +106,13 @@ export class UsersService {
       passwordHash: data.passwordHash,
       status: UserStatus.PENDING,
     });
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+    await this.pushNotificationsService.sendToCoaches({
+      title: 'Nouveau joueur',
+      body: `${saved.firstName} ${saved.lastName} attend une validation`,
+      url: '/players',
+    });
+    return saved;
   }
 
   async approve(userId: string): Promise<User> {
