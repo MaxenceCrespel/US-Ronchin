@@ -7,13 +7,13 @@ the pipeline normally, known-and-accepted ones don't keep failing it forever.
 import json
 import sys
 
-# GHSA-mh99-v99m-4gvg (CVE-2026-14257, brace-expansion): no fixed 1.x release
-# exists, and forcing the only patched version (5.0.8, an incompatible
-# rewrite) would break minimatch@3's glob matching — see .trivyignore for
-# the full analysis. Never reachable with attacker-controlled input either
-# way (internal temp-dir cleanup only), so accepted until an upstream fix
-# for puppeteer-extra-plugin-user-data-dir exists.
-ACCEPTED_ADVISORIES = {"GHSA-mh99-v99m-4gvg"}
+# brace-expansion (CVE-2026-14257 / GHSA-mh99-v99m-4gvg and its mitigation-
+# bypass follow-up GHSA-rgw5-rvv9-x895) is fixed via the root package.json
+# `overrides` entry pinning the minimatch@3.1.5 instance to brace-expansion
+# 1.1.18 — same 1.x API as before, no rewrite needed. No advisories accepted
+# by default; add one here only with a comment explaining why it can't be
+# fixed, same as .trivyignore.
+ACCEPTED_ADVISORIES: set[str] = set()
 
 
 def main() -> int:
