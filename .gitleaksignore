@@ -9,3 +9,12 @@
 # ("abc123def456") — jamais un vrai secret. Corrigé (ligne supprimée) dans
 # le commit ecceef4, mais reste présent dans l'historique de 2a36a4a.
 2a36a4a0fa6205322c9c98493e52c7a9cb3298e4:apps/api/README.md:generic-api-key:5
+
+# docker-compose.yml, commit 7d631c1 : celle-ci était une VRAIE clé privée
+# VAPID (pas un faux positif) committée par erreur comme "placeholder" de
+# dev. Immédiatement révoquée — une nouvelle paire a été générée, jamais
+# committée (voir apps/api/.env, gitignored), et la config VAPID de
+# docker-compose.yml est passée en variables d'environnement optionnelles
+# (commit suivant) au lieu d'une valeur en dur. Cette clé morte n'ouvre
+# plus aucun accès mais reste détectable dans l'historique de 7d631c1.
+7d631c1d43e22117906d87558a13bff483dd461c:docker-compose.yml:generic-api-key:50

@@ -17,6 +17,8 @@ export interface PushPayload {
 export class PushNotificationsService {
   private readonly logger = new Logger(PushNotificationsService.name);
 
+  private readonly configured: boolean;
+
   constructor(
     @InjectRepository(PushSubscription)
     private readonly subscriptionsRepository: Repository<PushSubscription>,
@@ -24,11 +26,18 @@ export class PushNotificationsService {
     private readonly usersRepository: Repository<User>,
     configService: ConfigService,
   ) {
-    webPush.setVapidDetails(
-      configService.getOrThrow<string>('VAPID_SUBJECT'),
-      configService.getOrThrow<string>('VAPID_PUBLIC_KEY'),
-      configService.getOrThrow<string>('VAPID_PRIVATE_KEY'),
-    );
+    const subject = configService.get<string>('VAPID_SUBJECT');
+    const publicKey = configService.get<string>('VAPID_PUBLIC_KEY');
+    const privateKey = configService.get<string>('VAPID_PRIVATE_KEY');
+    if (subject && publicKey && privateKey) {
+      webPush.setVapidDetails(subject, publicKey, privateKey);
+      this.configured = true;
+    } else {
+      this.configured = false;
+      this.logger.warn(
+        'VAPID_SUBJECT/VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY non configurées — notifications push désactivées. Génère une paire avec `npx web-push generate-vapid-keys`.',
+      );
+    }
   }
 
   async subscribe(userId: string, dto: SubscribeDto): Promise<void> {
@@ -86,6 +95,7 @@ export class PushNotificationsService {
     subscriptions: PushSubscription[],
     payload: PushPayload,
   ): Promise<void> {
+    if (!this.configured) return;
     await Promise.all(
       subscriptions.map(async (sub) => {
         try {

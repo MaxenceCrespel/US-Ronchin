@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/api-client'
 
-export async function fetchVapidPublicKey(): Promise<string> {
-  const { data } = await apiClient.get<{ publicKey: string }>('/push/vapid-public-key')
+export async function fetchVapidPublicKey(): Promise<string | null> {
+  const { data } = await apiClient.get<{ publicKey: string | null }>('/push/vapid-public-key')
   return data.publicKey
 }
 

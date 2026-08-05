@@ -18,7 +18,7 @@ export class PushNotificationsController {
   @Get('vapid-public-key')
   getVapidPublicKey() {
     return {
-      publicKey: this.configService.getOrThrow<string>('VAPID_PUBLIC_KEY'),
+      publicKey: this.configService.get<string>('VAPID_PUBLIC_KEY') ?? null,
     };
   }
 

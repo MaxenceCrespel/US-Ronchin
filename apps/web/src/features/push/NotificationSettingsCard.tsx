@@ -41,6 +41,10 @@ export function NotificationSettingsCard() {
       }
       const registration = await navigator.serviceWorker.ready
       const publicKey = await fetchVapidPublicKey()
+      if (!publicKey) {
+        setError("Les notifications ne sont pas configurées côté serveur pour l'instant.")
+        return
+      }
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
