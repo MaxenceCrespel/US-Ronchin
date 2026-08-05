@@ -67,7 +67,29 @@ CVE-2026-8927
 CVE-2026-8932
 CVE-2026-9538
 
-# brace-expansion DoS (CVE-2026-14257 and its mitigation-bypass follow-up)
-# is fixed, not ignored — see the root package.json `overrides` entry
-# pinning the minimatch@3.1.5 instance to brace-expansion@1.1.18 (same 1.x
-# API, no rewrite needed). No entry required here anymore.
+# brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
+# mitigation-bypass follow-up) is fixed, not ignored — see the root
+# package.json `overrides` entry pinning the minimatch@3.1.5 instance to
+# brace-expansion@1.1.18 (same 1.x API, no rewrite needed).
+#
+# --- apps/api image only: SEPARATE, unrelated vulnerabilities vendored
+# INSIDE the npm CLI itself (apps/api/Dockerfile runs `npm install -g
+# npm@latest` to patch npm's own bundled tar/picomatch/sigstore versions —
+# see that Dockerfile's comment). As of npm@12.0.2 (current latest,
+# checked 2026-08-05), npm still vendors brace-expansion@5.0.7 internally
+# (CVE-2026-14257 / its later-assigned CVE-2026-69152, fixed only at
+# 5.0.9+) and ip-address@10.2.0 (CVE-2026-69192, fixed at 10.3.1+) — and
+# the base image's own default npm@10.9.8 is equally affected on
+# brace-expansion (vendors 2.0.2, fixed only at 2.1.4+). No published npm
+# release currently ships a fix for either; nothing in our control (not
+# our package.json, not `overrides` — these live inside the
+# globally-installed npm binary, not our dependency tree). Not reachable
+# either way: this npm install is only ever used to bootstrap the image
+# at build time and for the one `npx playwright install chrome` call
+# below it — never invoked at runtime, never fed attacker- or
+# HTTP-controlled input. Revisit by checking
+# `npm view npm@latest dependencies` — or just rebuilding the image —
+# once npm ships a release with both fixed.
+CVE-2026-14257
+CVE-2026-69152
+CVE-2026-69192
