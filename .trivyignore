@@ -12,8 +12,8 @@
 # requires (fff-scraper.service.ts uses `channel: 'chrome'`) didn't reduce
 # this, it's inherent to installing Chrome's actual package on Debian.
 # `apt-get upgrade` (already run in the Dockerfile) has nothing newer for
-# any of these — Trivy marks them "affected"/"will_not_fix", no Debian
-# bookworm fix published. None of it is reachable application attack
+# any of these — Trivy marks them "affected"/"will_not_fix"/"fix_deferred",
+# no Debian bookworm fix published. None of it is reachable application attack
 # surface: the scraper only ever visits one fixed, trusted FFF domain over
 # HTTPS, in pure headless mode (no X server, no user-supplied files,
 # no LDAP/SSH/TIFF processing) — this whole dependency chain sits unused.
@@ -63,6 +63,7 @@ CVE-2026-7210
 CVE-2026-7598
 CVE-2026-8286
 CVE-2026-8376
+CVE-2026-8458
 CVE-2026-8927
 CVE-2026-8932
 CVE-2026-9538
