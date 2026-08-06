@@ -30,11 +30,6 @@ function shiftDate(isoDate: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** month-day match, e.g. a birth date of any year against a match/event date. */
-function sameMonthDay(isoDateA: string, isoDateB: string): boolean {
-  return isoDateA.slice(5, 10) === isoDateB.slice(5, 10);
-}
-
 function isDecemberOrJanuary(isoDate: string): boolean {
   const month = isoDate.slice(5, 7);
   return month === '12' || month === '01';
@@ -44,6 +39,19 @@ function daysBetween(isoDateA: string, isoDateB: string): number {
   const a = new Date(`${isoDateA}T00:00:00`).getTime();
   const b = new Date(`${isoDateB}T00:00:00`).getTime();
   return Math.abs(b - a) / 86_400_000;
+}
+
+const BIRTHDAY_WINDOW_DAYS = 3; // ±3 days = the week of the birthday, not just the exact day
+
+/** Whether `isoDate` falls within `BIRTHDAY_WINDOW_DAYS` of the given birth date's month-day,
+ * in any year — checks the birthday's occurrence in the surrounding years too so a birthday near
+ * Dec 31/Jan 1 doesn't lose its window across the year boundary. */
+function isNearBirthday(isoDate: string, birthDate: string): boolean {
+  const year = Number(isoDate.slice(0, 4));
+  const monthDay = birthDate.slice(5, 10);
+  return [year - 1, year, year + 1].some(
+    (y) => daysBetween(isoDate, `${y}-${monthDay}`) <= BIRTHDAY_WINDOW_DAYS,
+  );
 }
 
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
@@ -263,7 +271,7 @@ export class BadgesService {
       const hasBirthdayGoal =
         !!me?.birthDate &&
         eventsAsActor.some(
-          (e) => e.type === MatchEventType.GOAL && e.match && sameMonthDay(e.match.date, me.birthDate!),
+          (e) => e.type === MatchEventType.GOAL && e.match && isNearBirthday(e.match.date, me.birthDate!),
         );
 
       const assistsByMatch = new Map<string, number>();

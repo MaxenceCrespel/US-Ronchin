@@ -125,7 +125,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'GOALS',
     rarity: 'EPIC',
     title: "Le Cadeau d'Anniversaire",
-    description: 'Marquer un but le jour de ton anniversaire',
+    description: 'Marquer un but dans la semaine de ton anniversaire',
     emoji: '🎂',
   },
   {
