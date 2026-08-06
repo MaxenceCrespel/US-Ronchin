@@ -41,8 +41,11 @@ export function HomePage() {
     queryFn: () => fetchSessions(todayKey, in3WeeksKey),
   })
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
-  const playerStatsQuery = useQuery({ queryKey: ['stats', 'players'], queryFn: fetchPlayerStats })
-  const teamStatsQuery = useQuery({ queryKey: ['stats', 'team'], queryFn: fetchTeamStats })
+  const playerStatsQuery = useQuery({
+    queryKey: ['stats', 'players'],
+    queryFn: () => fetchPlayerStats(),
+  })
+  const teamStatsQuery = useQuery({ queryKey: ['stats', 'team'], queryFn: () => fetchTeamStats() })
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers, enabled: isCoach })
 
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)

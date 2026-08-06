@@ -1,7 +1,15 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Crown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -12,15 +20,18 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import { getSeasonBounds, isInSeason } from '@/lib/season'
 import type { PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
-import { fetchPlayerStats, fetchTeamStats } from './api'
+import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
 import { StandingsCard } from '@/features/standings/StandingsCard'
 import { AwardsSection } from '@/features/awards/AwardsSection'
 import { fetchMatches } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
+
+const CAREER = 'career'
 
 /** Trophées de fin de saison : visibles uniquement du 1er au 15 juin. */
 function isAwardsSeasonWindow(date = new Date()) {
@@ -80,9 +91,12 @@ function Leaderboard({ title, players, valueKey, valueLabel }: {
   )
 }
 
-function SeasonRecordCard() {
+function SeasonRecordCard({ season }: { season: string }) {
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
-  const played = (matchesQuery.data ?? []).filter((m) => m.status === 'PLAYED')
+  const bounds = season !== CAREER ? getSeasonBounds(season) : null
+  const played = (matchesQuery.data ?? []).filter(
+    (m) => m.status === 'PLAYED' && (!bounds || isInSeason(m.date, bounds)),
+  )
 
   let won = 0
   let drawn = 0
@@ -121,8 +135,11 @@ function SeasonRecordCard() {
   )
 }
 
-function RosterStatsTable() {
-  const playerStatsQuery = useQuery({ queryKey: ['stats', 'players'], queryFn: fetchPlayerStats })
+function RosterStatsTable({ season }: { season: string }) {
+  const playerStatsQuery = useQuery({
+    queryKey: ['stats', 'players', season],
+    queryFn: () => fetchPlayerStats(season),
+  })
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
 
   const playerIds = new Set(
@@ -198,26 +215,55 @@ function RosterStatsTable() {
 
 export function StatsPage() {
   const user = useAuthStore((s) => s.user)
-  const playerStatsQuery = useQuery({ queryKey: ['stats', 'players'], queryFn: fetchPlayerStats })
-  const teamStatsQuery = useQuery({ queryKey: ['stats', 'team'], queryFn: fetchTeamStats })
+  const seasonsQuery = useQuery({ queryKey: ['stats', 'seasons'], queryFn: fetchAvailableSeasons })
+  const [season, setSeason] = useState<string | null>(null)
+  const activeSeason = season ?? seasonsQuery.data?.current ?? CAREER
+
+  const playerStatsQuery = useQuery({
+    queryKey: ['stats', 'players', activeSeason],
+    queryFn: () => fetchPlayerStats(activeSeason),
+    enabled: !!seasonsQuery.data,
+  })
+  const teamStatsQuery = useQuery({
+    queryKey: ['stats', 'team', activeSeason],
+    queryFn: () => fetchTeamStats(activeSeason),
+    enabled: !!seasonsQuery.data,
+  })
 
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)
 
   return (
     <div className="flex flex-col gap-6" data-tour="stats-page">
-      <h1 className="text-xl font-semibold">Statistiques</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Statistiques</h1>
+        {seasonsQuery.data && (
+          <Select value={activeSeason} onValueChange={setSeason}>
+            <SelectTrigger size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {seasonsQuery.data.seasons.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s} {s === seasonsQuery.data!.current ? '(en cours)' : ''}
+                </SelectItem>
+              ))}
+              <SelectItem value={CAREER}>Carrière (tout confondu)</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      </div>
 
       {myStats && <MyStatsCard stats={myStats} />}
 
       <MonthlyChallengesCard />
 
-      <RosterStatsTable />
+      <RosterStatsTable season={activeSeason} />
 
       <div>
         <h2 className="mb-3 text-lg font-medium">Bilan de saison</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <StandingsCard />
-          <SeasonRecordCard />
+          <SeasonRecordCard season={activeSeason} />
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
+import { Match } from '../matches/entities/match.entity';
 import { MatchEvent } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -14,6 +15,7 @@ import { StatsController } from './stats.controller';
   imports: [
     TypeOrmModule.forFeature([
       User,
+      Match,
       MatchEvent,
       MatchComposition,
       PlayerRating,

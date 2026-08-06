@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { Match } from '../matches/entities/match.entity';
 import { MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -9,6 +10,7 @@ import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { isMotmRevealed, computeMotmWinner } from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
 
 const DEFAULT_RATING = 5; // midpoint of the 0-10 scale
 const RATING_WEIGHT = 70;
@@ -64,6 +66,8 @@ export class StatsService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(Match)
+    private readonly matchesRepository: Repository<Match>,
     @InjectRepository(MatchEvent)
     private readonly eventsRepository: Repository<MatchEvent>,
     @InjectRepository(MatchComposition)
@@ -78,9 +82,14 @@ export class StatsService {
     private readonly sessionsRepository: Repository<TrainingSession>,
   ) {}
 
+  private resolveSeasonBounds(season?: string): SeasonBounds | null {
+    return season && season !== 'career' ? getSeasonBounds(season) : null;
+  }
+
   /** Current run of consecutive PAST training sessions (excluding cancelled ones) each user was PRESENT at,
-   * counting back from the most recent occurred session — breaks on the first ABSENT/MAYBE/no-response. */
-  private async getPresenceStreaks(): Promise<Map<string, number>> {
+   * counting back from the most recent occurred session — breaks on the first ABSENT/MAYBE/no-response.
+   * Scoped to `bounds` when provided: sessions outside the season don't count and don't extend the streak. */
+  private async getPresenceStreaks(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
     const today = new Date().toISOString().slice(0, 10);
     const [sessions, attendances] = await Promise.all([
       this.sessionsRepository.find(),
@@ -88,7 +97,7 @@ export class StatsService {
     ]);
 
     const pastSessions = sessions
-      .filter((s) => !s.cancelled && s.date <= today)
+      .filter((s) => !s.cancelled && s.date <= today && (!bounds || isInSeason(s.date, bounds)))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
     const attendanceBySession = new Map<string, Attendance[]>();
@@ -118,21 +127,26 @@ export class StatsService {
     return streaks;
   }
 
-  private async getMotmCounts(): Promise<Map<string, number>> {
-    const [votes, compositions] = await Promise.all([
+  private async getMotmCounts(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
+    const [votes, compositions, matches] = await Promise.all([
       this.motmVotesRepository.find(),
       this.compositionsRepository.find(),
+      bounds ? this.matchesRepository.find() : Promise.resolve([]),
     ]);
 
+    const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
+    const inSeason = (matchId: string) =>
+      !bounds || isInSeason(matchDateById.get(matchId) ?? '', bounds);
+
     const votesByMatch = new Map<string, typeof votes>();
-    for (const vote of votes) {
+    for (const vote of votes.filter((v) => inSeason(v.matchId))) {
       const list = votesByMatch.get(vote.matchId) ?? [];
       list.push(vote);
       votesByMatch.set(vote.matchId, list);
     }
 
     const playersByMatch = new Map<string, number>();
-    for (const entry of compositions) {
+    for (const entry of compositions.filter((c) => inSeason(c.matchId))) {
       playersByMatch.set(entry.matchId, (playersByMatch.get(entry.matchId) ?? 0) + 1);
     }
 
@@ -146,17 +160,32 @@ export class StatsService {
     return counts;
   }
 
-  async getPlayerStats(): Promise<PlayerStats[]> {
-    const [users, events, compositions, ratings, attendances, motmCounts, presenceStreaks] =
+  async getPlayerStats(season?: string): Promise<PlayerStats[]> {
+    const bounds = this.resolveSeasonBounds(season);
+    const [users, allEvents, allCompositions, allRatings, allAttendances, matches, sessions, motmCounts, presenceStreaks] =
       await Promise.all([
         this.usersRepository.find(),
         this.eventsRepository.find(),
         this.compositionsRepository.find(),
         this.ratingsRepository.find(),
         this.attendancesRepository.find(),
-        this.getMotmCounts(),
-        this.getPresenceStreaks(),
+        bounds ? this.matchesRepository.find() : Promise.resolve([]),
+        bounds ? this.sessionsRepository.find() : Promise.resolve([]),
+        this.getMotmCounts(bounds),
+        this.getPresenceStreaks(bounds),
       ]);
+
+    const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
+    const sessionDateById = new Map(sessions.map((s) => [s.id, s.date]));
+    const matchInSeason = (matchId: string) =>
+      !bounds || isInSeason(matchDateById.get(matchId) ?? '', bounds);
+    const sessionInSeason = (trainingSessionId: string) =>
+      !bounds || isInSeason(sessionDateById.get(trainingSessionId) ?? '', bounds);
+
+    const events = allEvents.filter((e) => matchInSeason(e.matchId));
+    const compositions = allCompositions.filter((c) => matchInSeason(c.matchId));
+    const ratings = allRatings.filter((r) => matchInSeason(r.matchId));
+    const attendances = allAttendances.filter((a) => sessionInSeason(a.trainingSessionId));
 
     return users.map((user) => {
       const matchesPlayed = compositions.filter((c) => c.userId === user.id).length;
@@ -212,9 +241,17 @@ export class StatsService {
     });
   }
 
-  async getTeamStats() {
-    const playerStats = await this.getPlayerStats();
-    const events = await this.eventsRepository.find();
+  async getTeamStats(season?: string) {
+    const bounds = this.resolveSeasonBounds(season);
+    const [playerStats, allEvents, matches] = await Promise.all([
+      this.getPlayerStats(season),
+      this.eventsRepository.find(),
+      bounds ? this.matchesRepository.find() : Promise.resolve([]),
+    ]);
+    const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
+    const events = bounds
+      ? allEvents.filter((e) => isInSeason(matchDateById.get(e.matchId) ?? '', bounds))
+      : allEvents;
 
     const topScorers = [...playerStats]
       .filter((p) => p.goals > 0)
@@ -317,5 +354,35 @@ export class StatsService {
           }
         : null,
     };
+  }
+
+  async getAvailableSeasons(): Promise<{ seasons: string[]; current: string }> {
+    const current = getCurrentSeasonLabel();
+    const [oldestMatch, oldestSession] = await Promise.all([
+      this.matchesRepository
+        .createQueryBuilder('match')
+        .select('MIN(match.date)', 'min')
+        .getRawOne<{ min: string | null }>(),
+      this.sessionsRepository
+        .createQueryBuilder('session')
+        .select('MIN(session.date)', 'min')
+        .getRawOne<{ min: string | null }>(),
+    ]);
+
+    const oldestDate = [oldestMatch?.min, oldestSession?.min]
+      .filter((d): d is string => !!d)
+      .sort()[0];
+
+    const currentStartYear = Number(current.split('-')[0]);
+    const oldestStartYear = oldestDate
+      ? Number(getCurrentSeasonLabel(new Date(oldestDate)).split('-')[0])
+      : currentStartYear;
+
+    const seasons: string[] = [];
+    for (let year = currentStartYear; year >= oldestStartYear; year--) {
+      seasons.push(`${year}-${year + 1}`);
+    }
+
+    return { seasons, current };
   }
 }
