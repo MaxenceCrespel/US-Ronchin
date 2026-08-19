@@ -482,11 +482,13 @@ export function MatchDetailPage() {
   const hasVotedMotm = motmQuery.data?.myVoteUserId != null
   const motmRevealed = motmQuery.data?.revealed ?? false
   const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
-  // Blocks everything else behind a modal until either the vote window has genuinely
-  // closed (motmRevealed — everyone voted, or the 24h window elapsed) or the user has
-  // already done both. Forcing a vote that's no longer possible would just soft-lock
-  // anyone who missed the window.
-  const showVoteModal = votingApplies && !motmRevealed && !(hasVotedMotm && ratingsSubmitted)
+  // Two independent gates: the MOTM vote is only forced while its window is still open
+  // (motmRevealed — everyone voted, or the 24h window elapsed — means voting is closed,
+  // forcing it would just soft-lock anyone who missed the window). Ratings have no such
+  // time window — they stay mandatory regardless of whether MOTM has been revealed.
+  const needsMotmVote = !hasVotedMotm && !motmRevealed
+  const needsRatings = !ratingsSubmitted
+  const showVoteModal = votingApplies && (needsMotmVote || needsRatings)
   const votesTabApplies = match.status === 'PLAYED' && hasComposition
 
   const scoreCard = (
@@ -1251,16 +1253,16 @@ export function MatchDetailPage() {
       </CardHeader>
       <CardContent>
         <div className="-mx-2 overflow-x-auto px-2">
-          <Table>
+          <Table className="text-xs sm:text-sm">
             <TableHeader>
               <TableRow>
-                <TableHead className="bg-card sticky left-0 z-10">Joueur</TableHead>
-                <TableHead className="text-right">Note moy.</TableHead>
-                <TableHead className="text-right">Ma note</TableHead>
-                <TableHead className="text-right">Buts</TableHead>
-                <TableHead className="text-right">Passes D.</TableHead>
-                <TableHead className="text-right">🟨</TableHead>
-                <TableHead className="text-right">🟥</TableHead>
+                <TableHead className="bg-card sticky left-0 z-10 px-1.5 sm:px-2">Joueur</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">Note moy.</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">Ma note</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">Buts</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">Passes D.</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">🟨</TableHead>
+                <TableHead className="px-1.5 text-right sm:px-2">🟥</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1276,8 +1278,8 @@ export function MatchDetailPage() {
                 }
                 return (
                   <TableRow key={entry.userId}>
-                    <TableCell className="bg-card sticky left-0 z-10 font-medium">
-                      <span className="flex items-center gap-2">
+                    <TableCell className="bg-card sticky left-0 z-10 px-1.5 font-medium sm:px-2">
+                      <span className="flex items-center gap-1.5 sm:gap-2">
                         <AccountLevelRing
                           userId={entry.userId}
                           tier={levelsQuery.data?.[entry.userId]?.tier}
@@ -1293,16 +1295,16 @@ export function MatchDetailPage() {
                         {entry.user.firstName} {entry.user.lastName}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="px-1.5 text-right sm:px-2">
                       {summary?.average != null ? `${summary.average.toFixed(1)}/10` : '—'}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="px-1.5 text-right sm:px-2">
                       {isSelf || myRating == null ? '—' : `${myRating.rating}/10`}
                     </TableCell>
-                    <TableCell className="text-right">{stats.goals}</TableCell>
-                    <TableCell className="text-right">{stats.assists}</TableCell>
-                    <TableCell className="text-right">{stats.yellow}</TableCell>
-                    <TableCell className="text-right">{stats.red}</TableCell>
+                    <TableCell className="px-1.5 text-right sm:px-2">{stats.goals}</TableCell>
+                    <TableCell className="px-1.5 text-right sm:px-2">{stats.assists}</TableCell>
+                    <TableCell className="px-1.5 text-right sm:px-2">{stats.yellow}</TableCell>
+                    <TableCell className="px-1.5 text-right sm:px-2">{stats.red}</TableCell>
                   </TableRow>
                 )
               })}
@@ -1328,15 +1330,15 @@ export function MatchDetailPage() {
       >
         <DialogHeader>
           <DialogTitle>
-            {hasVotedMotm ? 'Notes obligatoires' : 'Vote obligatoire'} (étape {hasVotedMotm ? 2 : 1}/2)
+            {needsMotmVote ? 'Vote obligatoire (étape 1/2)' : 'Notes obligatoires (étape 2/2)'}
           </DialogTitle>
           <DialogDescription>
-            {hasVotedMotm
-              ? 'Avant de voir le résumé du match, note tes coéquipiers.'
-              : "Avant de voir le résumé du match, vote pour l'homme du match."}
+            {needsMotmVote
+              ? "Avant de voir le résumé du match, vote pour l'homme du match."
+              : 'Avant de voir le résumé du match, note tes coéquipiers.'}
           </DialogDescription>
         </DialogHeader>
-        {hasVotedMotm ? ratingsCard : motmCard}
+        {needsMotmVote ? motmCard : ratingsCard}
       </DialogContent>
     </Dialog>
   )
