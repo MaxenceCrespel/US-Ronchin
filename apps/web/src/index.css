@@ -167,6 +167,15 @@
   }
 }
 
+@keyframes motm-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
 .animate-football-bounce {
   animation: football-bounce 0.9s ease-in-out infinite;
   display: inline-block;
@@ -194,4 +203,14 @@
 
 .animate-net-wobble:hover {
   animation: net-wobble 0.3s ease-in-out;
+}
+
+.animate-motm-marquee {
+  animation: motm-marquee 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-motm-marquee {
+    animation: none;
+  }
 }

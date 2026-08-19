@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 import { CalendarCheck, Crown, ListChecks, Pencil, Star, Trash2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +10,13 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import {
   Select,
@@ -441,24 +450,44 @@ export function MatchDetailPage() {
     triggerMotmCelebration()
   }, [motmQuery.data, matchId, user, triggerMotmCelebration])
 
+  // Per-player goals/assists/cards for this match — no such aggregation exists server-side
+  // for a single match, so it's derived client-side from the raw event list.
+  const eventStatsByUser = useMemo(() => {
+    const map: Record<string, { goals: number; assists: number; yellow: number; red: number }> = {}
+    const bump = (id: string, key: 'goals' | 'assists' | 'yellow' | 'red') => {
+      map[id] ??= { goals: 0, assists: 0, yellow: 0, red: 0 }
+      map[id][key] += 1
+    }
+    for (const event of eventsQuery.data ?? []) {
+      if (event.type === 'GOAL') {
+        bump(event.userId, 'goals')
+        if (event.assistUserId) bump(event.assistUserId, 'assists')
+      } else if (event.type === 'YELLOW_CARD') {
+        bump(event.userId, 'yellow')
+      } else if (event.type === 'RED_CARD') {
+        bump(event.userId, 'red')
+      }
+    }
+    return map
+  }, [eventsQuery.data])
+
   const match = matchQuery.data
   if (!match) return null
 
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
   const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
-  // Coaches keep full access even when they played (composition/events management
-  // shouldn't be gated behind voting) — the forced vote-first flow is for players only.
-  const votingApplies = match.status === 'PLAYED' && iPlayed && hasComposition && !isCoach
+  // Voting/rating is mandatory for anyone who played, coach included — no role exception.
+  const votingApplies = match.status === 'PLAYED' && iPlayed && hasComposition
   const hasVotedMotm = motmQuery.data?.myVoteUserId != null
   const motmRevealed = motmQuery.data?.revealed ?? false
-  // Once the vote is revealed (everyone voted, or the 24h window elapsed), voting is
-  // genuinely closed — forcing a vote that's no longer possible would just soft-lock
+  const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
+  // Blocks everything else behind a modal until either the vote window has genuinely
+  // closed (motmRevealed — everyone voted, or the 24h window elapsed) or the user has
+  // already done both. Forcing a vote that's no longer possible would just soft-lock
   // anyone who missed the window.
-  const showForcedMotmVote = votingApplies && !hasVotedMotm && !motmRevealed
-  // Players (post-vote): votes/notes get their own tab alongside the match summary.
-  // The coach has a separate 3-tab layout below (Configuration / Résumé / Votes & notes).
-  const showVotingTabs = match.status === 'PLAYED' && hasComposition && !showForcedMotmVote
+  const showVoteModal = votingApplies && !motmRevealed && !(hasVotedMotm && ratingsSubmitted)
+  const votesTabApplies = match.status === 'PLAYED' && hasComposition
 
   const scoreCard = (
     <Card>
@@ -1025,7 +1054,6 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
   const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => entry.userId !== user?.id)
   const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.userId] != null)
 
@@ -1126,93 +1154,232 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const scoreSummary = (
+  const motmWinner = motmQuery.data?.revealed ? (motmQuery.data.results?.[0] ?? null) : null
+  const motmWinnerEntry = motmWinner
+    ? compositionQuery.data?.find((e) => e.userId === motmWinner.userId)
+    : undefined
+
+  const recapHeader = (
     <Card>
       <CardHeader>
-        <CardTitle>vs {match.opponent}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+          <span>vs {match.opponent}</span>
+          <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
+            {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
+          </Badge>
+        </CardTitle>
+        <CardDescription className="capitalize">
+          {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
+          {match.competition && ` · ${match.competition}`}
+          {' · '}
+          {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
+          {match.venue && ` · ${match.venue}`}
+        </CardDescription>
       </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold">
+      <CardContent className="flex flex-col gap-5">
+        <p className="text-3xl font-bold">
           {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
         </p>
+
+        {motmWinner ? (
+          <div className="flex items-center gap-2.5">
+            <PlayerAvatar
+              avatarUrl={motmWinnerEntry?.user.avatarUrl}
+              firstName={motmWinner.firstName}
+              lastName={motmWinner.lastName}
+              size="sm"
+              className="border-club-gold ring-club-gold/40 border-2 ring-2"
+            />
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              <Crown className="text-club-gold size-4" />
+              {motmWinner.firstName} {motmWinner.lastName}
+            </span>
+          </div>
+        ) : hasComposition ? (
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs">Homme du match : vote en cours</span>
+            <div className="overflow-hidden">
+              <div className="animate-motm-marquee flex w-max items-center gap-4">
+                {[...(compositionQuery.data ?? []), ...(compositionQuery.data ?? [])].map((entry, i) => (
+                  <PlayerAvatar
+                    key={`${entry.userId}-${i}`}
+                    avatarUrl={entry.user.avatarUrl}
+                    firstName={entry.user.firstName}
+                    lastName={entry.user.lastName}
+                    size="sm"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {(eventsQuery.data?.length ?? 0) > 0 && (
+          <div className="flex flex-col gap-1.5 border-t pt-4">
+            {[...(eventsQuery.data ?? [])]
+              .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
+              .map((event) => (
+                <div key={event.id} className="flex items-center gap-2 text-sm">
+                  {event.minute != null && (
+                    <span className="text-muted-foreground w-8 shrink-0 text-xs">
+                      {event.minute}'
+                    </span>
+                  )}
+                  {event.type === 'GOAL' && <span>⚽</span>}
+                  {event.type === 'YELLOW_CARD' && <span>🟨</span>}
+                  {event.type === 'RED_CARD' && <span>🟥</span>}
+                  <span>
+                    {event.user.firstName} {event.user.lastName}
+                  </span>
+                  {event.assistUser && (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      🎯 {event.assistUser.firstName} {event.assistUser.lastName}
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+
+  const statsTable = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Stats du match</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="-mx-2 overflow-x-auto px-2">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="bg-card sticky left-0 z-10">Joueur</TableHead>
+                <TableHead className="text-right">Note moy.</TableHead>
+                <TableHead className="text-right">Ma note</TableHead>
+                <TableHead className="text-right">Buts</TableHead>
+                <TableHead className="text-right">Passes D.</TableHead>
+                <TableHead className="text-right">🟨</TableHead>
+                <TableHead className="text-right">🟥</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {compositionQuery.data?.map((entry) => {
+                const isSelf = entry.userId === user?.id
+                const summary = ratingsSummaryQuery.data?.find((s) => s.userId === entry.userId)
+                const myRating = myRatingsQuery.data?.find((r) => r.ratedUserId === entry.userId)
+                const stats = eventStatsByUser[entry.userId] ?? {
+                  goals: 0,
+                  assists: 0,
+                  yellow: 0,
+                  red: 0,
+                }
+                return (
+                  <TableRow key={entry.userId}>
+                    <TableCell className="bg-card sticky left-0 z-10 font-medium">
+                      <span className="flex items-center gap-2">
+                        <AccountLevelRing
+                          userId={entry.userId}
+                          tier={levelsQuery.data?.[entry.userId]?.tier}
+                          ringWidth={2}
+                        >
+                          <PlayerAvatar
+                            avatarUrl={entry.user.avatarUrl}
+                            firstName={entry.user.firstName}
+                            lastName={entry.user.lastName}
+                            size="sm"
+                          />
+                        </AccountLevelRing>
+                        {entry.user.firstName} {entry.user.lastName}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {summary?.average != null ? `${summary.average.toFixed(1)}/10` : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {isSelf || myRating == null ? '—' : `${myRating.rating}/10`}
+                    </TableCell>
+                    <TableCell className="text-right">{stats.goals}</TableCell>
+                    <TableCell className="text-right">{stats.assists}</TableCell>
+                    <TableCell className="text-right">{stats.yellow}</TableCell>
+                    <TableCell className="text-right">{stats.red}</TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   )
 
   const compositionSummaryView = renderCompositionCard(false)
   const eventsSummaryView = renderEventsCard(false)
-  const votesTabApplies = match.status === 'PLAYED' && hasComposition
+
+  // Two steps: MOTM vote first, then ratings — advancing is implicit, driven by
+  // hasVotedMotm/ratingsSubmitted rather than separate local step state.
+  const voteModal = (
+    <Dialog open={showVoteModal}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[85vh] flex-col gap-6 overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {hasVotedMotm ? 'Notes obligatoires' : 'Vote obligatoire'} (étape {hasVotedMotm ? 2 : 1}/2)
+          </DialogTitle>
+          <DialogDescription>
+            {hasVotedMotm
+              ? 'Avant de voir le résumé du match, note tes coéquipiers.'
+              : "Avant de voir le résumé du match, vote pour l'homme du match."}
+          </DialogDescription>
+        </DialogHeader>
+        {hasVotedMotm ? ratingsCard : motmCard}
+      </DialogContent>
+    </Dialog>
+  )
 
   return (
     <div className="flex flex-col gap-8">
       <Confetti active={motmCelebration} />
+      {voteModal}
 
-      {showForcedMotmVote ? (
-        <div className="mx-auto flex w-full max-w-md flex-col gap-4">
-          <p className="text-muted-foreground text-center text-sm">
-            Vote pour l'homme du match avant de voir le résumé du match.
-          </p>
-          {motmCard}
+      {isCoach && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => setConfigOpen((v) => !v)}
+        >
+          {configOpen ? 'Fermer la configuration' : 'Configurer le match'}
+        </Button>
+      )}
+
+      {isCoach && configOpen ? (
+        <div className="flex flex-col gap-8">
+          {scoreCard}
+          {presenceCard}
+          {renderCompositionCard(true)}
+          {renderEventsCard(true)}
         </div>
-      ) : isCoach ? (
-        <div className="flex flex-col gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            className="self-start"
-            onClick={() => setConfigOpen((v) => !v)}
-          >
-            {configOpen ? 'Fermer la configuration' : 'Configurer le match'}
-          </Button>
-
-          {configOpen ? (
-            <div className="flex flex-col gap-8">
-              {scoreCard}
-              {presenceCard}
-              {renderCompositionCard(true)}
-              {renderEventsCard(true)}
-            </div>
-          ) : votesTabApplies ? (
-            <Tabs defaultValue="resume">
-              <TabsList className="mx-auto">
-                <TabsTrigger value="resume">Résumé</TabsTrigger>
-                <TabsTrigger value="votes">Votes &amp; notes</TabsTrigger>
-              </TabsList>
-              <TabsContent value="resume" className="flex flex-col gap-8">
-                {scoreSummary}
-                {compositionSummaryView}
-                {eventsSummaryView}
-              </TabsContent>
-              <TabsContent value="votes" className="flex flex-col gap-8">
-                {motmCard}
-                {ratingsCard}
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="flex flex-col gap-8">
-              {scoreSummary}
+      ) : votesTabApplies ? (
+        <div className="flex flex-col gap-8">
+          {recapHeader}
+          <Tabs defaultValue="resume">
+            <TabsList className="mx-auto">
+              <TabsTrigger value="resume">Résumé</TabsTrigger>
+              <TabsTrigger value="stats">Stats</TabsTrigger>
+            </TabsList>
+            <TabsContent value="resume" className="flex flex-col gap-8">
               {compositionSummaryView}
-              {eventsSummaryView}
-            </div>
-          )}
+            </TabsContent>
+            <TabsContent value="stats" className="flex flex-col gap-8">
+              {statsTable}
+            </TabsContent>
+          </Tabs>
         </div>
-      ) : showVotingTabs ? (
-        <Tabs defaultValue="votes">
-          <TabsList className="mx-auto">
-            <TabsTrigger value="votes">Votes</TabsTrigger>
-            <TabsTrigger value="resume">Résumé du match</TabsTrigger>
-          </TabsList>
-          <TabsContent value="votes" className="flex flex-col gap-8">
-            {motmCard}
-            {ratingsCard}
-          </TabsContent>
-          <TabsContent value="resume" className="flex flex-col gap-8">
-            {scoreCard}
-            {presenceCard}
-            {compositionSummaryView}
-            {eventsSummaryView}
-          </TabsContent>
-        </Tabs>
       ) : (
         <>
           {scoreCard}
