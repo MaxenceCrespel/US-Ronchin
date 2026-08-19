@@ -375,9 +375,9 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     key: 'centurion',
     category: 'EXPERIENCE',
     rarity: 'EPIC',
-    title: 'Centurion',
+    title: 'Le Pilier',
     description: '50 matchs joués',
-    emoji: '💯',
+    emoji: '🏛️',
   },
   {
     key: 'statue',
