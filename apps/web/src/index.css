@@ -167,12 +167,15 @@
   }
 }
 
-@keyframes motm-marquee {
-  from {
-    transform: translateX(0);
+@keyframes motm-sweep {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.9);
   }
-  to {
-    transform: translateX(-50%);
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 
@@ -205,12 +208,12 @@
   animation: net-wobble 0.3s ease-in-out;
 }
 
-.animate-motm-marquee {
-  animation: motm-marquee 8s linear infinite;
+.animate-motm-sweep {
+  animation: motm-sweep 1.8s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-motm-marquee {
+  .animate-motm-sweep {
     animation: none;
   }
 }

@@ -1198,20 +1198,26 @@ export function MatchDetailPage() {
             </span>
           </div>
         ) : hasComposition ? (
-          <div className="flex flex-col gap-2">
-            <span className="text-muted-foreground text-xs">Homme du match : vote en cours</span>
-            <div className="overflow-hidden">
-              <div className="animate-motm-marquee flex w-max items-center gap-4">
-                {[...(compositionQuery.data ?? []), ...(compositionQuery.data ?? [])].map((entry, i) => (
+          <div className="flex flex-col items-center gap-3 py-1">
+            <div className="border-club-gold/40 bg-club-gold/10 animate-legendary-pulse flex size-11 items-center justify-center rounded-full border">
+              <Crown className="text-club-gold size-5" />
+            </div>
+            <span className="text-muted-foreground text-xs">Homme du match : vote en cours…</span>
+            <div className="flex flex-wrap justify-center gap-2">
+              {(compositionQuery.data ?? []).map((entry, i) => (
+                <div
+                  key={entry.userId}
+                  className="animate-motm-sweep"
+                  style={{ animationDelay: `${i * 0.12}s` }}
+                >
                   <PlayerAvatar
-                    key={`${entry.userId}-${i}`}
                     avatarUrl={entry.user.avatarUrl}
                     firstName={entry.user.firstName}
                     lastName={entry.user.lastName}
                     size="sm"
                   />
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
         ) : null}
