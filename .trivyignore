@@ -3,20 +3,26 @@
 # here; only add when there's a genuine, documented reason a real finding
 # doesn't apply.
 
-# --- apps/api image: transitive Debian dependencies pulled in by
-# installing Google Chrome itself (`playwright install chrome` — see
-# apps/api/Dockerfile). Google Chrome's own .deb package installs with its
-# full Recommends: chain (fonts, perl, glib, cups, ncurses, util-linux...)
-# the same way `playwright install --with-deps` did — switching from the
-# generic Chromium build to the specific "chrome" channel the FFF scraper
-# requires (fff-scraper.service.ts uses `channel: 'chrome'`) didn't reduce
-# this, it's inherent to installing Chrome's actual package on Debian.
+# --- apps/api image: Debian OS-level dependencies with no upstream fix.
+# Two distinct sources, both genuinely unavoidable — verified, not assumed:
+#   1. Google Chrome's own .deb package (`playwright install chrome` — see
+#      apps/api/Dockerfile) installs with its full Recommends: chain (fonts,
+#      perl, glib, cups, ncurses, curl, openssl, libssh2...) — switching from
+#      the generic Chromium build to the "chrome" channel the FFF scraper
+#      requires (fff-scraper.service.ts uses `channel: 'chrome'`) didn't
+#      reduce this, it's inherent to installing Chrome's actual package.
+#   2. Packages already present in the bare `node:22-bookworm-slim` base
+#      image BEFORE anything in this Dockerfile runs (e.g. util-linux) —
+#      confirmed with `docker run --rm node:22-bookworm-slim dpkg -l`.
+#      Nothing to opt out of; it ships with the base image itself.
 # `apt-get upgrade` (already run in the Dockerfile) has nothing newer for
 # any of these — Trivy marks them "affected"/"will_not_fix"/"fix_deferred",
-# no Debian bookworm fix published. None of it is reachable application attack
-# surface: the scraper only ever visits one fixed, trusted FFF domain over
-# HTTPS, in pure headless mode (no X server, no user-supplied files,
-# no LDAP/SSH/TIFF processing) — this whole dependency chain sits unused.
+# no Debian bookworm fix published (re-verified via `apt list --upgradable`
+# inside the built image — empty). None of it is reachable application
+# attack surface: the scraper only ever visits one fixed, trusted FFF domain
+# over HTTPS, in pure headless mode (no X server, no user-supplied files,
+# no LDAP/SSH/TIFF/mount processing) — this whole dependency surface sits
+# unused by our actual application code.
 CVE-2022-4055
 CVE-2023-25193
 CVE-2023-2953
@@ -41,6 +47,7 @@ CVE-2026-42496
 CVE-2026-42497
 CVE-2026-45186
 CVE-2026-48962
+CVE-2026-53613
 CVE-2026-53615
 CVE-2026-54369
 CVE-2026-55199
