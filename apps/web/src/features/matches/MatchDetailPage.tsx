@@ -231,7 +231,10 @@ export function MatchDetailPage() {
     if (autoOpenedConfigRef.current) return
     if (!matchQuery.data || !compositionQuery.data) return
     autoOpenedConfigRef.current = true
-    if (compositionQuery.data.length === 0 && matchQuery.data.status !== 'PLAYED') {
+    const hasKickedOff =
+      new Date(`${matchQuery.data.date}T${matchQuery.data.kickOffTime ?? '00:00:00'}`).getTime() <=
+      Date.now()
+    if (compositionQuery.data.length === 0 && matchQuery.data.status !== 'PLAYED' && hasKickedOff) {
       setConfigOpen(true)
     }
   }, [matchQuery.data, compositionQuery.data])
@@ -474,6 +477,12 @@ export function MatchDetailPage() {
   const match = matchQuery.data
   if (!match) return null
 
+  // The coach can only configure a match (score, composition, events) once it has
+  // actually kicked off — no pre-announcing the lineup, everything is entered after
+  // the fact. Falls back to midnight on the match date when no kick-off time is set.
+  const matchTimeHasPassed =
+    new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
+
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
   const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
@@ -613,7 +622,7 @@ export function MatchDetailPage() {
             min={0}
             value={scoreHome}
             onChange={(e) => setScoreHome(e.target.value)}
-            disabled={!isCoach}
+            disabled={!isCoach || !matchTimeHasPassed}
           />
           <span>-</span>
           <Input
@@ -622,9 +631,9 @@ export function MatchDetailPage() {
             min={0}
             value={scoreAway}
             onChange={(e) => setScoreAway(e.target.value)}
-            disabled={!isCoach}
+            disabled={!isCoach || !matchTimeHasPassed}
           />
-          {isCoach && (
+          {isCoach && matchTimeHasPassed && (
             <Button size="sm" onClick={() => scoreMutation.mutate()} disabled={scoreMutation.isPending}>
               Enregistrer le score
             </Button>
@@ -1372,7 +1381,7 @@ export function MatchDetailPage() {
       <Confetti active={motmCelebration} />
       {voteModal}
 
-      {isCoach && (
+      {isCoach && matchTimeHasPassed && (
         <Button
           variant="outline"
           size="sm"
@@ -1383,7 +1392,7 @@ export function MatchDetailPage() {
         </Button>
       )}
 
-      {isCoach && configOpen ? (
+      {isCoach && matchTimeHasPassed && configOpen ? (
         <div className="flex flex-col gap-8">
           {scoreCard}
           {presenceCard}
