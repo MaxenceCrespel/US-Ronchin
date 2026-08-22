@@ -1322,7 +1322,6 @@ export function MatchDetailPage() {
   )
 
   const compositionSummaryView = renderCompositionCard(false)
-  const eventsSummaryView = renderEventsCard(false)
 
   // Two steps: MOTM vote first, then ratings — advancing is implicit, driven by
   // hasVotedMotm/ratingsSubmitted rather than separate local step state.
@@ -1389,11 +1388,12 @@ export function MatchDetailPage() {
           </Tabs>
         </div>
       ) : (
+        // Match not played yet: only the score card and "who's available" attendance —
+        // the composition is the coach's internal prep and shouldn't leak to players
+        // before kickoff. It reappears in the Résumé tab once the match is PLAYED.
         <>
           {scoreCard}
           {presenceCard}
-          {compositionSummaryView}
-          {eventsSummaryView}
         </>
       )}
     </div>
