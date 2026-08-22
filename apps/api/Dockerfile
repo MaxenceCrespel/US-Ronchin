@@ -43,6 +43,18 @@ COPY --from=api-build /build/apps/api/package.json ./package.json
 # invokes this npm at build time. Upgrading it keeps that surface current
 # without waiting on a base image rebuild.
 RUN npm install -g npm@latest
+# npm@latest still vendors a frozen, exact-pinned tar version — its own
+# package.json declares a semver range that a patched release would satisfy,
+# but the actual shipped bundle isn't re-resolved against it, so
+# `npm install -g npm@latest` alone doesn't pick up the fix. Surgically swap
+# just the vendored tar/ directory for the patched release (verified this
+# doesn't break npm: a real `npm install` still works fine against it) rather
+# than waiting on an upstream npm release that bumps its own bundle.
+RUN npm pack tar@7.5.21 --pack-destination /tmp --silent \
+  && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
+  && mkdir -p /usr/local/lib/node_modules/npm/node_modules/tar \
+  && tar -xzf /tmp/tar-7.5.21.tgz -C /usr/local/lib/node_modules/npm/node_modules/tar --strip-components=1 \
+  && rm /tmp/tar-7.5.21.tgz
 
 # Chromium, matching whatever playwright version is in node_modules —
 # required at runtime by the FFF calendar scraper (cron job + manual POST
