@@ -6,6 +6,7 @@ import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
 import { JoinPage } from '@/features/auth/JoinPage'
 import { HomePage } from '@/features/home/HomePage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { CompleteProfilePage } from '@/features/profile/CompleteProfilePage'
 import { TrainingsPage } from '@/features/trainings/TrainingsPage'
 import { PlayersPage } from '@/features/players/PlayersPage'
 import { MatchesPage } from '@/features/matches/MatchesPage'
@@ -21,6 +22,7 @@ function App() {
       <Route path="/join" element={<JoinPage />} />
 
       <Route element={<RequireAuth />}>
+        <Route path="/complete-profile" element={<CompleteProfilePage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/trainings" element={<TrainingsPage />} />
