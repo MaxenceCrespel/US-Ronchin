@@ -25,6 +25,9 @@ export class UserBadge {
   @Column({ name: 'badge_key' })
   badgeKey: string;
 
+  @Column({ type: 'int', default: 1 })
+  count: number;
+
   @CreateDateColumn({ name: 'earned_at' })
   earnedAt: Date;
 }

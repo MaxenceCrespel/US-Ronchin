@@ -301,7 +301,10 @@ export function BadgePackReveal({ queue, onDone }: { queue: BadgeStatus[]; onDon
           >
             {RARITY_LABELS[rarity]} · Badge débloqué !
           </p>
-          <p className="text-lg font-bold">{badge.title}</p>
+          <p className="text-lg font-bold">
+            {badge.title}
+            {badge.count > 1 && <span className="text-white/70"> ×{badge.count}</span>}
+          </p>
           <p className="text-sm text-white/70">{badge.description}</p>
           <Button className="mt-4" onClick={next}>
             {index + 1 < queue.length ? 'Badge suivant' : 'Génial !'}

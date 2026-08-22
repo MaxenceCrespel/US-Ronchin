@@ -175,6 +175,7 @@ export interface BadgeStatus {
   emoji: string
   earned: boolean
   earnedAt: string | null
+  count: number
 }
 
 export type AccountTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'RUBY'

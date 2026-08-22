@@ -58,19 +58,26 @@ function BadgeMedal({ badge, onOpen }: { badge: BadgeStatus; onOpen: () => void 
       onClick={onOpen}
       className="flex flex-col items-center gap-1.5 text-center"
     >
-      <div
-        className={cn(
-          'flex size-16 items-center justify-center rounded-full border-2 text-2xl transition-all duration-200 active:scale-95',
-          badge.earned
-            ? cn(
-                RARITY_RING[badge.rarity],
-                'animate-pop-in shadow-sm',
-                badge.rarity === 'LEGENDARY' && 'animate-legendary-pulse',
-              )
-            : 'border-dashed border-muted-foreground/25 bg-muted grayscale opacity-45',
+      <div className="relative">
+        <div
+          className={cn(
+            'flex size-16 items-center justify-center rounded-full border-2 text-2xl transition-all duration-200 active:scale-95',
+            badge.earned
+              ? cn(
+                  RARITY_RING[badge.rarity],
+                  'animate-pop-in shadow-sm',
+                  badge.rarity === 'LEGENDARY' && 'animate-legendary-pulse',
+                )
+              : 'border-dashed border-muted-foreground/25 bg-muted grayscale opacity-45',
+          )}
+        >
+          {badge.emoji}
+        </div>
+        {badge.earned && badge.count > 1 && (
+          <span className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none">
+            ×{badge.count}
+          </span>
         )}
-      >
-        {badge.emoji}
       </div>
       <span className="w-20 text-[11px] leading-tight font-semibold">{badge.title}</span>
     </button>
@@ -147,7 +154,9 @@ export function BadgesGrid({ userId }: { userId: string }) {
             <p className="text-muted-foreground text-sm">{activeBadge?.description}</p>
             {activeBadge?.earned ? (
               <p className="text-xs font-medium text-emerald-600">
-                ✅ Débloqué{activeBadge.earnedAt ? ` le ${formatEarnedDate(activeBadge.earnedAt)}` : ''}
+                {activeBadge.count > 1
+                  ? `✅ Débloqué ${activeBadge.count} fois`
+                  : `✅ Débloqué${activeBadge.earnedAt ? ` le ${formatEarnedDate(activeBadge.earnedAt)}` : ''}`}
               </p>
             ) : (
               <p className="text-muted-foreground text-xs">🔒 Pas encore débloqué</p>

@@ -35,14 +35,14 @@ export function BadgeUnlockWatcher() {
     // compare against the persisted "seen" set, or newly-earned badges get
     // silently swallowed on the next refresh instead of being celebrated.
     if (hasNeverSeenBadges(user.id)) {
-      saveSeenBadges(user.id, new Set(earned.map((b) => b.key)))
+      saveSeenBadges(user.id, Object.fromEntries(earned.map((b) => [b.key, b.count])))
       return
     }
 
     const seen = loadSeenBadges(user.id)
-    const newlyEarned = earned.filter((b) => !seen.has(b.key))
+    const newlyEarned = earned.filter((b) => b.count > (seen[b.key] ?? 0))
     if (newlyEarned.length > 0) {
-      saveSeenBadges(user.id, new Set(earned.map((b) => b.key)))
+      saveSeenBadges(user.id, Object.fromEntries(earned.map((b) => [b.key, b.count])))
       setQueue((prev) => [...prev, ...newlyEarned])
     }
   }, [badgesQuery.data, user, tourActive])

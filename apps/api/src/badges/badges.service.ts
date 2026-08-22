@@ -54,6 +54,24 @@ function isNearBirthday(isoDate: string, birthDate: string): boolean {
   );
 }
 
+/** Badges that reward a feat achievable multiple times within a single match — each
+ * occurrence bumps the badge's own count instead of only ever being earned once. */
+const REPEATABLE_BADGE_KEYS = new Set([
+  'hat_trick',
+  'poker',
+  'double',
+  'duo_magique',
+  'clean_sheet',
+  'super_sub',
+  'braquage',
+  'traiteur',
+  'vainqueur_soir',
+  'cadeau_anniversaire',
+  'early_bird',
+  'jekyll_hyde',
+  'impact_immediat',
+]);
+
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
   RARE: 3,
@@ -88,6 +106,7 @@ export interface BadgeStatus {
   emoji: string;
   earned: boolean;
   earnedAt: Date | null;
+  count: number;
 }
 
 @Injectable()
@@ -158,30 +177,38 @@ export class BadgesService {
       }
       const hasAigleDesSurfaces = (goalTypeCounts.get(GoalType.HEAD) ?? 0) >= 3;
       const hasSpecialiste = (goalTypeCounts.get(GoalType.PENALTY) ?? 0) >= 3;
-      const hasHatTrick = [...goalsByMatch.values()].some((c) => c >= 3);
-      const hasPoker = [...goalsByMatch.values()].some((c) => c >= 4);
-      const hasJekyllHyde = [...goalsByMatch.keys()].some((matchId) => redMatches.has(matchId));
-      const hasEarlyGoal = eventsAsActor.some(
+      const hatTrickCount = [...goalsByMatch.values()].filter((c) => c >= 3).length;
+      const hasHatTrick = hatTrickCount > 0;
+      const pokerCount = [...goalsByMatch.values()].filter((c) => c >= 4).length;
+      const hasPoker = pokerCount > 0;
+      const jekyllHydeCount = [...goalsByMatch.keys()].filter((matchId) => redMatches.has(matchId)).length;
+      const hasJekyllHyde = jekyllHydeCount > 0;
+      const earlyGoalCount = eventsAsActor.filter(
         (e) => e.type === MatchEventType.GOAL && e.minute != null && e.minute <= 5,
-      );
+      ).length;
+      const hasEarlyGoal = earlyGoalCount > 0;
 
       const assistMatchIds = new Set(eventsAsAssist.map((e) => e.matchId));
-      const hasDuoMagique = [...goalsByMatch.keys()].some((matchId) => assistMatchIds.has(matchId));
+      const duoMagiqueCount = [...goalsByMatch.keys()].filter((matchId) => assistMatchIds.has(matchId)).length;
+      const hasDuoMagique = duoMagiqueCount > 0;
 
-      const hasCleanSheet = myComposition.some((c) => {
+      const cleanSheetCount = myComposition.filter((c) => {
         const m = c.match;
         if (!m || m.status !== 'PLAYED' || m.scoreHome == null || m.scoreAway == null) return false;
         const concededByUs = m.homeAway === 'HOME' ? m.scoreAway : m.scoreHome;
         return concededByUs === 0;
-      });
+      }).length;
+      const hasCleanSheet = cleanSheetCount > 0;
 
-      const hasSuperSub = myComposition.some(
+      const superSubCount = myComposition.filter(
         (c) => !c.isStarter && (goalsByMatch.get(c.matchId) ?? 0) > 0,
-      );
+      ).length;
+      const hasSuperSub = superSubCount > 0;
 
-      const hasImpactImmediat = myComposition.some(
+      const impactImmediatCount = myComposition.filter(
         (c) => !c.isStarter && assistMatchIds.has(c.matchId),
-      );
+      ).length;
+      const hasImpactImmediat = impactImmediatCount > 0;
 
       const awayCount = myComposition.filter((c) => c.match?.homeAway === 'AWAY').length;
 
@@ -252,33 +279,37 @@ export class BadgesService {
         maxLossStreak = Math.max(maxLossStreak, curLoss);
       }
 
-      const hasDouble = [...goalsByMatch.values()].some((c) => c >= 2);
+      const doubleCount = [...goalsByMatch.values()].filter((c) => c >= 2).length;
+      const hasDouble = doubleCount > 0;
 
       const isMatchWin = (m: Match) =>
         m.status === 'PLAYED' &&
         m.scoreHome != null &&
         m.scoreAway != null &&
         (m.homeAway === 'HOME' ? m.scoreHome > m.scoreAway : m.scoreAway > m.scoreHome);
-      const hasEveningWinner = eventsAsActor.some(
+      const eveningWinnerCount = eventsAsActor.filter(
         (e) =>
           e.type === MatchEventType.GOAL &&
           e.minute != null &&
           e.minute >= 85 &&
           e.match &&
           isMatchWin(e.match),
-      );
+      ).length;
+      const hasEveningWinner = eveningWinnerCount > 0;
 
-      const hasBirthdayGoal =
-        !!me?.birthDate &&
-        eventsAsActor.some(
-          (e) => e.type === MatchEventType.GOAL && e.match && isNearBirthday(e.match.date, me.birthDate!),
-        );
+      const birthdayGoalCount = me?.birthDate
+        ? eventsAsActor.filter(
+            (e) => e.type === MatchEventType.GOAL && e.match && isNearBirthday(e.match.date, me.birthDate!),
+          ).length
+        : 0;
+      const hasBirthdayGoal = birthdayGoalCount > 0;
 
       const assistsByMatch = new Map<string, number>();
       for (const e of eventsAsAssist) {
         assistsByMatch.set(e.matchId, (assistsByMatch.get(e.matchId) ?? 0) + 1);
       }
-      const hasTraiteur = [...assistsByMatch.values()].some((c) => c >= 2);
+      const traiteurCount = [...assistsByMatch.values()].filter((c) => c >= 2).length;
+      const hasTraiteur = traiteurCount > 0;
 
       // Chronological timeline of goal contributions — longest run of assists
       // uninterrupted by a goal, across matches.
@@ -349,9 +380,10 @@ export class BadgesService {
       const hasCadenas = maxCadenasStreak >= 3;
       const hasGardeDuCorps = maxBenchStreak >= 5;
 
-      const hasBraquage = playedMatches.some(
+      const braquageCount = playedMatches.filter(
         (m) => isMatchWin(m) && m.scoreHome! + m.scoreAway! === 1 && goalsByMatch.has(m.id),
-      );
+      ).length;
+      const hasBraquage = braquageCount > 0;
 
       const hasNaufrage = playedMatches.some(
         (m) => resultOf(m) === 'L' && Math.abs(m.scoreHome! - m.scoreAway!) >= 4,
@@ -458,6 +490,24 @@ export class BadgesService {
         braquage: hasBraquage,
       };
 
+      const repeatableCounts: Record<string, number> = {
+        hat_trick: hatTrickCount,
+        poker: pokerCount,
+        double: doubleCount,
+        duo_magique: duoMagiqueCount,
+        clean_sheet: cleanSheetCount,
+        super_sub: superSubCount,
+        braquage: braquageCount,
+        traiteur: traiteurCount,
+        vainqueur_soir: eveningWinnerCount,
+        cadeau_anniversaire: birthdayGoalCount,
+        early_bird: earlyGoalCount,
+        jekyll_hyde: jekyllHydeCount,
+        impact_immediat: impactImmediatCount,
+      };
+      const occurrenceCount = (key: string): number =>
+        REPEATABLE_BADGE_KEYS.has(key) ? (repeatableCounts[key] ?? 0) : eligibility[key] ? 1 : 0;
+
       const otherCategories: BadgeCategory[] = [
         'GOALS',
         'ASSISTS',
@@ -472,18 +522,32 @@ export class BadgesService {
       );
 
       const existing = await this.badgesRepository.find({ where: { userId } });
-      const existingKeys = new Set(existing.map((b) => b.badgeKey));
-      const toAward = BADGE_DEFINITIONS.filter(
-        (d) => eligibility[d.key] && !existingKeys.has(d.key),
-      );
-      if (toAward.length > 0) {
-        await this.badgesRepository.save(
-          toAward.map((d) => this.badgesRepository.create({ userId, badgeKey: d.key })),
-        );
-        for (const badge of toAward) {
+      const existingByKey = new Map(existing.map((b) => [b.badgeKey, b]));
+
+      const toCreate: UserBadge[] = [];
+      const toUpdate: UserBadge[] = [];
+      const notifications: { title: string; count: number }[] = [];
+
+      for (const d of BADGE_DEFINITIONS) {
+        const count = occurrenceCount(d.key);
+        if (count <= 0) continue;
+        const row = existingByKey.get(d.key);
+        if (!row) {
+          toCreate.push(this.badgesRepository.create({ userId, badgeKey: d.key, count }));
+          notifications.push({ title: d.title, count });
+        } else if (REPEATABLE_BADGE_KEYS.has(d.key) && count > row.count) {
+          row.count = count;
+          toUpdate.push(row);
+          notifications.push({ title: d.title, count });
+        }
+      }
+
+      if (toCreate.length > 0 || toUpdate.length > 0) {
+        await this.badgesRepository.save([...toCreate, ...toUpdate]);
+        for (const notif of notifications) {
           await this.pushNotificationsService.sendToUser(userId, {
             title: 'Badge débloqué !',
-            body: badge.title,
+            body: notif.count > 1 ? `${notif.title} ×${notif.count}` : notif.title,
             url: '/profile',
           });
         }
@@ -491,13 +555,17 @@ export class BadgesService {
     }
 
     const earned = await this.badgesRepository.find({ where: { userId } });
-    const earnedMap = new Map(earned.map((b) => [b.badgeKey, b.earnedAt]));
+    const earnedMap = new Map(earned.map((b) => [b.badgeKey, b]));
 
-    return BADGE_DEFINITIONS.map((d) => ({
-      ...d,
-      earned: earnedMap.has(d.key),
-      earnedAt: earnedMap.get(d.key) ?? null,
-    }));
+    return BADGE_DEFINITIONS.map((d) => {
+      const row = earnedMap.get(d.key);
+      return {
+        ...d,
+        earned: !!row,
+        earnedAt: row?.earnedAt ?? null,
+        count: row?.count ?? 0,
+      };
+    });
   }
 
   private levelFromScore(score: number): AccountLevel {
@@ -520,7 +588,7 @@ export class BadgesService {
     const badges = await this.getForUser(userId);
     const score = badges
       .filter((b) => b.earned)
-      .reduce((sum, b) => sum + RARITY_WEIGHT[b.rarity], 0);
+      .reduce((sum, b) => sum + RARITY_WEIGHT[b.rarity] * b.count, 0);
     return this.levelFromScore(score);
   }
 
@@ -536,7 +604,7 @@ export class BadgesService {
     const scoreByUser = new Map<string, number>();
     for (const b of allBadges) {
       const rarity = rarityByKey.get(b.badgeKey) ?? 'COMMON';
-      scoreByUser.set(b.userId, (scoreByUser.get(b.userId) ?? 0) + RARITY_WEIGHT[rarity]);
+      scoreByUser.set(b.userId, (scoreByUser.get(b.userId) ?? 0) + RARITY_WEIGHT[rarity] * b.count);
     }
 
     const result: Record<string, AccountLevel> = {};
