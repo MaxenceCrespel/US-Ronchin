@@ -784,31 +784,50 @@ export function MatchDetailPage() {
                 {compositionMutation.isPending ? 'Enregistrement...' : 'Enregistrer la composition'}
               </Button>
             </>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {compositionQuery.data?.some((e) => e.isStarter && e.formationX != null) && (
-                <PitchFormationEditor
-                  readOnly
-                  players={(compositionQuery.data ?? [])
-                    .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
-                    .map((e) => ({
-                      userId: e.userId,
-                      firstName: e.user.firstName,
-                      lastName: e.user.lastName,
-                      shirtNumber: e.user.jerseyNumber,
-                      x: e.formationX!,
-                      y: e.formationY!,
-                    }))}
-                  onSwap={() => {}}
-                />
+          ) : (compositionQuery.data ?? []).some((e) => e.isStarter && e.formationX != null) ? (
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-center">
+              <PitchFormationEditor
+                readOnly
+                players={(compositionQuery.data ?? [])
+                  .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
+                  .map((e) => ({
+                    userId: e.userId,
+                    firstName: e.user.firstName,
+                    lastName: e.user.lastName,
+                    shirtNumber: e.user.jerseyNumber,
+                    x: e.formationX!,
+                    y: e.formationY!,
+                  }))}
+                onSwap={() => {}}
+              />
+              {(compositionQuery.data ?? []).some((e) => !e.isStarter) && (
+                <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
+                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                    Remplaçants
+                  </p>
+                  {(compositionQuery.data ?? [])
+                    .filter((entry) => !entry.isStarter)
+                    .map((entry) => (
+                      <div key={entry.id} className="flex items-center gap-2 text-sm">
+                        <PlayerAvatar
+                          avatarUrl={entry.user.avatarUrl}
+                          firstName={entry.user.firstName}
+                          lastName={entry.user.lastName}
+                          size="sm"
+                        />
+                        {entry.user.firstName} {entry.user.lastName}
+                      </div>
+                    ))}
+                </div>
               )}
-              <div className="flex flex-wrap gap-1.5">
-                {compositionQuery.data?.map((entry) => (
-                  <Badge key={entry.id} variant={entry.isStarter ? 'default' : 'secondary'}>
-                    {entry.user.firstName} {entry.user.lastName}
-                  </Badge>
-                ))}
-              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {compositionQuery.data?.map((entry) => (
+                <Badge key={entry.id} variant={entry.isStarter ? 'default' : 'secondary'}>
+                  {entry.user.firstName} {entry.user.lastName}
+                </Badge>
+              ))}
             </div>
           )}
         </CardContent>
