@@ -51,6 +51,10 @@ async function seedCoach() {
     phone: '0600000000',
     heightCm: 180,
     weightKg: 78,
+    // Without this, the onboarding tour auto-opens on first login (see
+    // OnboardingTour.tsx) and swaps in fake demo data over the real page —
+    // breaks any automated flow expecting the real home page content.
+    hasSeenOnboarding: true,
   });
 
   console.log(`Compte coach créé pour ${email}.`);
