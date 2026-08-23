@@ -116,6 +116,16 @@ export class AuthService {
     });
   }
 
+  /** Public status check for a joiner waiting on coach approval — no auth possible yet
+   * since they don't have a session, so this is keyed by email only, no secrets returned. */
+  async getJoinStatus(email: string): Promise<{ status: 'NOT_FOUND' | 'PENDING' | 'ACTIVE' }> {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      return { status: 'NOT_FOUND' };
+    }
+    return { status: user.status === UserStatus.PENDING ? 'PENDING' : 'ACTIVE' };
+  }
+
   async acceptInvitation(token: string, password: string) {
     const invitation = await this.invitationsRepository.findOne({ where: { token } });
     if (!invitation) {

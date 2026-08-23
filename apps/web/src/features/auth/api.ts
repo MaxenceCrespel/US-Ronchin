@@ -32,6 +32,15 @@ export async function join(input: JoinInput): Promise<void> {
   await apiClient.post('/auth/join', input)
 }
 
+export interface JoinStatus {
+  status: 'NOT_FOUND' | 'PENDING' | 'ACTIVE'
+}
+
+export async function fetchJoinStatus(email: string): Promise<JoinStatus> {
+  const { data } = await apiClient.get<JoinStatus>('/auth/join-status', { params: { email } })
+  return data
+}
+
 export async function approveUser(userId: string): Promise<User> {
   const { data } = await apiClient.patch<User>(`/users/${userId}/approve`)
   return data

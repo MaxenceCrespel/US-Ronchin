@@ -1,7 +1,6 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -9,8 +8,11 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { join } from './api'
 
+const PENDING_JOIN_EMAIL_KEY = 'pending-join-email'
+
 export function JoinPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const token = searchParams.get('token') ?? ''
 
   const [firstName, setFirstName] = useState('')
@@ -20,8 +22,24 @@ export function JoinPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
+  // Already applied on this browser and still waiting — skip straight to the waiting
+  // page instead of showing a blank signup form again.
+  useEffect(() => {
+    const pendingEmail = localStorage.getItem(PENDING_JOIN_EMAIL_KEY)
+    if (pendingEmail) {
+      navigate(`/join/waiting?email=${encodeURIComponent(pendingEmail)}&token=${token}`, {
+        replace: true,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const mutation = useMutation({
     mutationFn: () => join({ token, firstName, lastName, email, isLicensed, password }),
+    onSuccess: () => {
+      localStorage.setItem(PENDING_JOIN_EMAIL_KEY, email)
+      navigate(`/join/waiting?email=${encodeURIComponent(email)}&token=${token}`)
+    },
   })
 
   const passwordsMatch = password.length >= 8 && password === confirmPassword
@@ -40,14 +58,6 @@ export function JoinPage() {
         <CardContent>
           {!token ? (
             <p className="text-destructive text-sm">Lien invalide.</p>
-          ) : mutation.isSuccess ? (
-            <div className="flex flex-col items-center gap-2 py-4 text-center">
-              <CheckCircle2 className="size-10 text-emerald-600" />
-              <p className="font-medium">Compte créé !</p>
-              <p className="text-muted-foreground text-sm">
-                Le coach doit valider ton compte avant que tu puisses te connecter.
-              </p>
-            </div>
           ) : (
             <form
               className="flex flex-col gap-4"

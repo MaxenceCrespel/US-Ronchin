@@ -4,6 +4,7 @@ import { RequireAuth } from '@/app/RequireAuth'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
 import { JoinPage } from '@/features/auth/JoinPage'
+import { JoinWaitingPage } from '@/features/auth/JoinWaitingPage'
 import { HomePage } from '@/features/home/HomePage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { CompleteProfilePage } from '@/features/profile/CompleteProfilePage'
@@ -21,6 +22,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
       <Route path="/join" element={<JoinPage />} />
+      <Route path="/join/waiting" element={<JoinWaitingPage />} />
 
       <Route element={<RequireAuth />}>
         <Route path="/complete-profile" element={<CompleteProfilePage />} />

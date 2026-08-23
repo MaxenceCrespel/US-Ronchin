@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -40,5 +40,10 @@ export class AuthController {
   async join(@Body() dto: JoinDto) {
     await this.authService.join(dto);
     return { pending: true };
+  }
+
+  @Get('join-status')
+  joinStatus(@Query('email') email: string) {
+    return this.authService.getJoinStatus(email);
   }
 }
