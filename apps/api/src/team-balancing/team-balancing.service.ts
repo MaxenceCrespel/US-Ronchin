@@ -5,8 +5,37 @@ import { TrainingTeamAssignment } from './entities/training-team-assignment.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { StatsService } from '../stats/stats.service';
+import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
 
 const DEFAULT_TEAM_COUNT = 2;
+
+const BAND_BY_SUBPOSITION: Record<PlayerSubPosition, PlayerPosition> = {
+  [PlayerSubPosition.GOALKEEPER]: PlayerPosition.GOALKEEPER,
+  [PlayerSubPosition.CENTER_BACK]: PlayerPosition.DEFENDER,
+  [PlayerSubPosition.RIGHT_BACK]: PlayerPosition.DEFENDER,
+  [PlayerSubPosition.LEFT_BACK]: PlayerPosition.DEFENDER,
+  [PlayerSubPosition.DEFENSIVE_MIDFIELDER]: PlayerPosition.MIDFIELDER,
+  [PlayerSubPosition.CENTER_MIDFIELDER]: PlayerPosition.MIDFIELDER,
+  [PlayerSubPosition.RIGHT_MIDFIELDER]: PlayerPosition.MIDFIELDER,
+  [PlayerSubPosition.LEFT_MIDFIELDER]: PlayerPosition.MIDFIELDER,
+  [PlayerSubPosition.ATTACKING_MIDFIELDER]: PlayerPosition.MIDFIELDER,
+  [PlayerSubPosition.RIGHT_WINGER]: PlayerPosition.FORWARD,
+  [PlayerSubPosition.LEFT_WINGER]: PlayerPosition.FORWARD,
+  [PlayerSubPosition.STRIKER]: PlayerPosition.FORWARD,
+};
+
+const BANDS: PlayerPosition[] = [
+  PlayerPosition.GOALKEEPER,
+  PlayerPosition.DEFENDER,
+  PlayerPosition.MIDFIELDER,
+  PlayerPosition.FORWARD,
+];
+
+/** A player "covers" a band as soon as ANY of their selected positions maps to it —
+ * a defender who also plays midfield can count as midfield cover if a team needs one. */
+function bandsCovered(user: User): Set<PlayerPosition> {
+  return new Set((user.positions ?? []).map((p) => BAND_BY_SUBPOSITION[p]));
+}
 
 @Injectable()
 export class TeamBalancingService {
@@ -74,6 +103,50 @@ export class TeamBalancingService {
       teamSums[minTeam] += scoreByUserId.get(userId) ?? 0;
       teamCounts[minTeam] += 1;
       assignments.push({ userId, guestLabel: null, teamIndex: minTeam });
+    }
+
+    // Safety net: if a whole team ends up with zero coverage on a broad position band
+    // (goalkeeper/defense/midfield/attack) while another team has a spare, swap one player
+    // in — best-effort only, does not attempt full multi-band optimization.
+    const userById = new Map(presentAttendances.map((a) => [a.userId, a.user]));
+    for (const band of BANDS) {
+      const coverers = presentUserIds.filter((id) => bandsCovered(userById.get(id)!).has(band));
+      if (coverers.length === 0) continue;
+
+      const coverageByTeam = new Array(effectiveTeamCount).fill(0);
+      for (const id of coverers) {
+        const assignment = assignments.find((a) => a.userId === id)!;
+        coverageByTeam[assignment.teamIndex]++;
+      }
+
+      for (let emptyTeam = 0; emptyTeam < effectiveTeamCount; emptyTeam++) {
+        if (coverageByTeam[emptyTeam] > 0) continue;
+
+        const donorTeam = coverageByTeam.findIndex((c, i) => i !== emptyTeam && c >= 2);
+        if (donorTeam === -1) continue;
+
+        const moverId = coverers.find(
+          (id) => assignments.find((a) => a.userId === id)!.teamIndex === donorTeam,
+        );
+        if (!moverId) continue;
+        const moverScore = scoreByUserId.get(moverId) ?? 0;
+
+        const emptyTeamMembers = assignments.filter((a) => a.teamIndex === emptyTeam);
+        if (emptyTeamMembers.length === 0) continue;
+        const partner = emptyTeamMembers.reduce((closest, candidate) => {
+          const candidateScore = scoreByUserId.get(candidate.userId) ?? 0;
+          const closestScore = scoreByUserId.get(closest.userId) ?? 0;
+          return Math.abs(candidateScore - moverScore) < Math.abs(closestScore - moverScore)
+            ? candidate
+            : closest;
+        });
+
+        const moverAssignment = assignments.find((a) => a.userId === moverId)!;
+        moverAssignment.teamIndex = emptyTeam;
+        partner.teamIndex = donorTeam;
+        coverageByTeam[donorTeam]--;
+        coverageByTeam[emptyTeam]++;
+      }
     }
 
     // Guests ("+1"/"+2") have no skill data — spread them to keep team headcounts even instead.
