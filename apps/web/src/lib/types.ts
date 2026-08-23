@@ -1,6 +1,19 @@
-export type UserRole = 'PLAYER' | 'COACH'
+export type UserRole = 'PLAYER' | 'COACH' | 'SUPERADMIN'
 export type PreferredFoot = 'LEFT' | 'RIGHT' | 'BOTH'
 export type PlayerPosition = 'GOALKEEPER' | 'DEFENDER' | 'MIDFIELDER' | 'FORWARD'
+export type PlayerSubPosition =
+  | 'GOALKEEPER'
+  | 'CENTER_BACK'
+  | 'RIGHT_BACK'
+  | 'LEFT_BACK'
+  | 'DEFENSIVE_MIDFIELDER'
+  | 'CENTER_MIDFIELDER'
+  | 'RIGHT_MIDFIELDER'
+  | 'LEFT_MIDFIELDER'
+  | 'ATTACKING_MIDFIELDER'
+  | 'RIGHT_WINGER'
+  | 'LEFT_WINGER'
+  | 'STRIKER'
 
 export type UserStatus = 'ACTIVE' | 'PENDING'
 
@@ -14,7 +27,7 @@ export interface User {
   lastName: string
   isLicensed: boolean
   licenseNumber: string | null
-  position: PlayerPosition | null
+  positions: PlayerSubPosition[]
   jerseyNumber: number | null
   preferredFoot: PreferredFoot | null
   heightCm: number | null

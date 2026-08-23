@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -55,7 +56,25 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch(':id')
-  async adminUpdate(@Param('id') id: string, @Body() dto: AdminUpdateUserDto) {
+  async adminUpdate(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateUserDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    // SUPERADMIN is reserved and never coach-manageable — a coach can promote/demote
+    // PLAYER/COACH freely, but granting or revoking SUPERADMIN requires being one already.
+    if (dto.role === UserRole.SUPERADMIN && currentUser.role !== UserRole.SUPERADMIN) {
+      throw new ForbiddenException('Seul un super-admin peut attribuer ce rôle');
+    }
+    const target = await this.usersService.findById(id);
+    if (
+      target.role === UserRole.SUPERADMIN &&
+      dto.role &&
+      dto.role !== UserRole.SUPERADMIN &&
+      currentUser.role !== UserRole.SUPERADMIN
+    ) {
+      throw new ForbiddenException('Seul un super-admin peut modifier ce rôle');
+    }
     return toPublicUser(await this.usersService.adminUpdate(id, dto));
   }
 

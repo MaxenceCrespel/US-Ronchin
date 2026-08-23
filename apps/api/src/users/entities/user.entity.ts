@@ -9,6 +9,7 @@ import {
 export enum UserRole {
   PLAYER = 'PLAYER',
   COACH = 'COACH',
+  SUPERADMIN = 'SUPERADMIN',
 }
 
 export enum UserStatus {
@@ -22,11 +23,31 @@ export enum PreferredFoot {
   BOTH = 'BOTH',
 }
 
+/** Broad pitch band derived from a player's y-coordinate on the formation editor for a
+ * SPECIFIC match (`MatchComposition.position`) — never chosen by a user, unrelated to
+ * `User.positions` below. Kept separate and unchanged so the pitch layout/coloring logic
+ * (`bandForY()` in PitchFormationEditor.tsx) is not affected by more precise sub-positions. */
 export enum PlayerPosition {
   GOALKEEPER = 'GOALKEEPER',
   DEFENDER = 'DEFENDER',
   MIDFIELDER = 'MIDFIELDER',
   FORWARD = 'FORWARD',
+}
+
+/** A player's own precise, possibly multiple, preferred positions — set on their profile. */
+export enum PlayerSubPosition {
+  GOALKEEPER = 'GOALKEEPER',
+  CENTER_BACK = 'CENTER_BACK',
+  RIGHT_BACK = 'RIGHT_BACK',
+  LEFT_BACK = 'LEFT_BACK',
+  DEFENSIVE_MIDFIELDER = 'DEFENSIVE_MIDFIELDER',
+  CENTER_MIDFIELDER = 'CENTER_MIDFIELDER',
+  RIGHT_MIDFIELDER = 'RIGHT_MIDFIELDER',
+  LEFT_MIDFIELDER = 'LEFT_MIDFIELDER',
+  ATTACKING_MIDFIELDER = 'ATTACKING_MIDFIELDER',
+  RIGHT_WINGER = 'RIGHT_WINGER',
+  LEFT_WINGER = 'LEFT_WINGER',
+  STRIKER = 'STRIKER',
 }
 
 @Entity('users')
@@ -64,8 +85,8 @@ export class User {
   @Column({ name: 'license_number', type: 'varchar', nullable: true })
   licenseNumber: string | null;
 
-  @Column({ type: 'enum', enum: PlayerPosition, nullable: true })
-  position: PlayerPosition | null;
+  @Column({ type: 'enum', enum: PlayerSubPosition, array: true, nullable: true })
+  positions: PlayerSubPosition[] | null;
 
   @Column({ name: 'jersey_number', type: 'int', nullable: true })
   jerseyNumber: number | null;
@@ -92,6 +113,11 @@ export class User {
   /** Set once the user has been through (or dismissed) the first-login onboarding tour. */
   @Column({ name: 'has_seen_onboarding', default: false })
   hasSeenOnboarding: boolean;
+
+  /** Timestamp of the last authenticated API request from this user — used by the
+   * superadmin KPI dashboard to gauge app usage, not a "presence" signal for anything else. */
+  @Column({ name: 'last_seen_at', type: 'timestamp', nullable: true })
+  lastSeenAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

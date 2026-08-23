@@ -12,7 +12,7 @@ export function RequireAuth({ roles }: { roles?: UserRole[] }) {
     return <Navigate to="/login" replace />
   }
 
-  if (roles && user && !roles.includes(user.role)) {
+  if (roles && user && user.role !== 'SUPERADMIN' && !roles.includes(user.role)) {
     return <Navigate to="/trainings" replace />
   }
 

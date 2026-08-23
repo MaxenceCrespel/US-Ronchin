@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { CalendarDays, CircleHelp, Home, Menu, ShieldHalf, Trophy, Users, X } from 'lucide-react'
+import { CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import type { UserRole } from '@/lib/types'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { Button } from '@/components/ui/button'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -11,12 +12,20 @@ import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { OnboardingTour } from '@/components/OnboardingTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 
-const navItems = [
+const navItems: {
+  to: string
+  label: string
+  icon: typeof Home
+  end?: boolean
+  tour: string
+  roles?: UserRole[]
+}[] = [
   { to: '/', label: 'Accueil', icon: Home, end: true, tour: 'nav-home' },
   { to: '/trainings', label: 'Entraînements', icon: CalendarDays, tour: 'nav-trainings' },
   { to: '/matches', label: 'Matchs', icon: ShieldHalf, tour: 'nav-matches' },
   { to: '/stats', label: 'Stats', icon: Trophy, tour: 'nav-stats' },
   { to: '/players', label: 'Effectif', icon: Users, tour: 'nav-players' },
+  { to: '/admin', label: 'Admin', icon: Gauge, tour: 'nav-admin', roles: ['SUPERADMIN'] },
 ]
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -80,7 +89,9 @@ export function Layout() {
           </button>
         </div>
         <nav className="flex flex-col gap-1 px-2 md:px-3">
-          {navItems.map(({ to, label, icon: Icon, end, tour }) => (
+          {navItems
+            .filter((item) => !item.roles || (user && item.roles.includes(user.role)))
+            .map(({ to, label, icon: Icon, end, tour }) => (
             <NavLink
               key={to}
               to={to}

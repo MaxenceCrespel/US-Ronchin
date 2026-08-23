@@ -18,6 +18,7 @@ import { StandingsModule } from './standings/standings.module';
 import { AwardsModule } from './awards/awards.module';
 import { BadgesModule } from './badges/badges.module';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module';
+import { ActivityTrackingModule } from './activity-tracking/activity-tracking.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { PushNotificationsModule } from './push-notifications/push-notifications
     AwardsModule,
     BadgesModule,
     PushNotificationsModule,
+    ActivityTrackingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

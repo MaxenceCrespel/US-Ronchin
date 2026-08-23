@@ -7,6 +7,7 @@ import { JoinPage } from '@/features/auth/JoinPage'
 import { HomePage } from '@/features/home/HomePage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { CompleteProfilePage } from '@/features/profile/CompleteProfilePage'
+import { AdminKpisPage } from '@/features/admin/AdminKpisPage'
 import { TrainingsPage } from '@/features/trainings/TrainingsPage'
 import { PlayersPage } from '@/features/players/PlayersPage'
 import { MatchesPage } from '@/features/matches/MatchesPage'
@@ -34,6 +35,10 @@ function App() {
 
           <Route element={<RequireAuth roles={['COACH']} />}>
             <Route path="/admin/import-pdf" element={<ImportMatchPdfPage />} />
+          </Route>
+
+          <Route element={<RequireAuth roles={['SUPERADMIN']} />}>
+            <Route path="/admin" element={<AdminKpisPage />} />
           </Route>
         </Route>
       </Route>
