@@ -9,5 +9,8 @@ const REQUIRED_SCALAR_FIELDS: (keyof User)[] = [
 ]
 
 export function isProfileComplete(user: User): boolean {
-  return REQUIRED_SCALAR_FIELDS.every((field) => user[field] != null) && user.positions.length > 0
+  return (
+    REQUIRED_SCALAR_FIELDS.every((field) => user[field] != null) &&
+    (user.positions?.length ?? 0) > 0
+  )
 }

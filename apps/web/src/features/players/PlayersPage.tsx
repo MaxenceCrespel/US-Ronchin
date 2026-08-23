@@ -383,7 +383,7 @@ export function PlayersPage() {
                   </TableCell>
                   <TableCell>{player.isLicensed ? 'Licencié' : 'Non licencié'}</TableCell>
                   <TableCell>
-                    {player.positions.length > 0
+                    {player.positions && player.positions.length > 0
                       ? player.positions.map((p) => SUB_POSITION_LABELS[p]).join(', ')
                       : '—'}
                   </TableCell>
