@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import type { AwardCategory } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchPlayers } from '@/features/players/api'
@@ -20,7 +21,7 @@ import { castVote, fetchAwardCategories, setCategoryActive } from './api'
 function CategoryCard({ category }: { category: AwardCategory }) {
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
-  const isCoach = currentUser?.role === 'COACH'
+  const isCoach = hasCoachAccess(currentUser)
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
   const [selected, setSelected] = useState(category.myVoteUserId ?? '')
 

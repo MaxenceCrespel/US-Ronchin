@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import type { MatchHomeAway } from '@/lib/types'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import { createMatch, fetchMatches } from './api'
@@ -84,7 +85,7 @@ function FffSyncStatus() {
 
 export function MatchesPage() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
   const queryClient = useQueryClient()
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
 

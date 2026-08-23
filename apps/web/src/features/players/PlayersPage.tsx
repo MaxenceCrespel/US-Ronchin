@@ -32,6 +32,7 @@ import {
 import { approveUser, createInvitation } from '@/features/auth/api'
 import { SUB_POSITION_LABELS } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import type { User, UserRole } from '@/lib/types'
 import { adminUpdateUser, deleteUser, fetchPlayers } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -317,7 +318,7 @@ function InvitePlayerDialog() {
 
 export function PlayersPage() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
   const queryClient = useQueryClient()
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
   const levelsQuery = useAllAccountLevels()

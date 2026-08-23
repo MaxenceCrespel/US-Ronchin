@@ -6,6 +6,7 @@ import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote } from 'lucide-rea
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { fetchSessions } from '@/features/trainings/api'
 import { SessionCard, MatchCard } from '@/features/trainings/TrainingsPage'
 import { fetchComposition, fetchMatches, fetchMotm } from '@/features/matches/api'
@@ -31,7 +32,7 @@ function greeting() {
 
 export function HomePage() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
 
   const todayKey = new Date().toISOString().slice(0, 10)
   const in3WeeksKey = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)

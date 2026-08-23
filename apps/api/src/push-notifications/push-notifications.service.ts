@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as webPush from 'web-push';
 import { PushSubscription } from './entities/push-subscription.entity';
 import { User, UserRole } from '../users/entities/user.entity';
@@ -83,7 +83,7 @@ export class PushNotificationsService {
 
   async sendToCoaches(payload: PushPayload): Promise<void> {
     const coaches = await this.usersRepository.find({
-      where: { role: UserRole.COACH },
+      where: { role: In([UserRole.COACH, UserRole.SUPERADMIN]) },
     });
     await this.sendToUsers(
       coaches.map((c) => c.id),

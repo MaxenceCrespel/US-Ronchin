@@ -40,7 +40,7 @@ export function Layout() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const replayOnboarding = useOnboardingUiStore((s) => s.replay)
-  const isCoach = user?.role === 'COACH'
+  const roleLabel = user?.role === 'SUPERADMIN' ? 'Super-admin' : user?.role === 'COACH' ? 'Coach' : 'Joueur'
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -135,7 +135,7 @@ export function Layout() {
                   <p className="text-sm font-medium">
                     {user.firstName} {user.lastName}
                   </p>
-                  <p className="text-muted-foreground text-xs">{isCoach ? 'Coach' : 'Joueur'}</p>
+                  <p className="text-muted-foreground text-xs">{roleLabel}</p>
                 </div>
               </Link>
             )}

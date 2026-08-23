@@ -12,11 +12,12 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { fetchStandings, fetchStandingsLogs, syncStandings } from './api'
 
 export function StandingsCard() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
   const queryClient = useQueryClient()
 
   const standingsQuery = useQuery({ queryKey: ['standings'], queryFn: fetchStandings })

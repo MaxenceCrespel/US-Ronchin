@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
 import { FootballSpinner } from '@/components/FootballSpinner'
@@ -615,7 +616,7 @@ export function SessionCard({
 }) {
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
-  const isCoach = currentUser?.role === 'COACH'
+  const isCoach = hasCoachAccess(currentUser)
   const [editing, setEditing] = useState(false)
   const [editDate, setEditDate] = useState(date)
   const [editStartTime, setEditStartTime] = useState(startTime.slice(0, 5))
@@ -943,7 +944,7 @@ function toDateKey(date: Date) {
 
 export function TrainingsPage() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
 
   const todayKey = toDateKey(new Date())
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))

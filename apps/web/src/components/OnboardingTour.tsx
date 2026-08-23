@@ -5,6 +5,7 @@ import { Pause, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { updateProfile } from '@/features/profile/api'
 import { buildTourDemoData } from '@/lib/tour-demo-data'
@@ -133,7 +134,7 @@ export function OnboardingTour() {
   const demoKeysRef = useRef<unknown[][] | null>(null)
   const originalQueryDefaultsRef = useRef<Record<string, unknown> | null>(null)
 
-  const steps = STEPS.filter((s) => !s.coachOnly || user?.role === 'COACH')
+  const steps = STEPS.filter((s) => !s.coachOnly || hasCoachAccess(user))
   const open = manualOpen || (!!user && !user.hasSeenOnboarding)
   const step = steps[stepIndex]
 

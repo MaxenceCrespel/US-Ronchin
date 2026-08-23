@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import { attendanceButtonClass } from '@/lib/attendance-styles'
 import { useCelebration } from '@/lib/useCelebration'
@@ -161,7 +162,7 @@ export function MatchDetailPage() {
   const matchId = id!
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
-  const isCoach = user?.role === 'COACH'
+  const isCoach = hasCoachAccess(user)
   const queryClient = useQueryClient()
 
   const matchQuery = useQuery({ queryKey: ['match', matchId], queryFn: () => fetchMatch(matchId) })

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
+import { hasCoachAccess } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { updateProfile, uploadAvatar, deleteAvatar } from './api'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
@@ -395,8 +396,8 @@ export function ProfilePage() {
     </Card>
     <NotificationSettingsCard />
     <BadgesGrid userId={user.id} />
-    {user.role === 'COACH' && <JoinLinkCard />}
-    {user.role === 'COACH' && <ClubSettingsCard />}
+    {hasCoachAccess(user) && <JoinLinkCard />}
+    {hasCoachAccess(user) && <ClubSettingsCard />}
     </div>
   )
 }
