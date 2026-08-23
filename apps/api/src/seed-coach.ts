@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { AppModule } from './app.module';
 import { UsersService } from './users/users.service';
-import { UserRole } from './users/entities/user.entity';
+import { PlayerSubPosition, PreferredFoot, UserRole } from './users/entities/user.entity';
 
 const SALT_ROUNDS = 10;
 
@@ -40,7 +40,18 @@ async function seedCoach() {
   });
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   await usersService.setPassword(pending.id, passwordHash);
-  await usersService.adminUpdate(pending.id, { role: UserRole.COACH });
+  await usersService.adminUpdate(pending.id, {
+    role: UserRole.COACH,
+    // Mandatory profile fields — without these, /complete-profile would block this
+    // account from reaching anywhere else in the app (see RequireAuth.tsx), which
+    // breaks any automated flow (E2E tests, first-login smoke checks) using it.
+    positions: [PlayerSubPosition.CENTER_MIDFIELDER],
+    preferredFoot: PreferredFoot.RIGHT,
+    birthDate: '1985-01-01',
+    phone: '0600000000',
+    heightCm: 180,
+    weightKg: 78,
+  });
 
   console.log(`Compte coach créé pour ${email}.`);
   await app.close();
