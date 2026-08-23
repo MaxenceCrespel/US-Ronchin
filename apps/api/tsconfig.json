@@ -11,6 +11,15 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "target": "ES2023",
+    // Off, not the ES2022+ default: with it on, every DTO's declared-but-omitted
+    // optional field (e.g. `positions?: X[]`) becomes a real own property set to
+    // `undefined` on instantiation (class-transformer's plainToInstance), and
+    // Object.assign(entity, dto) in UsersService then overwrites the real DB value
+    // with that undefined on every partial PATCH — silently nulling fields never
+    // sent in the request (verified: PATCH /users/me with only {hasSeenOnboarding}
+    // wiped positions/birthDate/phone/etc.). This restores "declared but absent
+    // from the payload" meaning "leave untouched", not "erase".
+    "useDefineForClassFields": false,
     "sourceMap": true,
     "outDir": "./dist",
     "incremental": true,
