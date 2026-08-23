@@ -1,10 +1,27 @@
-import type { AttendanceStatus, PlayerPosition, PreferredFoot } from './types'
+import type { AttendanceStatus, PlayerPosition, PlayerSubPosition, PreferredFoot } from './types'
 
+/** Broad pitch band, used only for `MatchComposition.position` (auto-derived per match, never
+ * user-selected) — see `PlayerSubPosition`/`SUB_POSITION_LABELS` for a player's own profile positions. */
 export const POSITION_LABELS: Record<PlayerPosition, string> = {
   GOALKEEPER: 'Gardien',
   DEFENDER: 'Défenseur',
   MIDFIELDER: 'Milieu',
   FORWARD: 'Attaquant',
+}
+
+export const SUB_POSITION_LABELS: Record<PlayerSubPosition, string> = {
+  GOALKEEPER: 'Gardien',
+  CENTER_BACK: 'Défenseur central',
+  RIGHT_BACK: 'Défenseur droit',
+  LEFT_BACK: 'Défenseur gauche',
+  DEFENSIVE_MIDFIELDER: 'Milieu défensif',
+  CENTER_MIDFIELDER: 'Milieu central',
+  RIGHT_MIDFIELDER: 'Milieu droit',
+  LEFT_MIDFIELDER: 'Milieu gauche',
+  ATTACKING_MIDFIELDER: 'Milieu offensif',
+  RIGHT_WINGER: 'Ailier droit',
+  LEFT_WINGER: 'Ailier gauche',
+  STRIKER: 'Attaquant',
 }
 
 export const FOOT_LABELS: Record<PreferredFoot, string> = {

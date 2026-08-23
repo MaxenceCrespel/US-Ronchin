@@ -4,6 +4,7 @@ import { Copy, Link2, RefreshCw, Check, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -15,8 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useAuthStore } from '@/lib/auth-store'
 import { cn } from '@/lib/utils'
 import { updateProfile, uploadAvatar, deleteAvatar } from './api'
-import type { PlayerPosition, PreferredFoot } from '@/lib/types'
-import { POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
+import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
+import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
 import { fetchSettings, updateSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
@@ -170,7 +171,7 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
 
-  const [position, setPosition] = useState<PlayerPosition | ''>(user?.position ?? '')
+  const [positions, setPositions] = useState<PlayerSubPosition[]>(user?.positions ?? [])
   const [jerseyNumber, setJerseyNumber] = useState(user?.jerseyNumber?.toString() ?? '')
   const [preferredFoot, setPreferredFoot] = useState<PreferredFoot | ''>(
     user?.preferredFoot ?? '',
@@ -185,7 +186,7 @@ export function ProfilePage() {
   const mutation = useMutation({
     mutationFn: () =>
       updateProfile({
-        position: position || undefined,
+        positions,
         jerseyNumber: jerseyNumber ? Number(jerseyNumber) : undefined,
         preferredFoot: preferredFoot || undefined,
         heightCm: heightCm ? Number(heightCm) : undefined,
@@ -281,20 +282,28 @@ export function ProfilePage() {
             mutation.mutate()
           }}
         >
-          <div className="flex flex-col gap-1.5">
-            <Label>Poste</Label>
-            <Select value={position} onValueChange={(v) => setPosition(v as PlayerPosition)}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Sélectionner un poste" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(POSITION_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label>Postes (plusieurs possibles)</Label>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                <div key={value} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`position-${value}`}
+                    checked={positions.includes(value as PlayerSubPosition)}
+                    onCheckedChange={(checked) =>
+                      setPositions((prev) =>
+                        checked
+                          ? [...prev, value as PlayerSubPosition]
+                          : prev.filter((p) => p !== value),
+                      )
+                    }
+                  />
+                  <Label htmlFor={`position-${value}`} className="text-sm font-normal">
                     {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </Label>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">

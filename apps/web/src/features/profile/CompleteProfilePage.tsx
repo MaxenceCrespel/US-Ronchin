@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -13,8 +14,8 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
-import { POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
-import type { PlayerPosition, PreferredFoot } from '@/lib/types'
+import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
+import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
 import { updateProfile } from './api'
 
 export function CompleteProfilePage() {
@@ -23,7 +24,7 @@ export function CompleteProfilePage() {
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
 
-  const [position, setPosition] = useState<PlayerPosition | ''>('')
+  const [positions, setPositions] = useState<PlayerSubPosition[]>([])
   const [preferredFoot, setPreferredFoot] = useState<PreferredFoot | ''>('')
   const [birthDate, setBirthDate] = useState('')
   const [heightCm, setHeightCm] = useState('')
@@ -33,7 +34,7 @@ export function CompleteProfilePage() {
   const mutation = useMutation({
     mutationFn: () =>
       updateProfile({
-        position: position || undefined,
+        positions,
         preferredFoot: preferredFoot || undefined,
         birthDate: birthDate || undefined,
         heightCm: heightCm ? Number(heightCm) : undefined,
@@ -49,7 +50,7 @@ export function CompleteProfilePage() {
   if (!user) return null
 
   const canSubmit =
-    !!position && !!preferredFoot && !!birthDate && !!heightCm && !!weightKg && !!phone
+    positions.length > 0 && !!preferredFoot && !!birthDate && !!heightCm && !!weightKg && !!phone
 
   return (
     <div className="flex min-h-svh items-center justify-center px-4 py-10">
@@ -70,20 +71,28 @@ export function CompleteProfilePage() {
               mutation.mutate()
             }}
           >
-            <div className="flex flex-col gap-1.5">
-              <Label>Poste</Label>
-              <Select value={position} onValueChange={(v) => setPosition(v as PlayerPosition)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sélectionner un poste" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(POSITION_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Label>Postes (plusieurs possibles)</Label>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                  <div key={value} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`position-${value}`}
+                      checked={positions.includes(value as PlayerSubPosition)}
+                      onCheckedChange={(checked) =>
+                        setPositions((prev) =>
+                          checked
+                            ? [...prev, value as PlayerSubPosition]
+                            : prev.filter((p) => p !== value),
+                        )
+                      }
+                    />
+                    <Label htmlFor={`position-${value}`} className="text-sm font-normal">
                       {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </Label>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">

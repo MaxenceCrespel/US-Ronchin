@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -8,12 +9,13 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { PlayerPosition, PreferredFoot } from '../entities/user.entity';
+import { PlayerSubPosition, PreferredFoot } from '../entities/user.entity';
 
 export class UpdateProfileDto {
   @IsOptional()
-  @IsEnum(PlayerPosition)
-  position?: PlayerPosition;
+  @IsArray()
+  @IsEnum(PlayerSubPosition, { each: true })
+  positions?: PlayerSubPosition[];
 
   @IsOptional()
   @IsInt()

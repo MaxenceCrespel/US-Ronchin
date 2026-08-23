@@ -1,8 +1,8 @@
 import { apiClient } from '@/lib/api-client'
-import type { PlayerPosition, PreferredFoot, User } from '@/lib/types'
+import type { PlayerSubPosition, PreferredFoot, User } from '@/lib/types'
 
 export interface UpdateProfileInput {
-  position?: PlayerPosition
+  positions?: PlayerSubPosition[]
   jerseyNumber?: number
   preferredFoot?: PreferredFoot
   heightCm?: number

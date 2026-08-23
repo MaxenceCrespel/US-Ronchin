@@ -27,7 +27,7 @@ function fakeUser(overrides: Partial<User> & Pick<User, 'id' | 'firstName' | 'la
     status: 'ACTIVE',
     isLicensed: true,
     licenseNumber: null,
-    position: null,
+    positions: [],
     jerseyNumber: null,
     preferredFoot: null,
     heightCm: null,
@@ -50,9 +50,9 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
   const weekStart = startOfWeek(today, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
 
-  const fabien = fakeUser({ id: 'demo-fabien', firstName: 'Fabien', lastName: 'Caboche', jerseyNumber: 6, position: 'DEFENDER' })
-  const vincent = fakeUser({ id: 'demo-vincent', firstName: 'Vincent', lastName: 'Ringalle', jerseyNumber: 9, position: 'FORWARD' })
-  const mehdi = fakeUser({ id: 'demo-mehdi', firstName: 'Mehdi', lastName: 'Choloux', jerseyNumber: 4, position: 'DEFENDER' })
+  const fabien = fakeUser({ id: 'demo-fabien', firstName: 'Fabien', lastName: 'Caboche', jerseyNumber: 6, positions: ['CENTER_BACK'] })
+  const vincent = fakeUser({ id: 'demo-vincent', firstName: 'Vincent', lastName: 'Ringalle', jerseyNumber: 9, positions: ['STRIKER'] })
+  const mehdi = fakeUser({ id: 'demo-mehdi', firstName: 'Mehdi', lastName: 'Choloux', jerseyNumber: 4, positions: ['CENTER_BACK'] })
   const yann = fakeUser({
     id: 'demo-yann',
     firstName: 'Yann',
@@ -60,7 +60,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     role: 'COACH',
     isPlayingCoach: true,
     jerseyNumber: 11,
-    position: 'FORWARD',
+    positions: ['STRIKER'],
   })
   const me: User = { ...currentUser }
 
