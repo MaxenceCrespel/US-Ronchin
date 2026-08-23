@@ -48,7 +48,7 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 
 ### État connu au premier run
 
-- **Deploy-Staging** est volontairement en `continue-on-error: true` tant que la checklist ci-dessous n'est pas faite — il échouera proprement sans bloquer le reste de la pipeline.
+- **Deploy-Staging** est actif — VPS configuré, secrets SSH en place (voir checklist ci-dessous, déjà faite).
 - **Qodo Merge** reste inactif tant que `OPENAI_KEY` n'est pas ajouté (voir plus bas).
 
 ## Checklist : activer le déploiement automatique sur le VPS
