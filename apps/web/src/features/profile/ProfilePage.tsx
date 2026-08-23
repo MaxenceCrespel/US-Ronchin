@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Link2, RefreshCw, Check, Camera } from 'lucide-react'
+import { Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { updateProfile, uploadAvatar, deleteAvatar } from './api'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
 import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
-import { fetchSettings, updateSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
+import { fetchSettings, updateSettings } from '@/features/settings/api'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -80,89 +80,6 @@ function ClubSettingsCard() {
             <span className="text-muted-foreground text-sm">Paramètres mis à jour.</span>
           )}
         </form>
-      </CardContent>
-    </Card>
-  )
-}
-
-function JoinLinkCard() {
-  const queryClient = useQueryClient()
-  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
-  const [copied, setCopied] = useState(false)
-
-  const regenerateMutation = useMutation({
-    mutationFn: regenerateJoinLink,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
-  })
-
-  const disableMutation = useMutation({
-    mutationFn: disableJoinLink,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
-  })
-
-  const joinUrl = settingsQuery.data?.joinToken
-    ? `${window.location.origin}/join?token=${settingsQuery.data.joinToken}`
-    : null
-
-  return (
-    <Card className="mx-auto w-full max-w-xl">
-      <CardHeader>
-        <CardTitle>Lien d'invitation</CardTitle>
-        <CardDescription>
-          Partage ce lien (WhatsApp, SMS...) pour que les joueurs créent eux-mêmes leur compte —
-          tu devras ensuite valider chaque nouveau compte dans l'effectif.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {joinUrl ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                navigator.clipboard.writeText(joinUrl)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1500)
-              }}
-              aria-label="Copier le lien"
-            >
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            </Button>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">Aucun lien actif pour le moment.</p>
-        )}
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={regenerateMutation.isPending}
-            onClick={() => regenerateMutation.mutate()}
-          >
-            <RefreshCw className="size-4" />
-            {joinUrl ? 'Régénérer' : 'Générer un lien'}
-          </Button>
-          {joinUrl && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              disabled={disableMutation.isPending}
-              onClick={() => disableMutation.mutate()}
-            >
-              Désactiver
-            </Button>
-          )}
-        </div>
-        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
-          <Link2 className="mt-0.5 size-3.5 shrink-0" />
-          Régénérer le lien invalide immédiatement l'ancien — utile si tu penses qu'il a fuité en
-          dehors du groupe.
-        </p>
       </CardContent>
     </Card>
   )
@@ -396,7 +313,6 @@ export function ProfilePage() {
     </Card>
     <NotificationSettingsCard />
     <BadgesGrid userId={user.id} />
-    {hasCoachAccess(user) && <JoinLinkCard />}
     {hasCoachAccess(user) && <ClubSettingsCard />}
     </div>
   )

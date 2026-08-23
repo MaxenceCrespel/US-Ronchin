@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, Copy, Link2, Pencil, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +37,90 @@ import type { User, UserRole } from '@/lib/types'
 import { adminUpdateUser, deleteUser, fetchPlayers } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
+import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
+
+function JoinLinkCard() {
+  const queryClient = useQueryClient()
+  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
+  const [copied, setCopied] = useState(false)
+
+  const regenerateMutation = useMutation({
+    mutationFn: regenerateJoinLink,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  const disableMutation = useMutation({
+    mutationFn: disableJoinLink,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  const joinUrl = settingsQuery.data?.joinToken
+    ? `${window.location.origin}/join?token=${settingsQuery.data.joinToken}`
+    : null
+
+  return (
+    <Card data-tour="players-join-link">
+      <CardHeader>
+        <CardTitle>Lien d'invitation</CardTitle>
+        <CardDescription>
+          Partage ce lien (WhatsApp, SMS...) pour que les joueurs créent eux-mêmes leur compte —
+          tu devras ensuite valider chaque nouveau compte ci-dessous.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {joinUrl ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                navigator.clipboard.writeText(joinUrl)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+              aria-label="Copier le lien"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">Aucun lien actif pour le moment.</p>
+        )}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={regenerateMutation.isPending}
+            onClick={() => regenerateMutation.mutate()}
+          >
+            <RefreshCw className="size-4" />
+            {joinUrl ? 'Régénérer' : 'Générer un lien'}
+          </Button>
+          {joinUrl && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={disableMutation.isPending}
+              onClick={() => disableMutation.mutate()}
+            >
+              Désactiver
+            </Button>
+          )}
+        </div>
+        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+          <Link2 className="mt-0.5 size-3.5 shrink-0" />
+          Régénérer le lien invalide immédiatement l'ancien — utile si tu penses qu'il a fuité en
+          dehors du groupe.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
 
 function EditPlayerDialog({ player }: { player: User }) {
   const queryClient = useQueryClient()
@@ -334,6 +418,8 @@ export function PlayersPage() {
         <h1 className="text-xl font-semibold">Effectif</h1>
         {isCoach && <InvitePlayerDialog />}
       </div>
+
+      {isCoach && <JoinLinkCard />}
 
       <Card data-tour="players-roster">
         <CardHeader>
