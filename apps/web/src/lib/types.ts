@@ -163,8 +163,8 @@ export interface MonthlyChallengeEntry {
 }
 
 export interface MonthlyChallenges {
-  topScorer: MonthlyChallengeEntry | null
-  mostPresent: MonthlyChallengeEntry | null
+  topScorers: MonthlyChallengeEntry[]
+  mostPresentPlayers: MonthlyChallengeEntry[]
 }
 
 export type BadgeCategory =

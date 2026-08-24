@@ -37,6 +37,11 @@ export class TrainingSession {
   @Column({ default: false })
   cancelled: boolean;
 
+  /** Set once a "pointage réel manquant" push reminder has been sent for this session —
+   * never repeated, mirrors Match.resultReminderSentAt. */
+  @Column({ name: 'attendance_reminder_sent_at', type: 'timestamp', nullable: true })
+  attendanceReminderSentAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -155,8 +155,8 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
   }
 
   const monthlyChallenges: MonthlyChallenges = {
-    topScorer: { userId: fabien.id, firstName: fabien.firstName, lastName: fabien.lastName, value: 4 },
-    mostPresent: { userId: yann.id, firstName: yann.firstName, lastName: yann.lastName, value: 4 },
+    topScorers: [{ userId: fabien.id, firstName: fabien.firstName, lastName: fabien.lastName, value: 4 }],
+    mostPresentPlayers: [{ userId: yann.id, firstName: yann.firstName, lastName: yann.lastName, value: 4 }],
   }
 
   const players: User[] = [me, fabien, vincent, mehdi, yann]

@@ -51,14 +51,27 @@ export interface MonthlyChallengeEntry {
 }
 
 export interface MonthlyChallenges {
-  topScorer: MonthlyChallengeEntry | null;
-  mostPresent: MonthlyChallengeEntry | null;
+  topScorers: MonthlyChallengeEntry[];
+  mostPresentPlayers: MonthlyChallengeEntry[];
 }
 
 /** What actually happened, not what the player declared beforehand — falls back to the
  * declaration only when the coach hasn't pointed the session yet. */
 function effectiveStatus(a: Attendance): AttendanceStatus | null {
   return a.actualStatus ?? a.status;
+}
+
+/** Same as effectiveStatus, but for a PAST session with no answer at all (no row, or a row
+ * with neither declared nor validated status), defaults to ABSENT — a player who never
+ * responds to the poll shouldn't be silently excluded from their attendance record, only a
+ * coach's later validation can turn that into a real PRESENT. */
+function effectiveAttendanceStatus(
+  attendance: Attendance | undefined,
+  sessionIsPast: boolean,
+): AttendanceStatus | null {
+  const status = attendance ? effectiveStatus(attendance) : null;
+  if (status) return status;
+  return sessionIsPast ? AttendanceStatus.ABSENT : null;
 }
 
 @Injectable()
@@ -87,7 +100,8 @@ export class StatsService {
   }
 
   /** Current run of consecutive PAST training sessions (excluding cancelled ones) each user was PRESENT at,
-   * counting back from the most recent occurred session — breaks on the first ABSENT/MAYBE/no-response.
+   * counting back from the most recent occurred session — breaks on the first ABSENT/MAYBE/no-response
+   * (a player who never answers the poll is treated as absent, not skipped).
    * Scoped to `bounds` when provided: sessions outside the season don't count and don't extend the streak. */
   private async getPresenceStreaks(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
     const today = new Date().toISOString().slice(0, 10);
@@ -113,14 +127,12 @@ export class StatsService {
       let streak = 0;
       for (const session of pastSessions) {
         const attendance = attendanceBySession.get(session.id)?.find((a) => a.userId === userId);
-        const status = attendance ? effectiveStatus(attendance) : null;
+        const status = effectiveAttendanceStatus(attendance, true);
         if (status === AttendanceStatus.PRESENT) {
           streak += 1;
-        } else if (status) {
+        } else {
           break;
         }
-        // No response at all for this past session: skip without breaking or counting —
-        // treated as "not yet answered" rather than a miss.
       }
       streaks.set(userId, streak);
     }
@@ -170,11 +182,12 @@ export class StatsService {
         this.ratingsRepository.find(),
         this.attendancesRepository.find(),
         bounds ? this.matchesRepository.find() : Promise.resolve([]),
-        bounds ? this.sessionsRepository.find() : Promise.resolve([]),
+        this.sessionsRepository.find(),
         this.getMotmCounts(bounds),
         this.getPresenceStreaks(bounds),
       ]);
 
+    const today = new Date().toISOString().slice(0, 10);
     const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
     const sessionDateById = new Map(sessions.map((s) => [s.id, s.date]));
     const matchInSeason = (matchId: string) =>
@@ -186,6 +199,18 @@ export class StatsService {
     const compositions = allCompositions.filter((c) => matchInSeason(c.matchId));
     const ratings = allRatings.filter((r) => matchInSeason(r.matchId));
     const attendances = allAttendances.filter((a) => sessionInSeason(a.trainingSessionId));
+
+    // Every past, non-cancelled session counts toward a player's attendance record — a session
+    // with no answer at all defaults to absent (effectiveAttendanceStatus), it isn't just excluded.
+    const pastSessions = sessions.filter(
+      (s) => !s.cancelled && s.date <= today && sessionInSeason(s.id),
+    );
+    const attendanceBySession = new Map<string, Map<string, Attendance>>();
+    for (const a of attendances) {
+      const byUser = attendanceBySession.get(a.trainingSessionId) ?? new Map<string, Attendance>();
+      byUser.set(a.userId, a);
+      attendanceBySession.set(a.trainingSessionId, byUser);
+    }
 
     return users.map((user) => {
       const matchesPlayed = compositions.filter((c) => c.userId === user.id).length;
@@ -202,11 +227,12 @@ export class StatsService {
         (e) => e.type === MatchEventType.RED_CARD && e.userId === user.id,
       ).length;
 
-      const userAttendances = attendances.filter((a) => a.userId === user.id);
-      const trainingsPresent = userAttendances.filter(
-        (a) => effectiveStatus(a) === AttendanceStatus.PRESENT,
+      const trainingsPresent = pastSessions.filter(
+        (s) =>
+          effectiveAttendanceStatus(attendanceBySession.get(s.id)?.get(user.id), true) ===
+          AttendanceStatus.PRESENT,
       ).length;
-      const trainingsResponded = userAttendances.length;
+      const trainingsResponded = pastSessions.length;
 
       const userRatings = ratings.filter((r) => r.ratedUserId === user.id);
       const averageRating =
@@ -300,7 +326,7 @@ export class StatsService {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
-    const topScorerRaw = await this.eventsRepository
+    const topScorersRaw = await this.eventsRepository
       .createQueryBuilder('event')
       .innerJoin('event.match', 'match')
       .innerJoin('event.user', 'user')
@@ -314,16 +340,15 @@ export class StatsService {
       .addGroupBy('user.firstName')
       .addGroupBy('user.lastName')
       .orderBy('"value"', 'DESC')
-      .limit(1)
-      .getRawOne<{ userId: string; firstName: string; lastName: string; value: string }>();
+      .getRawMany<{ userId: string; firstName: string; lastName: string; value: string }>();
 
     const mostPresentRaw = await this.attendancesRepository
       .createQueryBuilder('attendance')
       .innerJoin('attendance.trainingSession', 'session')
       .innerJoin('attendance.user', 'user')
-      .where('COALESCE(attendance.actual_status::text, attendance.status::text) = :status', {
-        status: AttendanceStatus.PRESENT,
-      })
+      // Validated presence only (actual_status, set by the coach after the session) —
+      // a player declaring "présent" beforehand doesn't guarantee they'll actually show up.
+      .where('attendance.actual_status = :status', { status: AttendanceStatus.PRESENT })
       .andWhere('session.date BETWEEN :start AND :end', { start: monthStart, end: monthEnd })
       .select('attendance.userId', 'userId')
       .addSelect('user.firstName', 'firstName')
@@ -333,26 +358,22 @@ export class StatsService {
       .addGroupBy('user.firstName')
       .addGroupBy('user.lastName')
       .orderBy('"value"', 'DESC')
-      .limit(1)
-      .getRawOne<{ userId: string; firstName: string; lastName: string; value: string }>();
+      .getRawMany<{ userId: string; firstName: string; lastName: string; value: string }>();
+
+    // Ties: everyone at the max count shows up, not just whoever the DB returned first.
+    const tiedAtTop = (
+      rows: { userId: string; firstName: string; lastName: string; value: string }[],
+    ): MonthlyChallengeEntry[] => {
+      if (rows.length === 0) return [];
+      const max = Number(rows[0].value);
+      return rows
+        .filter((r) => Number(r.value) === max)
+        .map((r) => ({ userId: r.userId, firstName: r.firstName, lastName: r.lastName, value: max }));
+    };
 
     return {
-      topScorer: topScorerRaw
-        ? {
-            userId: topScorerRaw.userId,
-            firstName: topScorerRaw.firstName,
-            lastName: topScorerRaw.lastName,
-            value: Number(topScorerRaw.value),
-          }
-        : null,
-      mostPresent: mostPresentRaw
-        ? {
-            userId: mostPresentRaw.userId,
-            firstName: mostPresentRaw.firstName,
-            lastName: mostPresentRaw.lastName,
-            value: Number(mostPresentRaw.value),
-          }
-        : null,
+      topScorers: tiedAtTop(topScorersRaw),
+      mostPresentPlayers: tiedAtTop(mostPresentRaw),
     };
   }
 
