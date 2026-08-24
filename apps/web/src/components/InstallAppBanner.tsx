@@ -1,19 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Download, Share, SquarePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { isStandalone } from '@/lib/pwa'
 
 const DISMISSED_KEY = 'install-banner-dismissed'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as unknown as { standalone?: boolean }).standalone === true
-  )
 }
 
 function isIos(): boolean {

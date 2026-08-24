@@ -11,6 +11,7 @@ import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { OnboardingTour } from '@/components/OnboardingTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
+import { NotificationPrompt } from '@/components/NotificationPrompt'
 
 const navItems: {
   to: string
@@ -155,6 +156,7 @@ export function Layout() {
           </div>
         </header>
         <InstallAppBanner />
+        <NotificationPrompt />
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <Outlet />

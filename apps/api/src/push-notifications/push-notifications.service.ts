@@ -95,7 +95,14 @@ export class PushNotificationsService {
     subscriptions: PushSubscription[],
     payload: PushPayload,
   ): Promise<void> {
-    if (!this.configured) return;
+    if (!this.configured) {
+      this.logger.warn(`Envoi ignoré (VAPID non configuré) — payload: "${payload.title}"`);
+      return;
+    }
+    if (subscriptions.length === 0) {
+      this.logger.log(`Aucun abonnement à notifier pour "${payload.title}"`);
+      return;
+    }
     await Promise.all(
       subscriptions.map(async (sub) => {
         try {
@@ -106,6 +113,7 @@ export class PushNotificationsService {
             },
             JSON.stringify(payload),
           );
+          this.logger.log(`Notification envoyée (${sub.id}): "${payload.title}"`);
         } catch (error) {
           const statusCode = (error as { statusCode?: number }).statusCode;
           if (statusCode === 404 || statusCode === 410) {
