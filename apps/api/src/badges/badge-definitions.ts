@@ -477,7 +477,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'IMPACT',
     rarity: 'COMMON',
     title: 'La Muraille de Ronchin',
-    description: "Être sur la feuille de match d'une rencontre terminée sans encaisser de but",
+    description: 'Titulaire en défense lors d’une rencontre terminée sans encaisser de but',
     emoji: '🧱',
   },
   {
@@ -485,7 +485,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'IMPACT',
     rarity: 'RARE',
     title: 'Le Cadenas',
-    description: '3 rencontres consécutives sur la feuille de match sans encaisser de but',
+    description: '3 rencontres consécutives titulaire en défense sans encaisser de but',
     emoji: '🔒',
   },
   {

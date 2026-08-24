@@ -8,7 +8,7 @@ import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { isMotmRevealed, computeMotmWinner } from '../matches/motm-utils';
 import type { Match } from '../matches/entities/match.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
-import { User } from '../users/entities/user.entity';
+import { PlayerPosition, User } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
@@ -195,6 +195,7 @@ export class BadgesService {
       const cleanSheetCount = myComposition.filter((c) => {
         const m = c.match;
         if (!m || m.status !== 'PLAYED' || m.scoreHome == null || m.scoreAway == null) return false;
+        if (!c.isStarter || c.position !== PlayerPosition.DEFENDER) return false;
         const concededByUs = m.homeAway === 'HOME' ? m.scoreAway : m.scoreHome;
         return concededByUs === 0;
       }).length;
@@ -358,7 +359,8 @@ export class BadgesService {
         panneSecheStreak = goalsInMatch === 0 && assistsInMatch === 0 ? panneSecheStreak + 1 : 0;
         maxPanneSecheStreak = Math.max(maxPanneSecheStreak, panneSecheStreak);
 
-        cadenasStreak = concededByUs === 0 ? cadenasStreak + 1 : 0;
+        const startedAsDefender = comp?.isStarter && comp.position === PlayerPosition.DEFENDER;
+        cadenasStreak = startedAsDefender && concededByUs === 0 ? cadenasStreak + 1 : 0;
         maxCadenasStreak = Math.max(maxCadenasStreak, cadenasStreak);
 
         const isBench = comp ? !comp.isStarter : false;
