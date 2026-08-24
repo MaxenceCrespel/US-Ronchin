@@ -192,69 +192,20 @@ export function ProfilePage() {
           {user.isLicensed ? 'Joueur licencié' : 'Joueur non licencié'} — {user.email}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <form
-          className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            mutation.mutate()
-          }}
-        >
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label>Postes (plusieurs possibles)</Label>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-              {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
-                <div key={value} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`position-${value}`}
-                    checked={positions.includes(value as PlayerSubPosition)}
-                    onCheckedChange={(checked) =>
-                      setPositions((prev) =>
-                        checked
-                          ? [...prev, value as PlayerSubPosition]
-                          : prev.filter((p) => p !== value),
-                      )
-                    }
-                  />
-                  <Label htmlFor={`position-${value}`} className="text-sm font-normal">
-                    {label}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
+    </Card>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="jerseyNumber">Numéro de maillot</Label>
-            <Input
-              id="jerseyNumber"
-              type="number"
-              min={0}
-              max={99}
-              value={jerseyNumber}
-              onChange={(e) => setJerseyNumber(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>Pied fort</Label>
-            <Select
-              value={preferredFoot}
-              onValueChange={(v) => setPreferredFoot(v as PreferredFoot)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Sélectionner" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(FOOT_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
+    <form
+      className="mx-auto flex w-full max-w-xl flex-col gap-6"
+      onSubmit={(e) => {
+        e.preventDefault()
+        mutation.mutate()
+      }}
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>Informations personnelles</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="birthDate">Date de naissance</Label>
             <Input
@@ -262,6 +213,17 @@ export function ProfilePage() {
               type="date"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="phone">Téléphone</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="06 12 34 56 78"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
           </div>
 
@@ -288,29 +250,83 @@ export function ProfilePage() {
               onChange={(e) => setWeightKg(e.target.value)}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="flex flex-col gap-1.5 sm:col-span-2">
-            <Label htmlFor="phone">Téléphone</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="06 12 34 56 78"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
+      <Card>
+        <CardHeader>
+          <CardTitle>Profil sportif</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="jerseyNumber">Numéro de maillot</Label>
+              <Input
+                id="jerseyNumber"
+                type="number"
+                min={0}
+                max={99}
+                value={jerseyNumber}
+                onChange={(e) => setJerseyNumber(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Pied fort</Label>
+              <Select
+                value={preferredFoot}
+                onValueChange={(v) => setPreferredFoot(v as PreferredFoot)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Sélectionner" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(FOOT_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <div className="sm:col-span-2">
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Enregistrement...' : 'Enregistrer mon profil'}
-            </Button>
-            {mutation.isSuccess && (
-              <span className="text-muted-foreground ml-3 text-sm">Profil mis à jour.</span>
-            )}
+          <div className="flex flex-col gap-1.5">
+            <Label>Postes (plusieurs possibles)</Label>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+              {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                <div key={value} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`position-${value}`}
+                    checked={positions.includes(value as PlayerSubPosition)}
+                    onCheckedChange={(checked) =>
+                      setPositions((prev) =>
+                        checked
+                          ? [...prev, value as PlayerSubPosition]
+                          : prev.filter((p) => p !== value),
+                      )
+                    }
+                  />
+                  <Label htmlFor={`position-${value}`} className="text-sm font-normal">
+                    {label}
+                  </Label>
+                </div>
+              ))}
+            </div>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <div>
+        <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending ? 'Enregistrement...' : 'Enregistrer mon profil'}
+        </Button>
+        {mutation.isSuccess && (
+          <span className="text-muted-foreground ml-3 text-sm">Profil mis à jour.</span>
+        )}
+      </div>
+    </form>
+
     <NotificationSettingsCard />
     <BadgesGrid userId={user.id} />
     {hasCoachAccess(user) && <ClubSettingsCard />}

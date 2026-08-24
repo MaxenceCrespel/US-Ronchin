@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -91,6 +92,7 @@ function formatEarnedDate(iso: string) {
 export function BadgesGrid({ userId }: { userId: string }) {
   const badgesQuery = useQuery({ queryKey: ['badges', userId], queryFn: fetchMyBadges })
   const [activeBadge, setActiveBadge] = useState<BadgeStatus | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   const badges = badgesQuery.data ?? []
   const earnedCount = badges.filter((b) => b.earned).length
@@ -104,26 +106,41 @@ export function BadgesGrid({ userId }: { userId: string }) {
 
   return (
     <Card data-tour="profile-badges">
-      <CardHeader>
-        <CardTitle>Badges</CardTitle>
-        <CardDescription>
-          {earnedCount}/{badges.length} débloqués — touche un badge pour voir comment l'obtenir
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        {groups.map((group) => (
-          <div key={group.category} className="flex flex-col gap-2.5">
-            <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-              {CATEGORY_LABELS[group.category]}
-            </h3>
-            <div className="flex flex-wrap gap-4">
-              {group.badges.map((badge) => (
-                <BadgeMedal key={badge.key} badge={badge} onOpen={() => setActiveBadge(badge)} />
-              ))}
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <CardHeader className="flex-1">
+          <CardTitle>Badges</CardTitle>
+          <CardDescription>
+            {earnedCount}/{badges.length} débloqués
+            {expanded && ' — touche un badge pour voir comment l\'obtenir'}
+          </CardDescription>
+        </CardHeader>
+        <ChevronDown
+          className={cn(
+            'text-muted-foreground mr-6 size-5 shrink-0 transition-transform',
+            expanded && 'rotate-180',
+          )}
+        />
+      </button>
+      {expanded && (
+        <CardContent className="flex flex-col gap-5">
+          {groups.map((group) => (
+            <div key={group.category} className="flex flex-col gap-2.5">
+              <h3 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                {CATEGORY_LABELS[group.category]}
+              </h3>
+              <div className="flex flex-wrap gap-4">
+                {group.badges.map((badge) => (
+                  <BadgeMedal key={badge.key} badge={badge} onOpen={() => setActiveBadge(badge)} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </CardContent>
+          ))}
+        </CardContent>
+      )}
 
       <Dialog open={activeBadge !== null} onOpenChange={(open) => !open && setActiveBadge(null)}>
         <DialogContent className="max-w-xs">
