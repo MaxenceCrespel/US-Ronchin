@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Link2, Pencil, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, Copy, Link2, Pencil, QrCode, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,6 +44,7 @@ function JoinLinkCard() {
   const queryClient = useQueryClient()
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
   const [copied, setCopied] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
 
   const regenerateMutation = useMutation({
     mutationFn: regenerateJoinLink,
@@ -84,6 +86,26 @@ function JoinLinkCard() {
             >
               {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
             </Button>
+            <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+              <DialogTrigger asChild>
+                <Button type="button" variant="outline" size="icon" aria-label="Afficher le QR code">
+                  <QrCode className="size-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-xs">
+                <DialogHeader>
+                  <DialogTitle>Rejoindre US Ronchin</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col items-center gap-3 py-2">
+                  <div className="rounded-lg border bg-white p-4">
+                    <QRCodeSVG value={joinUrl} size={220} />
+                  </div>
+                  <p className="text-muted-foreground text-center text-sm">
+                    Scanne pour créer ton compte directement.
+                  </p>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">Aucun lien actif pour le moment.</p>
