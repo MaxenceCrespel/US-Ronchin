@@ -92,7 +92,7 @@ function formatEarnedDate(iso: string) {
 export function BadgesGrid({ userId }: { userId: string }) {
   const badgesQuery = useQuery({ queryKey: ['badges', userId], queryFn: fetchMyBadges })
   const [activeBadge, setActiveBadge] = useState<BadgeStatus | null>(null)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
 
   const badges = badgesQuery.data ?? []
   const earnedCount = badges.filter((b) => b.earned).length

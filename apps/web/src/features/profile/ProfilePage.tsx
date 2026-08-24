@@ -194,6 +194,8 @@ export function ProfilePage() {
       </CardHeader>
     </Card>
 
+    <BadgesGrid userId={user.id} />
+
     <form
       className="mx-auto flex w-full max-w-xl flex-col gap-6"
       onSubmit={(e) => {
@@ -328,7 +330,6 @@ export function ProfilePage() {
     </form>
 
     <NotificationSettingsCard />
-    <BadgesGrid userId={user.id} />
     {hasCoachAccess(user) && <ClubSettingsCard />}
     </div>
   )
