@@ -96,7 +96,8 @@ export async function fetchEvents(matchId: string): Promise<MatchEvent[]> {
 
 export interface CreateEventInput {
   type: MatchEventType
-  userId: string
+  userId?: string
+  scorerName?: string
   assistUserId?: string
   minute?: number
   goalType?: GoalType

@@ -128,8 +128,10 @@ export interface MatchEvent {
   id: string
   matchId: string
   type: MatchEventType
-  userId: string
-  user: User
+  userId: string | null
+  user: User | null
+  /** Set instead of userId/user for a player not yet registered in the app. */
+  scorerName: string | null
   assistUserId: string | null
   assistUser: User | null
   minute: number | null

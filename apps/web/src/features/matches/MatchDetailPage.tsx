@@ -359,8 +359,10 @@ export function MatchDetailPage() {
       ? compositionQuery.data.map((entry) => entry.user)
       : (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
 
+  const OTHER_SCORER = '__other__'
   const [eventType, setEventType] = useState<MatchEventType>('GOAL')
   const [eventUserId, setEventUserId] = useState('')
+  const [eventScorerName, setEventScorerName] = useState('')
   const [eventAssistUserId, setEventAssistUserId] = useState('')
   const [eventMinute, setEventMinute] = useState('')
   const [eventGoalType, setEventGoalType] = useState<GoalType | ''>('')
@@ -369,7 +371,8 @@ export function MatchDetailPage() {
     mutationFn: () =>
       addEvent(matchId, {
         type: eventType,
-        userId: eventUserId,
+        userId: eventUserId !== OTHER_SCORER ? eventUserId : undefined,
+        scorerName: eventUserId === OTHER_SCORER ? eventScorerName.trim() : undefined,
         assistUserId: eventType === 'GOAL' && eventAssistUserId ? eventAssistUserId : undefined,
         minute: eventMinute ? Number(eventMinute) : undefined,
         goalType: eventType === 'GOAL' && eventGoalType ? eventGoalType : undefined,
@@ -377,6 +380,7 @@ export function MatchDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events', matchId] })
       setEventUserId('')
+      setEventScorerName('')
       setEventAssistUserId('')
       setEventMinute('')
       setEventGoalType('')
@@ -494,12 +498,12 @@ export function MatchDetailPage() {
     }
     for (const event of eventsQuery.data ?? []) {
       if (event.type === 'GOAL') {
-        bump(event.userId, 'goals')
+        if (event.userId) bump(event.userId, 'goals')
         if (event.assistUserId) bump(event.assistUserId, 'assists')
       } else if (event.type === 'YELLOW_CARD') {
-        bump(event.userId, 'yellow')
+        if (event.userId) bump(event.userId, 'yellow')
       } else if (event.type === 'RED_CARD') {
-        bump(event.userId, 'red')
+        if (event.userId) bump(event.userId, 'red')
       }
     }
     return map
@@ -896,7 +900,9 @@ export function MatchDetailPage() {
               className="grid grid-cols-2 gap-3 sm:grid-cols-4"
               onSubmit={(e) => {
                 e.preventDefault()
-                if (eventUserId) addEventMutation.mutate()
+                const canSubmit =
+                  eventUserId && (eventUserId !== OTHER_SCORER || eventScorerName.trim())
+                if (canSubmit) addEventMutation.mutate()
               }}
             >
               <Select value={eventType} onValueChange={(v) => setEventType(v as MatchEventType)}>
@@ -922,8 +928,18 @@ export function MatchDetailPage() {
                       {player.firstName} {player.lastName}
                     </SelectItem>
                   ))}
+                  <SelectItem value={OTHER_SCORER}>Autre (pas encore inscrit)</SelectItem>
                 </SelectContent>
               </Select>
+
+              {eventUserId === OTHER_SCORER && (
+                <Input
+                  placeholder="Nom du joueur"
+                  value={eventScorerName}
+                  onChange={(e) => setEventScorerName(e.target.value)}
+                  className="col-span-2 sm:col-span-1"
+                />
+              )}
 
               {eventType === 'GOAL' && (
                 <Select value={eventAssistUserId} onValueChange={setEventAssistUserId}>
@@ -969,7 +985,14 @@ export function MatchDetailPage() {
                   value={eventMinute}
                   onChange={(e) => setEventMinute(e.target.value)}
                 />
-                <Button type="submit" disabled={!eventUserId || addEventMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={
+                    !eventUserId ||
+                    (eventUserId === OTHER_SCORER && !eventScorerName.trim()) ||
+                    addEventMutation.isPending
+                  }
+                >
                   Ajouter
                 </Button>
               </div>
@@ -984,8 +1007,8 @@ export function MatchDetailPage() {
               >
                 <span>
                   {event.minute != null ? `${event.minute}' — ` : ''}
-                  <strong>{EVENT_LABELS[event.type]}</strong> — {event.user.firstName}{' '}
-                  {event.user.lastName}
+                  <strong>{EVENT_LABELS[event.type]}</strong> —{' '}
+                  {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
                   {event.goalType && <> ({GOAL_TYPE_LABELS[event.goalType]})</>}
                   {event.assistUser && (
                     <>
@@ -1414,7 +1437,7 @@ export function MatchDetailPage() {
                   {event.type === 'YELLOW_CARD' && <span>🟨</span>}
                   {event.type === 'RED_CARD' && <span>🟥</span>}
                   <span>
-                    {event.user.firstName} {event.user.lastName}
+                    {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
                   </span>
                   {event.assistUser && (
                     <span className="text-muted-foreground flex items-center gap-1">

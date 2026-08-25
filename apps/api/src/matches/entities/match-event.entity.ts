@@ -37,12 +37,17 @@ export class MatchEvent {
   @Column({ type: 'enum', enum: MatchEventType })
   type: MatchEventType;
 
-  @Column({ name: 'user_id' })
-  userId: string;
+  @Column({ name: 'user_id', nullable: true })
+  userId: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: User | null;
+
+  /** Free-text name for a player not yet registered in the app — used instead of userId,
+   * e.g. a goal scored by someone who hasn't created their account yet. */
+  @Column({ name: 'scorer_name', type: 'varchar', length: 100, nullable: true })
+  scorerName: string | null;
 
   @Column({ name: 'assist_user_id', nullable: true })
   assistUserId: string | null;

@@ -158,6 +158,13 @@ export class MatchesService {
 
   async addEvent(matchId: string, dto: CreateMatchEventDto): Promise<MatchEvent> {
     await this.findById(matchId);
+    const hasUser = !!dto.userId;
+    const hasScorerName = !!dto.scorerName;
+    if (hasUser === hasScorerName) {
+      throw new BadRequestException(
+        'Renseigne soit un joueur du club, soit un nom pour un joueur non inscrit',
+      );
+    }
     const event = this.eventsRepository.create({ ...dto, matchId });
     return this.eventsRepository.save(event);
   }

@@ -81,7 +81,7 @@ export class MatchesController {
     const events = await this.matchesService.getEvents(id);
     return events.map((event) => ({
       ...event,
-      user: sanitizeUser(event.user),
+      user: event.user ? sanitizeUser(event.user) : null,
       assistUser: event.assistUser ? sanitizeUser(event.assistUser) : null,
     }));
   }
