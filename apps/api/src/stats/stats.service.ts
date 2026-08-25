@@ -7,6 +7,7 @@ import { MatchEvent, MatchEventType } from '../matches/entities/match-event.enti
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
+import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
 import { isMotmRevealed, computeMotmWinner } from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
@@ -31,6 +32,7 @@ export interface PlayerStats {
   averageRating: number | null;
   ratingsCount: number;
   motmCount: number;
+  patronDefenseCount: number;
   presenceStreak: number;
   skillScore: number;
 }
@@ -91,6 +93,8 @@ export class StatsService {
     private readonly attendancesRepository: Repository<Attendance>,
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
+    @InjectRepository(MatchDefenseBossVote)
+    private readonly defenseBossVotesRepository: Repository<MatchDefenseBossVote>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
   ) {}
@@ -172,10 +176,55 @@ export class StatsService {
     return counts;
   }
 
+  /** Same tallying rules as getMotmCounts (reveal gating, winner-take-all), for the
+   * "Patron de la défense" vote — only defenders are ever votedFor, enforced at vote time. */
+  private async getPatronDefenseCounts(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
+    const [votes, compositions, matches] = await Promise.all([
+      this.defenseBossVotesRepository.find(),
+      this.compositionsRepository.find(),
+      bounds ? this.matchesRepository.find() : Promise.resolve([]),
+    ]);
+
+    const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
+    const inSeason = (matchId: string) =>
+      !bounds || isInSeason(matchDateById.get(matchId) ?? '', bounds);
+
+    const votesByMatch = new Map<string, typeof votes>();
+    for (const vote of votes.filter((v) => inSeason(v.matchId))) {
+      const list = votesByMatch.get(vote.matchId) ?? [];
+      list.push(vote);
+      votesByMatch.set(vote.matchId, list);
+    }
+
+    const playersByMatch = new Map<string, number>();
+    for (const entry of compositions.filter((c) => inSeason(c.matchId))) {
+      playersByMatch.set(entry.matchId, (playersByMatch.get(entry.matchId) ?? 0) + 1);
+    }
+
+    const counts = new Map<string, number>();
+    for (const [matchId, matchVotes] of votesByMatch) {
+      const totalPlayers = playersByMatch.get(matchId) ?? 0;
+      if (!isMotmRevealed(matchVotes, totalPlayers)) continue;
+      const winnerId = computeMotmWinner(matchVotes);
+      if (winnerId) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
+    }
+    return counts;
+  }
+
   async getPlayerStats(season?: string): Promise<PlayerStats[]> {
     const bounds = this.resolveSeasonBounds(season);
-    const [users, allEvents, allCompositions, allRatings, allAttendances, matches, sessions, motmCounts, presenceStreaks] =
-      await Promise.all([
+    const [
+      users,
+      allEvents,
+      allCompositions,
+      allRatings,
+      allAttendances,
+      matches,
+      sessions,
+      motmCounts,
+      patronDefenseCounts,
+      presenceStreaks,
+    ] = await Promise.all([
         this.usersRepository.find(),
         this.eventsRepository.find(),
         this.compositionsRepository.find(),
@@ -184,6 +233,7 @@ export class StatsService {
         bounds ? this.matchesRepository.find() : Promise.resolve([]),
         this.sessionsRepository.find(),
         this.getMotmCounts(bounds),
+        this.getPatronDefenseCounts(bounds),
         this.getPresenceStreaks(bounds),
       ]);
 
@@ -261,6 +311,7 @@ export class StatsService {
         averageRating,
         ratingsCount: userRatings.length,
         motmCount: motmCounts.get(user.id) ?? 0,
+        patronDefenseCount: patronDefenseCounts.get(user.id) ?? 0,
         presenceStreak: presenceStreaks.get(user.id) ?? 0,
         skillScore,
       };

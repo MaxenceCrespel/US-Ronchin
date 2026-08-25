@@ -7,6 +7,10 @@ import { Attendance } from '../attendances/entities/attendance.entity';
 import { User } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
+import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
+import { Match } from '../matches/entities/match.entity';
+import { MatchAttendance } from '../matches/entities/match-attendance.entity';
+import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { BadgesService } from './badges.service';
 import { BadgesController } from './badges.controller';
 import { StatsModule } from '../stats/stats.module';
@@ -22,6 +26,10 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
       User,
       TrainingSession,
       MatchMotmVote,
+      MatchDefenseBossVote,
+      Match,
+      MatchAttendance,
+      PlayerRating,
     ]),
     StatsModule,
     PushNotificationsModule,

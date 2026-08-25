@@ -11,6 +11,7 @@ import type {
   MatchSource,
   MatchStatus,
   MotmResponse,
+  DefenseBossResponse,
   PlayerPosition,
   PlayerRating,
   RatingSummaryEntry,
@@ -171,4 +172,13 @@ export async function fetchMotm(matchId: string): Promise<MotmResponse> {
 
 export async function voteMotm(matchId: string, votedForId: string): Promise<void> {
   await apiClient.put(`/matches/${matchId}/motm`, { votedForId })
+}
+
+export async function fetchDefenseBoss(matchId: string): Promise<DefenseBossResponse> {
+  const { data } = await apiClient.get<DefenseBossResponse>(`/matches/${matchId}/defense-boss`)
+  return data
+}
+
+export async function voteDefenseBoss(matchId: string, votedForId: string): Promise<void> {
+  await apiClient.put(`/matches/${matchId}/defense-boss`, { votedForId })
 }

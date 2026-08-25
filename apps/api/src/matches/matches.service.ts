@@ -8,7 +8,9 @@ import { PlayerRating } from './entities/player-rating.entity';
 import { MatchRatingSubmission } from './entities/match-rating-submission.entity';
 import { MatchAttendance } from './entities/match-attendance.entity';
 import { MatchMotmVote } from './entities/match-motm-vote.entity';
+import { MatchDefenseBossVote } from './entities/match-defense-boss-vote.entity';
 import { AttendanceStatus } from '../attendances/entities/attendance.entity';
+import { PlayerPosition } from '../users/entities/user.entity';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
@@ -41,6 +43,23 @@ export interface MotmResponse {
   results: MotmResultEntry[] | null;
 }
 
+export interface DefenseBossResultEntry {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  votes: number;
+}
+
+export interface DefenseBossResponse {
+  myVoteUserId: string | null;
+  revealed: boolean;
+  totalVotes: number;
+  totalPlayers: number;
+  /** False when no defender played this match — the vote step doesn't apply. */
+  hasEligibleTargets: boolean;
+  results: DefenseBossResultEntry[] | null;
+}
+
 @Injectable()
 export class MatchesService {
   constructor(
@@ -58,6 +77,8 @@ export class MatchesService {
     private readonly attendancesRepository: Repository<MatchAttendance>,
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
+    @InjectRepository(MatchDefenseBossVote)
+    private readonly defenseBossVotesRepository: Repository<MatchDefenseBossVote>,
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
@@ -349,5 +370,69 @@ export class MatchesService {
     }
     const vote = this.motmVotesRepository.create({ matchId, voterId, votedForId });
     await this.motmVotesRepository.save(vote);
+  }
+
+  async getDefenseBoss(matchId: string, currentUserId: string): Promise<DefenseBossResponse> {
+    const [composition, votes] = await Promise.all([
+      this.compositionsRepository.find({ where: { matchId } }),
+      this.defenseBossVotesRepository.find({ where: { matchId }, relations: { votedFor: true } }),
+    ]);
+
+    const totalPlayers = composition.length;
+    const totalVotes = votes.length;
+    const hasEligibleTargets = composition.some((c) => c.position === PlayerPosition.DEFENDER);
+    const revealed = isMotmRevealed(votes, totalPlayers);
+
+    let results: DefenseBossResultEntry[] | null = null;
+    if (revealed) {
+      const counts = new Map<string, DefenseBossResultEntry>();
+      for (const vote of votes) {
+        const existing = counts.get(vote.votedForId);
+        if (existing) {
+          existing.votes += 1;
+        } else {
+          counts.set(vote.votedForId, {
+            userId: vote.votedForId,
+            firstName: vote.votedFor.firstName,
+            lastName: vote.votedFor.lastName,
+            votes: 1,
+          });
+        }
+      }
+      results = [...counts.values()].sort((a, b) => b.votes - a.votes);
+    }
+
+    return {
+      myVoteUserId: votes.find((v) => v.voterId === currentUserId)?.votedForId ?? null,
+      revealed,
+      totalVotes,
+      totalPlayers,
+      hasEligibleTargets,
+      results,
+    };
+  }
+
+  async voteDefenseBoss(matchId: string, voterId: string, votedForId: string): Promise<void> {
+    const composition = await this.compositionsRepository.find({ where: { matchId } });
+    const composedUserIds = new Set(composition.map((entry) => entry.userId));
+    if (!composedUserIds.has(voterId)) {
+      throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent voter');
+    }
+    const target = composition.find((entry) => entry.userId === votedForId);
+    if (!target || target.position !== PlayerPosition.DEFENDER) {
+      throw new BadRequestException('Seul un défenseur du match peut être élu patron de la défense');
+    }
+
+    const { revealed } = await this.getDefenseBoss(matchId, voterId);
+    if (revealed) {
+      throw new BadRequestException('Le vote patron de la défense est clos pour ce match');
+    }
+
+    const existing = await this.defenseBossVotesRepository.findOne({ where: { matchId, voterId } });
+    if (existing) {
+      throw new BadRequestException('Ton vote est déjà enregistré et ne peut plus être modifié');
+    }
+    const vote = this.defenseBossVotesRepository.create({ matchId, voterId, votedForId });
+    await this.defenseBossVotesRepository.save(vote);
   }
 }

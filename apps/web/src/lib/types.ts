@@ -151,6 +151,7 @@ export interface PlayerStats {
   averageRating: number | null
   ratingsCount: number
   motmCount: number
+  patronDefenseCount: number
   presenceStreak: number
   skillScore: number
 }
@@ -171,6 +172,9 @@ export type BadgeCategory =
   | 'GOALS'
   | 'ASSISTS'
   | 'MOTM'
+  | 'GOALKEEPER'
+  | 'DEFENSE'
+  | 'MIDFIELD'
   | 'ATTENDANCE'
   | 'EXPERIENCE'
   | 'DISCIPLINE'
@@ -229,6 +233,22 @@ export interface MotmResponse {
   totalVotes: number
   totalPlayers: number
   results: MotmResultEntry[] | null
+}
+
+export interface DefenseBossResultEntry {
+  userId: string
+  firstName: string
+  lastName: string
+  votes: number
+}
+
+export interface DefenseBossResponse {
+  myVoteUserId: string | null
+  revealed: boolean
+  totalVotes: number
+  totalPlayers: number
+  hasEligibleTargets: boolean
+  results: DefenseBossResultEntry[] | null
 }
 
 export interface TrainingTeamAssignment {

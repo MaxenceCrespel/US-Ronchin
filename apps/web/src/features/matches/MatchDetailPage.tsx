@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { CalendarCheck, Crown, ListChecks, Pencil, Star, Trash2, Users } from 'lucide-react'
+import { CalendarCheck, Crown, ListChecks, Pencil, Shield, Star, Trash2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -53,6 +53,7 @@ import {
   fetchComposition,
   fetchEvents,
   fetchMatch,
+  fetchDefenseBoss,
   fetchMatchAttendance,
   fetchMotm,
   fetchMyRatings,
@@ -62,6 +63,7 @@ import {
   setMyMatchAttendance,
   submitRatings,
   updateMatch,
+  voteDefenseBoss,
   voteMotm,
 } from './api'
 
@@ -454,6 +456,34 @@ export function MatchDetailPage() {
     triggerMotmCelebration()
   }, [motmQuery.data, matchId, user, triggerMotmCelebration])
 
+  const defenseBossQuery = useQuery({
+    queryKey: ['defense-boss', matchId],
+    queryFn: () => fetchDefenseBoss(matchId),
+    refetchInterval: 30000,
+  })
+
+  const [defenseBossSelection, setDefenseBossSelection] = useState('')
+  const defenseBossMutation = useMutation({
+    mutationFn: (votedForId: string) => voteDefenseBoss(matchId, votedForId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['defense-boss', matchId] }),
+  })
+
+  const { active: defenseBossCelebration, trigger: triggerDefenseBossCelebration } = useCelebration()
+  useEffect(() => {
+    if (!defenseBossQuery.data?.revealed || !user) return
+    const winner = defenseBossQuery.data.results?.[0]
+    if (winner?.userId !== user.id) return
+
+    const flagKey = `defense-boss-celebrated-${matchId}-${user.id}`
+    try {
+      if (localStorage.getItem(flagKey)) return
+      localStorage.setItem(flagKey, '1')
+    } catch {
+      // ignore — celebration just won't be deduplicated across visits.
+    }
+    triggerDefenseBossCelebration()
+  }, [defenseBossQuery.data, matchId, user, triggerDefenseBossCelebration])
+
   // Per-player goals/assists/cards for this match — no such aggregation exists server-side
   // for a single match, so it's derived client-side from the raw event list.
   const eventStatsByUser = useMemo(() => {
@@ -497,8 +527,14 @@ export function MatchDetailPage() {
   // forcing it would just soft-lock anyone who missed the window). Ratings have no such
   // time window — they stay mandatory regardless of whether MOTM has been revealed.
   const needsMotmVote = !hasVotedMotm && !motmRevealed
+  // Undefined while loading defaults to "applies" so the step never flickers past before
+  // we actually know whether a defender played — same fail-safe as the other two gates.
+  const defenseBossApplies = defenseBossQuery.data ? defenseBossQuery.data.hasEligibleTargets : true
+  const hasVotedDefenseBoss = defenseBossQuery.data?.myVoteUserId != null
+  const defenseBossRevealed = defenseBossQuery.data?.revealed ?? false
+  const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
   const needsRatings = !ratingsSubmitted
-  const showVoteModal = votingApplies && (needsMotmVote || needsRatings)
+  const showVoteModal = votingApplies && (needsMotmVote || needsDefenseBossVote || needsRatings)
   const votesTabApplies = match.status === 'PLAYED' && hasComposition
 
   const scoreCard = (
@@ -1085,6 +1121,118 @@ export function MatchDetailPage() {
         </Card>
       )
 
+  const defenders = teammates.filter((entry) => entry.position === 'DEFENDER')
+  const defenseBossCard = match.status === 'PLAYED' && hasComposition && defenseBossApplies && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="text-club-blue size-4" />
+              Patron de la défense
+            </CardTitle>
+            <CardDescription>
+              {defenseBossQuery.data?.revealed
+                ? 'Résultat révélé.'
+                : `Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote (${defenseBossQuery.data?.totalVotes ?? 0}/${defenseBossQuery.data?.totalPlayers ?? 0}).`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {defenseBossQuery.data?.revealed ? (
+              defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
+                <ul className="flex flex-col gap-2">
+                  {defenseBossQuery.data.results.map((r, index) => (
+                    <li key={r.userId} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        {index === 0 && <Shield className="text-club-blue size-4" />}
+                        {r.firstName} {r.lastName}
+                      </span>
+                      <Badge variant="secondary">{r.votes} vote(s)</Badge>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
+              )
+            ) : iPlayed ? (
+              defenseBossQuery.data?.myVoteUserId ? (
+                <div className="flex items-center gap-3">
+                  {(() => {
+                    const voted = defenders.find((t) => t.userId === defenseBossQuery.data?.myVoteUserId)
+                    return voted ? (
+                      <PlayerAvatar
+                        avatarUrl={voted.user.avatarUrl}
+                        firstName={voted.user.firstName}
+                        lastName={voted.user.lastName}
+                        size="lg"
+                        className="border-club-blue ring-club-blue/40 border-2 ring-4"
+                      />
+                    ) : null
+                  })()}
+                  <p className="text-sm">
+                    <span className="font-medium">Vote enregistré</span>
+                    <br />
+                    <span className="text-muted-foreground text-xs">
+                      Définitif — impossible de le modifier.
+                    </span>
+                  </p>
+                </div>
+              ) : defenders.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    {defenders.map((entry) => {
+                      const selected = defenseBossSelection === entry.userId
+                      return (
+                        <button
+                          key={entry.userId}
+                          type="button"
+                          onClick={() => setDefenseBossSelection(entry.userId)}
+                          className="flex flex-col items-center gap-1.5"
+                        >
+                          <PlayerAvatar
+                            avatarUrl={entry.user.avatarUrl}
+                            firstName={entry.user.firstName}
+                            lastName={entry.user.lastName}
+                            size="lg"
+                            className={cn(
+                              'transition-all duration-150',
+                              selected
+                                ? 'border-club-blue ring-club-blue/40 border-2 ring-4'
+                                : 'opacity-70',
+                            )}
+                          />
+                          <span className="w-16 truncate text-center text-xs font-medium">
+                            {entry.user.firstName}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      disabled={!defenseBossSelection || defenseBossMutation.isPending}
+                      onClick={() => defenseBossMutation.mutate(defenseBossSelection)}
+                    >
+                      Voter
+                    </Button>
+                    <span className="text-muted-foreground text-xs">
+                      Ton vote sera définitif.
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Aucun défenseur n'a joué ce match.
+                </p>
+              )
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Seuls les joueurs ayant participé peuvent voter.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )
+
   const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => entry.userId !== user?.id)
   const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.userId] != null)
 
@@ -1352,8 +1500,35 @@ export function MatchDetailPage() {
 
   const compositionSummaryView = renderCompositionCard(false)
 
-  // Two steps: MOTM vote first, then ratings — advancing is implicit, driven by
-  // hasVotedMotm/ratingsSubmitted rather than separate local step state.
+  // MOTM vote, then patron de la défense (skipped if no defender played), then ratings —
+  // advancing is implicit, driven by each gate rather than separate local step state.
+  const voteSteps = [
+    {
+      needed: needsMotmVote,
+      node: motmCard,
+      title: 'Vote obligatoire',
+      description: "Avant de voir le résumé du match, vote pour l'homme du match.",
+    },
+    ...(defenseBossApplies
+      ? [
+          {
+            needed: needsDefenseBossVote,
+            node: defenseBossCard,
+            title: 'Vote obligatoire',
+            description: 'Avant de voir le résumé du match, vote pour le patron de la défense.',
+          },
+        ]
+      : []),
+    {
+      needed: needsRatings,
+      node: ratingsCard,
+      title: 'Notes obligatoires',
+      description: 'Avant de voir le résumé du match, note tes coéquipiers.',
+    },
+  ]
+  const activeStepIndex = voteSteps.findIndex((s) => s.needed)
+  const activeStep = activeStepIndex >= 0 ? voteSteps[activeStepIndex] : null
+
   const voteModal = (
     <Dialog open={showVoteModal}>
       <DialogContent
@@ -1362,24 +1537,24 @@ export function MatchDetailPage() {
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>
-            {needsMotmVote ? 'Vote obligatoire (étape 1/2)' : 'Notes obligatoires (étape 2/2)'}
-          </DialogTitle>
-          <DialogDescription>
-            {needsMotmVote
-              ? "Avant de voir le résumé du match, vote pour l'homme du match."
-              : 'Avant de voir le résumé du match, note tes coéquipiers.'}
-          </DialogDescription>
-        </DialogHeader>
-        {needsMotmVote ? motmCard : ratingsCard}
+        {activeStep && (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {activeStep.title} (étape {activeStepIndex + 1}/{voteSteps.length})
+              </DialogTitle>
+              <DialogDescription>{activeStep.description}</DialogDescription>
+            </DialogHeader>
+            {activeStep.node}
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )
 
   return (
     <div className="flex flex-col gap-8">
-      <Confetti active={motmCelebration} />
+      <Confetti active={motmCelebration || defenseBossCelebration} />
       {voteModal}
 
       {isCoach && matchTimeHasPassed && (

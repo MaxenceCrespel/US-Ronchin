@@ -6,6 +6,7 @@ import { MatchEvent } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
+import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { StatsService } from './stats.service';
@@ -20,6 +21,7 @@ import { StatsController } from './stats.controller';
       MatchComposition,
       PlayerRating,
       MatchMotmVote,
+      MatchDefenseBossVote,
       Attendance,
       TrainingSession,
     ]),

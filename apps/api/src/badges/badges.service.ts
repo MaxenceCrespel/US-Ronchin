@@ -5,14 +5,18 @@ import { UserBadge } from './entities/user-badge.entity';
 import { GoalType, MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
+import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
 import { isMotmRevealed, computeMotmWinner } from '../matches/motm-utils';
-import type { Match } from '../matches/entities/match.entity';
+import { Match } from '../matches/entities/match.entity';
+import { MatchAttendance } from '../matches/entities/match-attendance.entity';
+import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { PlayerPosition, User } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { getCurrentSeasonLabel } from '../stats/season.util';
 
 /** What actually happened at training, not what the player declared beforehand. */
 function effectiveStatus(a: Attendance): AttendanceStatus | null {
@@ -71,7 +75,12 @@ const REPEATABLE_BADGE_KEYS = new Set([
   'early_bird',
   'jekyll_hyde',
   'impact_immediat',
+  'box_to_box',
 ]);
+
+/** Minimum number of training+match "occasions" within a calendar month for Le Mois Parfait
+ * to be meaningful — a month with just one session shouldn't count as a perfect month. */
+const MOIS_PARFAIT_MIN_OCCASIONS = 3;
 
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
@@ -127,6 +136,14 @@ export class BadgesService {
     private readonly sessionsRepository: Repository<TrainingSession>,
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
+    @InjectRepository(MatchDefenseBossVote)
+    private readonly defenseBossVotesRepository: Repository<MatchDefenseBossVote>,
+    @InjectRepository(Match)
+    private readonly matchesRepository: Repository<Match>,
+    @InjectRepository(MatchAttendance)
+    private readonly matchAttendancesRepository: Repository<MatchAttendance>,
+    @InjectRepository(PlayerRating)
+    private readonly ratingsRepository: Repository<PlayerRating>,
     private readonly statsService: StatsService,
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
@@ -138,18 +155,30 @@ export class BadgesService {
     if (stats) {
       // All events involving this user, either as the actor (userId) or as the
       // assist provider (assistUserId) — badges like "Duo Magique" need both.
-      const [eventsAsActor, eventsAsAssist, myComposition, myAttendances, me, allSessions] =
-        await Promise.all([
-          this.eventsRepository.find({ where: { userId }, relations: { match: true } }),
-          this.eventsRepository.find({ where: { assistUserId: userId }, relations: { match: true } }),
-          this.compositionsRepository.find({ where: { userId }, relations: { match: true } }),
-          this.attendancesRepository.find({
-            where: { userId },
-            relations: { trainingSession: true },
-          }),
-          this.usersRepository.findOne({ where: { id: userId } }),
-          this.sessionsRepository.find(),
-        ]);
+      const [
+        eventsAsActor,
+        eventsAsAssist,
+        myComposition,
+        myAttendances,
+        me,
+        allSessions,
+        myMatchAttendances,
+        myRatings,
+        allMatches,
+      ] = await Promise.all([
+        this.eventsRepository.find({ where: { userId }, relations: { match: true } }),
+        this.eventsRepository.find({ where: { assistUserId: userId }, relations: { match: true } }),
+        this.compositionsRepository.find({ where: { userId }, relations: { match: true } }),
+        this.attendancesRepository.find({
+          where: { userId },
+          relations: { trainingSession: true },
+        }),
+        this.usersRepository.findOne({ where: { id: userId } }),
+        this.sessionsRepository.find(),
+        this.matchAttendancesRepository.find({ where: { userId } }),
+        this.ratingsRepository.find({ where: { ratedUserId: userId }, relations: { match: true } }),
+        this.matchesRepository.find(),
+      ]);
 
       const myMatchIds = myComposition.map((c) => c.matchId);
       const [motmVotesForMyMatches, compositionsForMyMatches] =
@@ -213,6 +242,25 @@ export class BadgesService {
         return concededByUs === 0;
       }).length;
       const hasPortier = goalkeeperCleanSheetCount > 0;
+      const hasMainsOr = goalkeeperCleanSheetCount >= 5;
+      const hasMainsDiamant = goalkeeperCleanSheetCount >= 10;
+      const hasMainsLegendaires = goalkeeperCleanSheetCount >= 20;
+
+      const defenderStartCount = myComposition.filter(
+        (c) => c.isStarter && c.position === PlayerPosition.DEFENDER && c.match?.status === 'PLAYED',
+      ).length;
+      const hasVeteranDefense = defenderStartCount >= 15;
+      const hasCadreDefensif = defenderStartCount >= 30;
+      const hasLegendeArriereGarde = defenderStartCount >= 50;
+
+      const starterMatchCount = myComposition.filter(
+        (c) => c.isStarter && c.match?.status === 'PLAYED',
+      ).length;
+
+      const positionsPlayed = new Set(
+        myComposition.map((c) => c.position).filter((p): p is PlayerPosition => !!p),
+      );
+      const hasPolyvalent = positionsPlayed.size >= 4;
 
       const superSubCount = myComposition.filter(
         (c) => !c.isStarter && (goalsByMatch.get(c.matchId) ?? 0) > 0,
@@ -352,9 +400,12 @@ export class BadgesService {
       let maxPanneSecheStreak = 0;
       let cadenasStreak = 0;
       let maxCadenasStreak = 0;
+      let gkCadenasStreak = 0;
+      let maxGkCadenasStreak = 0;
       let benchStreak = 0;
       let maxBenchStreak = 0;
       let hasEquilibriste = false;
+      let boxToBoxCount = 0;
       for (let i = 0; i < playedMatches.length; i++) {
         const m = playedMatches[i];
         const goalsInMatch = goalsByMatch.get(m.id) ?? 0;
@@ -376,6 +427,13 @@ export class BadgesService {
         cadenasStreak = startedAsDefender && concededByUs === 0 ? cadenasStreak + 1 : 0;
         maxCadenasStreak = Math.max(maxCadenasStreak, cadenasStreak);
 
+        const startedAsGoalkeeper = comp?.isStarter && comp.position === PlayerPosition.GOALKEEPER;
+        gkCadenasStreak = startedAsGoalkeeper && concededByUs === 0 ? gkCadenasStreak + 1 : 0;
+        maxGkCadenasStreak = Math.max(maxGkCadenasStreak, gkCadenasStreak);
+
+        const startedAsMidfielder = comp?.isStarter && comp.position === PlayerPosition.MIDFIELDER;
+        if (startedAsMidfielder && goalsInMatch > 0 && assistsInMatch > 0) boxToBoxCount += 1;
+
         const isBench = comp ? !comp.isStarter : false;
         benchStreak = isBench ? benchStreak + 1 : 0;
         maxBenchStreak = Math.max(maxBenchStreak, benchStreak);
@@ -393,6 +451,8 @@ export class BadgesService {
       const hasSangFroid = maxNoCardStreak >= 20;
       const hasPanneSeche = maxPanneSecheStreak >= 10;
       const hasCadenas = maxCadenasStreak >= 3;
+      const hasVerrou = maxGkCadenasStreak >= 3;
+      const hasBoxToBox = boxToBoxCount > 0;
       const hasGardeDuCorps = maxBenchStreak >= 5;
 
       const braquageCount = playedMatches.filter(
@@ -436,6 +496,69 @@ export class BadgesService {
       const maxZeroMotmMatches = zeroMotmMatchCounts.length > 0 ? Math.max(...zeroMotmMatchCounts) : 0;
       const hasDernierDeCordee =
         stats.motmCount === 0 && stats.matchesPlayed > 0 && stats.matchesPlayed === maxZeroMotmMatches;
+
+      const myMotmVoteMatchIds = new Set(
+        motmVotesForMyMatches.filter((v) => v.voterId === userId).map((v) => v.matchId),
+      );
+      const hasFairPlay =
+        playedMatches.length > 0 && playedMatches.every((m) => myMotmVoteMatchIds.has(m.id));
+
+      const hasTaulier = stats.matchesPlayed >= 10 && starterMatchCount / stats.matchesPlayed >= 0.8;
+
+      const seasonsActive = new Set<string>();
+      for (const m of playedMatches) {
+        seasonsActive.add(getCurrentSeasonLabel(new Date(`${m.date}T00:00:00`)));
+      }
+      for (const a of myAttendances) {
+        if (effectiveStatus(a) === AttendanceStatus.PRESENT && a.trainingSession) {
+          seasonsActive.add(getCurrentSeasonLabel(new Date(`${a.trainingSession.date}T00:00:00`)));
+        }
+      }
+      const hasHistorique = seasonsActive.size >= 3;
+
+      // "Note moyenne sur 3 matchs" — the per-match average (not each individual note) of the
+      // 3 most recently rated matches, so a match rated by many teammates doesn't outweigh one
+      // rated by few.
+      const ratingsByMatch = new Map<string, { date: string; ratings: number[] }>();
+      for (const r of myRatings) {
+        if (!r.match || r.match.status !== 'PLAYED') continue;
+        const entry = ratingsByMatch.get(r.matchId) ?? { date: r.match.date, ratings: [] };
+        entry.ratings.push(r.rating);
+        ratingsByMatch.set(r.matchId, entry);
+      }
+      const last3Rated = [...ratingsByMatch.values()]
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+        .slice(-3)
+        .map((entry) => entry.ratings.reduce((sum, v) => sum + v, 0) / entry.ratings.length);
+      const hasMetronome =
+        last3Rated.length >= 3 && last3Rated.reduce((sum, avg) => sum + avg, 0) / last3Rated.length > 7;
+
+      // Le Mois Parfait — 100% présence (entraînements + matchs) sur un mois calendaire donné,
+      // un mois avec trop peu d'occasions ne compte pas. Non-réponse = absent, comme partout
+      // ailleurs dans l'app : un joueur qui n'a jamais répondu ne doit pas être compté par défaut.
+      const myTrainingAttendanceBySession = new Map(myAttendances.map((a) => [a.trainingSessionId, a]));
+      const myMatchAttendanceByMatch = new Map(myMatchAttendances.map((a) => [a.matchId, a]));
+      const monthOccasions = new Map<string, { total: number; present: number }>();
+      const bumpMonth = (isoDate: string, present: boolean) => {
+        const key = isoDate.slice(0, 7);
+        const entry = monthOccasions.get(key) ?? { total: 0, present: 0 };
+        entry.total += 1;
+        if (present) entry.present += 1;
+        monthOccasions.set(key, entry);
+      };
+      for (const s of allSessions) {
+        if (s.cancelled || s.date > today) continue;
+        const attendance = myTrainingAttendanceBySession.get(s.id);
+        const status = attendance ? effectiveStatus(attendance) : null;
+        bumpMonth(s.date, status === AttendanceStatus.PRESENT);
+      }
+      for (const m of allMatches) {
+        if (m.status !== 'PLAYED' || m.date > today) continue;
+        bumpMonth(m.date, myMatchAttendanceByMatch.get(m.id)?.status === AttendanceStatus.PRESENT);
+      }
+      const hasMoisParfait = [...monthOccasions.values()].some(
+        (e) => e.total >= MOIS_PARFAIT_MIN_OCCASIONS && e.present === e.total,
+      );
 
       const eligibility: Record<string, boolean> = {
         first_goal: stats.goals >= 1,
@@ -507,6 +630,24 @@ export class BadgesService {
         equilibriste: hasEquilibriste,
         garde_du_corps: hasGardeDuCorps,
         braquage: hasBraquage,
+        mains_or: hasMainsOr,
+        mains_diamant: hasMainsDiamant,
+        mains_legendaires: hasMainsLegendaires,
+        verrou: hasVerrou,
+        veteran_defense: hasVeteranDefense,
+        cadre_defensif: hasCadreDefensif,
+        legende_arriere_garde: hasLegendeArriereGarde,
+        patron_first: stats.patronDefenseCount >= 1,
+        patron_hero: stats.patronDefenseCount >= 3,
+        patron_legend: stats.patronDefenseCount >= 5,
+        patron_diva: stats.patronDefenseCount >= 10,
+        box_to_box: hasBoxToBox,
+        fair_play: hasFairPlay,
+        taulier: hasTaulier,
+        historique: hasHistorique,
+        mois_parfait: hasMoisParfait,
+        polyvalent: hasPolyvalent,
+        metronome: hasMetronome,
       };
 
       const repeatableCounts: Record<string, number> = {
@@ -524,6 +665,7 @@ export class BadgesService {
         early_bird: earlyGoalCount,
         jekyll_hyde: jekyllHydeCount,
         impact_immediat: impactImmediatCount,
+        box_to_box: boxToBoxCount,
       };
       const occurrenceCount = (key: string): number =>
         REPEATABLE_BADGE_KEYS.has(key) ? (repeatableCounts[key] ?? 0) : eligibility[key] ? 1 : 0;

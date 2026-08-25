@@ -2,6 +2,9 @@ export type BadgeCategory =
   | 'GOALS'
   | 'ASSISTS'
   | 'MOTM'
+  | 'GOALKEEPER'
+  | 'DEFENSE'
+  | 'MIDFIELD'
   | 'ATTENDANCE'
   | 'EXPERIENCE'
   | 'DISCIPLINE'
@@ -24,6 +27,9 @@ export const BADGE_CATEGORY_LABELS: Record<BadgeCategory, string> = {
   GOALS: 'Buts',
   ASSISTS: 'Passes décisives',
   MOTM: 'Homme du match',
+  GOALKEEPER: 'Gardien',
+  DEFENSE: 'Défense',
+  MIDFIELD: 'Milieu',
   ATTENDANCE: 'Assiduité',
   EXPERIENCE: 'Expérience',
   DISCIPLINE: 'Discipline',
@@ -260,6 +266,14 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     description: 'Être élu homme du match lors d’une défaite de l’équipe',
     emoji: '🤷',
   },
+  {
+    key: 'fair_play',
+    category: 'MOTM',
+    rarity: 'RARE',
+    title: 'Le Fair-Play',
+    description: 'Voter pour l’homme du match à chaque fois que tu as toi-même joué',
+    emoji: '🗳️',
+  },
 
   // Assiduité — séries, puis totaux, puis déclaratif vs réel
   {
@@ -353,6 +367,15 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
       '100% de présence validée par le coach aux entraînements de décembre et janvier',
     emoji: '🥵',
   },
+  {
+    key: 'mois_parfait',
+    category: 'ATTENDANCE',
+    rarity: 'RARE',
+    title: 'Le Mois Parfait',
+    description:
+      "100% de présence, entraînements et matchs confondus, sur un mois calendaire (au moins 3 occasions dans le mois)",
+    emoji: '📅',
+  },
 
   // Expérience — progression puis special
   {
@@ -411,6 +434,22 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     description:
       "Jouer un match, être absent plus d'un mois complet, puis revenir sur la feuille de match",
     emoji: '💼',
+  },
+  {
+    key: 'taulier',
+    category: 'EXPERIENCE',
+    rarity: 'RARE',
+    title: 'Le Taulier',
+    description: 'Être titulaire dans au moins 80% de tes matchs joués (minimum 10 matchs)',
+    emoji: '🧷',
+  },
+  {
+    key: 'historique',
+    category: 'EXPERIENCE',
+    rarity: 'EPIC',
+    title: "L'Historique",
+    description: 'Avoir fait partie de l’effectif sur au moins 3 saisons différentes',
+    emoji: '📜',
   },
 
   // Discipline — jaune, puis rouge, puis combos, puis contre-badge
@@ -474,7 +513,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   // Impact & résultats — défense, moments individuels, série d'équipe, présence
   {
     key: 'clean_sheet',
-    category: 'IMPACT',
+    category: 'DEFENSE',
     rarity: 'COMMON',
     title: 'La Muraille de Ronchin',
     description: 'Titulaire en défense lors d’une rencontre terminée sans encaisser de but',
@@ -482,7 +521,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'roc',
-    category: 'IMPACT',
+    category: 'DEFENSE',
     rarity: 'RARE',
     title: 'Le Roc',
     description: '5 rencontres titulaire en défense sans encaisser de but',
@@ -490,7 +529,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'forteresse',
-    category: 'IMPACT',
+    category: 'DEFENSE',
     rarity: 'EPIC',
     title: 'La Forteresse',
     description: '10 rencontres titulaire en défense sans encaisser de but',
@@ -498,27 +537,123 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'inebranlable',
-    category: 'IMPACT',
+    category: 'DEFENSE',
     rarity: 'LEGENDARY',
     title: 'L’Inébranlable',
     description: '20 rencontres titulaire en défense sans encaisser de but',
     emoji: '🛡️',
   },
   {
+    key: 'cadenas',
+    category: 'DEFENSE',
+    rarity: 'RARE',
+    title: 'Le Cadenas',
+    description: '3 rencontres consécutives titulaire en défense sans encaisser de but',
+    emoji: '🔒',
+  },
+  {
+    key: 'veteran_defense',
+    category: 'DEFENSE',
+    rarity: 'RARE',
+    title: 'Le Vétéran de la Défense',
+    description: '15 titularisations en défense au fil de la carrière',
+    emoji: '🏛️',
+  },
+  {
+    key: 'cadre_defensif',
+    category: 'DEFENSE',
+    rarity: 'EPIC',
+    title: 'Le Cadre Défensif',
+    description: '30 titularisations en défense au fil de la carrière',
+    emoji: '🏗️',
+  },
+  {
+    key: 'legende_arriere_garde',
+    category: 'DEFENSE',
+    rarity: 'LEGENDARY',
+    title: "La Légende de l'Arrière-Garde",
+    description: '50 titularisations en défense au fil de la carrière',
+    emoji: '🗿',
+  },
+  {
+    key: 'patron_first',
+    category: 'DEFENSE',
+    rarity: 'COMMON',
+    title: 'Patron de la défense',
+    description: 'Être élu patron de la défense après un match',
+    emoji: '🦁',
+  },
+  {
+    key: 'patron_hero',
+    category: 'DEFENSE',
+    rarity: 'RARE',
+    title: 'Chef de la garnison',
+    description: '3 fois élu patron de la défense',
+    emoji: '🛡️',
+  },
+  {
+    key: 'patron_legend',
+    category: 'DEFENSE',
+    rarity: 'EPIC',
+    title: 'Général de la défense',
+    description: '5 fois élu patron de la défense',
+    emoji: '⚔️',
+  },
+  {
+    key: 'patron_diva',
+    category: 'DEFENSE',
+    rarity: 'LEGENDARY',
+    title: 'Seigneur de la défense',
+    description: '10 fois élu patron de la défense',
+    emoji: '👑',
+  },
+  {
     key: 'portier',
-    category: 'IMPACT',
+    category: 'GOALKEEPER',
     rarity: 'COMMON',
     title: 'Le Portier',
     description: 'Titulaire au poste de gardien lors d’une rencontre terminée sans encaisser de but',
     emoji: '🧤',
   },
   {
-    key: 'cadenas',
-    category: 'IMPACT',
+    key: 'mains_or',
+    category: 'GOALKEEPER',
     rarity: 'RARE',
-    title: 'Le Cadenas',
-    description: '3 rencontres consécutives titulaire en défense sans encaisser de but',
-    emoji: '🔒',
+    title: "Les Mains d'Or",
+    description: '5 rencontres titulaire gardien sans encaisser de but',
+    emoji: '🥇',
+  },
+  {
+    key: 'mains_diamant',
+    category: 'GOALKEEPER',
+    rarity: 'EPIC',
+    title: 'Les Mains de Diamant',
+    description: '10 rencontres titulaire gardien sans encaisser de but',
+    emoji: '💎',
+  },
+  {
+    key: 'mains_legendaires',
+    category: 'GOALKEEPER',
+    rarity: 'LEGENDARY',
+    title: 'Les Mains Légendaires',
+    description: '20 rencontres titulaire gardien sans encaisser de but',
+    emoji: '🌟',
+  },
+  {
+    key: 'verrou',
+    category: 'GOALKEEPER',
+    rarity: 'RARE',
+    title: 'Le Verrou',
+    description: '3 rencontres consécutives titulaire gardien sans encaisser de but',
+    emoji: '🔐',
+  },
+  {
+    key: 'box_to_box',
+    category: 'MIDFIELD',
+    rarity: 'RARE',
+    title: 'Box-to-Box',
+    description: 'Être titulaire au milieu, marquer ET délivrer une passe décisive dans le même match',
+    emoji: '⚙️',
   },
   {
     key: 'braquage',
@@ -621,5 +756,22 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     description:
       "Avoir joué le plus de matchs de l'équipe sans jamais avoir été élu homme du match",
     emoji: '🐢',
+  },
+  {
+    key: 'polyvalent',
+    category: 'SPECIAL',
+    rarity: 'RARE',
+    title: 'Le Polyvalent',
+    description:
+      'Avoir joué au moins une fois à chacun des 4 postes (gardien, défense, milieu, attaque)',
+    emoji: '🔀',
+  },
+  {
+    key: 'metronome',
+    category: 'SPECIAL',
+    rarity: 'EPIC',
+    title: 'Le Métronome',
+    description: 'Une note moyenne supérieure à 7/10 sur tes 3 derniers matchs notés',
+    emoji: '🎻',
   },
 ];

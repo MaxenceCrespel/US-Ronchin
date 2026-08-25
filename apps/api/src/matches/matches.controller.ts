@@ -23,6 +23,7 @@ import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
 import { VoteMotmDto } from './dto/vote-motm.dto';
+import { VoteDefenseBossDto } from './dto/vote-defense-boss.dto';
 import { SetAttendanceDto } from '../attendances/dto/set-attendance.dto';
 import { sanitizeUser } from '../common/utils/sanitize-user';
 
@@ -174,5 +175,19 @@ export class MatchesController {
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
     return this.matchesService.voteMotm(id, currentUser.id, dto.votedForId);
+  }
+
+  @Get(':id/defense-boss')
+  getDefenseBoss(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    return this.matchesService.getDefenseBoss(id, currentUser.id);
+  }
+
+  @Put(':id/defense-boss')
+  voteDefenseBoss(
+    @Param('id') id: string,
+    @Body() dto: VoteDefenseBossDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.matchesService.voteDefenseBoss(id, currentUser.id, dto.votedForId);
   }
 }
