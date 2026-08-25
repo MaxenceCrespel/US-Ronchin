@@ -304,6 +304,13 @@ export class BadgesService {
         .filter((m): m is Match => !!m && m.status === 'PLAYED' && isWeekendDate(m.date));
       const hasFootballeurDimanche = weekendMatches.some((m) => {
         const weekBefore = shiftDate(m.date, -7);
+        // Only a real "skipped training" if a session actually existed in that window —
+        // otherwise every player picking up their very first match of the season (before
+        // any training had even happened yet) would wrongly earn this.
+        const sessionsInWindow = allSessions.filter(
+          (s) => !s.cancelled && s.date >= weekBefore && s.date < m.date,
+        );
+        if (sessionsInWindow.length === 0) return false;
         return !myAttendances.some(
           (a) =>
             a.trainingSession &&
