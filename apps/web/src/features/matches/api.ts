@@ -70,6 +70,7 @@ export async function fetchComposition(matchId: string): Promise<MatchCompositio
 }
 
 export interface CompositionEntryInput {
+  id?: string
   userId?: string
   guestFirstName?: string
   guestLastName?: string

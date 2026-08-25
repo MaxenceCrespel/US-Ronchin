@@ -16,6 +16,13 @@ import {
 import { PlayerPosition } from '../../users/entities/user.entity';
 
 export class CompositionEntryDto {
+  /** The existing composition row's id, when editing an already-saved entry — lets
+   * setComposition update in place instead of delete+recreate, so votes cast against a
+   * guest entry (FK'd to the composition row, see MatchMotmVote) survive a re-save. */
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   /** Exactly one of userId/(guestFirstName+guestLastName) must be set — enforced in
    * MatchesService.setComposition, same convention as CreateMatchEventDto's scorerName. */
   @IsOptional()

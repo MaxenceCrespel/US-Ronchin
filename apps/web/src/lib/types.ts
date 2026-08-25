@@ -226,14 +226,15 @@ export interface RatingSummaryEntry {
 }
 
 export interface MotmResultEntry {
-  userId: string
+  /** Null when the winner is still a guest (no account linked yet). */
+  userId: string | null
   firstName: string
   lastName: string
   votes: number
 }
 
 export interface MotmResponse {
-  myVoteUserId: string | null
+  myVoteCompositionId: string | null
   revealed: boolean
   totalVotes: number
   totalPlayers: number
@@ -241,14 +242,15 @@ export interface MotmResponse {
 }
 
 export interface DefenseBossResultEntry {
-  userId: string
+  /** Null when the winner is still a guest (no account linked yet). */
+  userId: string | null
   firstName: string
   lastName: string
   votes: number
 }
 
 export interface DefenseBossResponse {
-  myVoteUserId: string | null
+  myVoteCompositionId: string | null
   revealed: boolean
   totalVotes: number
   totalPlayers: number

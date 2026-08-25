@@ -471,8 +471,16 @@ export function MatchDetailPage() {
           .map(([key, v]) => {
             const note = playerNotes[key]?.trim() || undefined
             const guest = guests[key]
+            // A guest key is either a persisted composition row id (hydrated from the
+            // server) or a freshly client-generated placeholder (`guest-...`, not saved
+            // yet) — only the former should be echoed back as `id` so the row is updated
+            // in place instead of duplicated (see MatchesService.setComposition upsert).
             const identity = guest
-              ? { guestFirstName: guest.firstName, guestLastName: guest.lastName }
+              ? {
+                  guestFirstName: guest.firstName,
+                  guestLastName: guest.lastName,
+                  ...(key.startsWith('guest-') ? {} : { id: key }),
+                }
               : { userId: key }
             if (!v.starter) return { ...identity, isStarter: false, note }
             const pos = formationCoords[key]
@@ -683,14 +691,13 @@ export function MatchDetailPage() {
     new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
 
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
-  // Guests (no account yet) can't vote or be voted for — excluded from every voting/rating pool.
-  const teammates =
-    compositionQuery.data?.filter(isComposedPlayer).filter((entry) => entry.userId !== user?.id) ??
-    []
+  // Guests (no account yet) CAN be voted for MOTM/patron de la défense — the vote resolves
+  // to them automatically once their entry is linked to a real account (see LinkGuestButton).
+  const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
   // Voting/rating is mandatory for anyone who played, coach included — no role exception.
   const votingApplies = match.status === 'PLAYED' && iPlayed && hasComposition
-  const hasVotedMotm = motmQuery.data?.myVoteUserId != null
+  const hasVotedMotm = motmQuery.data?.myVoteCompositionId != null
   const motmRevealed = motmQuery.data?.revealed ?? false
   const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
   // Two independent gates: the MOTM vote is only forced while its window is still open
@@ -701,7 +708,7 @@ export function MatchDetailPage() {
   // Undefined while loading defaults to "applies" so the step never flickers past before
   // we actually know whether a defender played — same fail-safe as the other two gates.
   const defenseBossApplies = defenseBossQuery.data ? defenseBossQuery.data.hasEligibleTargets : true
-  const hasVotedDefenseBoss = defenseBossQuery.data?.myVoteUserId != null
+  const hasVotedDefenseBoss = defenseBossQuery.data?.myVoteCompositionId != null
   const defenseBossRevealed = defenseBossQuery.data?.revealed ?? false
   const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
   const needsRatings = !ratingsSubmitted
@@ -1308,7 +1315,10 @@ export function MatchDetailPage() {
               motmQuery.data.results && motmQuery.data.results.length > 0 ? (
                 <ul className="flex flex-col gap-2">
                   {motmQuery.data.results.map((r, index) => (
-                    <li key={r.userId} className="flex items-center justify-between text-sm">
+                    <li
+                      key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
+                      className="flex items-center justify-between text-sm"
+                    >
                       <span className="flex items-center gap-2">
                         {index === 0 && <Crown className="text-club-gold size-4" />}
                         {r.firstName} {r.lastName}
@@ -1321,15 +1331,15 @@ export function MatchDetailPage() {
                 <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
               )
             ) : iPlayed ? (
-              motmQuery.data?.myVoteUserId ? (
+              motmQuery.data?.myVoteCompositionId ? (
                 <div className="flex items-center gap-3">
                   {(() => {
-                    const voted = teammates.find((t) => t.userId === motmQuery.data?.myVoteUserId)
+                    const voted = teammates.find((t) => t.id === motmQuery.data?.myVoteCompositionId)
                     return voted ? (
                       <PlayerAvatar
-                        avatarUrl={voted.user.avatarUrl}
-                        firstName={voted.user.firstName}
-                        lastName={voted.user.lastName}
+                        avatarUrl={voted.user?.avatarUrl}
+                        firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
+                        lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
                         size="lg"
                         className="border-club-gold ring-club-gold/40 border-2 ring-4"
                       />
@@ -1347,18 +1357,18 @@ export function MatchDetailPage() {
                 <>
                   <div className="flex flex-wrap gap-3">
                     {teammates.map((entry) => {
-                      const selected = motmSelection === entry.userId
+                      const selected = motmSelection === entry.id
                       return (
                         <button
-                          key={entry.userId}
+                          key={entry.id}
                           type="button"
-                          onClick={() => setMotmSelection(entry.userId)}
+                          onClick={() => setMotmSelection(entry.id)}
                           className="flex flex-col items-center gap-1.5"
                         >
                           <PlayerAvatar
-                            avatarUrl={entry.user.avatarUrl}
-                            firstName={entry.user.firstName}
-                            lastName={entry.user.lastName}
+                            avatarUrl={entry.user?.avatarUrl}
+                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -1368,7 +1378,7 @@ export function MatchDetailPage() {
                             )}
                           />
                           <span className="w-16 truncate text-center text-xs font-medium">
-                            {entry.user.firstName}
+                            {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
                       )
@@ -1416,7 +1426,10 @@ export function MatchDetailPage() {
               defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
                 <ul className="flex flex-col gap-2">
                   {defenseBossQuery.data.results.map((r, index) => (
-                    <li key={r.userId} className="flex items-center justify-between text-sm">
+                    <li
+                      key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
+                      className="flex items-center justify-between text-sm"
+                    >
                       <span className="flex items-center gap-2">
                         {index === 0 && <Shield className="text-club-blue size-4" />}
                         {r.firstName} {r.lastName}
@@ -1429,15 +1442,17 @@ export function MatchDetailPage() {
                 <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
               )
             ) : iPlayed ? (
-              defenseBossQuery.data?.myVoteUserId ? (
+              defenseBossQuery.data?.myVoteCompositionId ? (
                 <div className="flex items-center gap-3">
                   {(() => {
-                    const voted = defenders.find((t) => t.userId === defenseBossQuery.data?.myVoteUserId)
+                    const voted = defenders.find(
+                      (t) => t.id === defenseBossQuery.data?.myVoteCompositionId,
+                    )
                     return voted ? (
                       <PlayerAvatar
-                        avatarUrl={voted.user.avatarUrl}
-                        firstName={voted.user.firstName}
-                        lastName={voted.user.lastName}
+                        avatarUrl={voted.user?.avatarUrl}
+                        firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
+                        lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
                         size="lg"
                         className="border-club-blue ring-club-blue/40 border-2 ring-4"
                       />
@@ -1455,18 +1470,18 @@ export function MatchDetailPage() {
                 <>
                   <div className="flex flex-wrap gap-3">
                     {defenders.map((entry) => {
-                      const selected = defenseBossSelection === entry.userId
+                      const selected = defenseBossSelection === entry.id
                       return (
                         <button
-                          key={entry.userId}
+                          key={entry.id}
                           type="button"
-                          onClick={() => setDefenseBossSelection(entry.userId)}
+                          onClick={() => setDefenseBossSelection(entry.id)}
                           className="flex flex-col items-center gap-1.5"
                         >
                           <PlayerAvatar
-                            avatarUrl={entry.user.avatarUrl}
-                            firstName={entry.user.firstName}
-                            lastName={entry.user.lastName}
+                            avatarUrl={entry.user?.avatarUrl}
+                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -1476,7 +1491,7 @@ export function MatchDetailPage() {
                             )}
                           />
                           <span className="w-16 truncate text-center text-xs font-medium">
-                            {entry.user.firstName}
+                            {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
                       )

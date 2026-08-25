@@ -6,7 +6,7 @@ import { GoalType, MatchEvent, MatchEventType } from '../matches/entities/match-
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
-import { isMotmRevealed, computeMotmWinner } from '../matches/motm-utils';
+import { isMotmRevealed, computeMotmWinner, resolveWinnerUserId } from '../matches/motm-utils';
 import { Match } from '../matches/entities/match.entity';
 import { MatchAttendance } from '../matches/entities/match-attendance.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -468,12 +468,18 @@ export class BadgesService {
         if (!c.userId) continue; // guest, can't vote
         playersByMatch.set(c.matchId, (playersByMatch.get(c.matchId) ?? 0) + 1);
       }
+      // computeMotmWinner returns a MatchComposition id, not a User id — resolve it back.
+      const compositionByIdForMyMatches = new Map(compositionsForMyMatches.map((c) => [c.id, c]));
       const hasIncompris = playedMatches.some((m) => {
         if (resultOf(m) !== 'L') return false;
         const matchVotes = votesByMatch.get(m.id) ?? [];
         const totalPlayers = playersByMatch.get(m.id) ?? 0;
         if (!isMotmRevealed(matchVotes, totalPlayers)) return false;
-        return computeMotmWinner(matchVotes) === userId;
+        const winnerUserId = resolveWinnerUserId(
+          computeMotmWinner(matchVotes),
+          compositionByIdForMyMatches,
+        );
+        return winnerUserId === userId;
       });
 
       const zeroMotmMatchCounts = allStats

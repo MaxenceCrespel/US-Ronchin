@@ -84,7 +84,7 @@ export function HomePage() {
     ? []
     : recentPlayedMatches.filter((_m, i) => {
         const composition = compositionQueries[i]?.data
-        const hasVoted = motmQueries[i]?.data?.myVoteUserId != null
+        const hasVoted = motmQueries[i]?.data?.myVoteCompositionId != null
         const revealed = motmQueries[i]?.data?.revealed ?? false
         const iPlayed = composition?.some((c) => c.userId === user?.id) ?? false
         // Once revealed (everyone voted, or the 24h window elapsed), voting is closed —

@@ -29,14 +29,15 @@ export interface RatingSummaryEntry {
 }
 
 export interface MotmResultEntry {
-  userId: string;
+  /** Null when the winner is still a guest (no account linked yet). */
+  userId: string | null;
   firstName: string;
   lastName: string;
   votes: number;
 }
 
 export interface MotmResponse {
-  myVoteUserId: string | null;
+  myVoteCompositionId: string | null;
   revealed: boolean;
   totalVotes: number;
   totalPlayers: number;
@@ -44,14 +45,15 @@ export interface MotmResponse {
 }
 
 export interface DefenseBossResultEntry {
-  userId: string;
+  /** Null when the winner is still a guest (no account linked yet). */
+  userId: string | null;
   firstName: string;
   lastName: string;
   votes: number;
 }
 
 export interface DefenseBossResponse {
-  myVoteUserId: string | null;
+  myVoteCompositionId: string | null;
   revealed: boolean;
   totalVotes: number;
   totalPlayers: number;
@@ -150,11 +152,34 @@ export class MatchesService {
         );
       }
     }
-    await this.compositionsRepository.delete({ matchId });
-    const entries = dto.entries.map((entry) =>
-      this.compositionsRepository.create({ ...entry, matchId }),
+    // Upsert rather than delete-then-recreate: matches/motm/defense-boss votes are FK'd to
+    // a composition row (so a guest's vote survives being linked to a real account later),
+    // and blindly recreating every row on each save would cascade-delete those votes.
+    const existing = await this.compositionsRepository.find({ where: { matchId } });
+    const existingById = new Map(existing.map((e) => [e.id, e]));
+    const existingByUserId = new Map(
+      existing
+        .filter((e): e is MatchComposition & { userId: string } => !!e.userId)
+        .map((e) => [e.userId, e]),
     );
-    return this.compositionsRepository.save(entries);
+
+    const keepIds = new Set<string>();
+    const toSave = dto.entries.map((entry) => {
+      const matched =
+        (entry.id ? existingById.get(entry.id) : undefined) ??
+        (entry.userId ? existingByUserId.get(entry.userId) : undefined);
+      if (matched) {
+        keepIds.add(matched.id);
+        return this.compositionsRepository.merge(matched, entry);
+      }
+      return this.compositionsRepository.create({ ...entry, matchId });
+    });
+
+    const toDeleteIds = existing.filter((e) => !keepIds.has(e.id)).map((e) => e.id);
+    if (toDeleteIds.length > 0) {
+      await this.compositionsRepository.delete(toDeleteIds);
+    }
+    return this.compositionsRepository.save(toSave);
   }
 
   /** Once a guest composition entry's player creates a real account, the coach can retroactively
@@ -365,8 +390,8 @@ export class MatchesService {
 
   async getMotm(matchId: string, currentUserId: string): Promise<MotmResponse> {
     const [composition, votes] = await Promise.all([
-      this.compositionsRepository.find({ where: { matchId } }),
-      this.motmVotesRepository.find({ where: { matchId }, relations: { votedFor: true } }),
+      this.compositionsRepository.find({ where: { matchId }, relations: { user: true } }),
+      this.motmVotesRepository.find({ where: { matchId } }),
     ]);
 
     // Guests (no account yet) can't vote — excluded from the eligible-voter count that
@@ -374,19 +399,29 @@ export class MatchesService {
     const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
     const revealed = isMotmRevealed(votes, totalPlayers);
+    const compositionById = new Map(composition.map((c) => [c.id, c]));
+    const compositionByUserId = new Map(
+      composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
+    );
+    // The composition entry each vote targets, real account or guest alike.
+    const voteTarget = (v: MatchMotmVote) =>
+      v.votedForGuestId ? compositionById.get(v.votedForGuestId) : compositionByUserId.get(v.votedForId!);
 
     let results: MotmResultEntry[] | null = null;
     if (revealed) {
       const counts = new Map<string, MotmResultEntry>();
       for (const vote of votes) {
-        const existing = counts.get(vote.votedForId);
+        const target = voteTarget(vote);
+        if (!target) continue;
+        const key = target.id;
+        const existing = counts.get(key);
         if (existing) {
           existing.votes += 1;
         } else {
-          counts.set(vote.votedForId, {
-            userId: vote.votedForId,
-            firstName: vote.votedFor.firstName,
-            lastName: vote.votedFor.lastName,
+          counts.set(key, {
+            userId: target.userId,
+            firstName: target.user?.firstName ?? target.guestFirstName ?? '',
+            lastName: target.user?.lastName ?? target.guestLastName ?? '',
             votes: 1,
           });
         }
@@ -394,8 +429,9 @@ export class MatchesService {
       results = [...counts.values()].sort((a, b) => b.votes - a.votes);
     }
 
+    const myVote = votes.find((v) => v.voterId === currentUserId);
     return {
-      myVoteUserId: votes.find((v) => v.voterId === currentUserId)?.votedForId ?? null,
+      myVoteCompositionId: myVote ? (voteTarget(myVote)?.id ?? null) : null,
       revealed,
       totalVotes,
       totalPlayers,
@@ -403,10 +439,14 @@ export class MatchesService {
     };
   }
 
-  async voteMotm(matchId: string, voterId: string, votedForId: string): Promise<void> {
+  /** votedForCompositionId targets a MatchComposition row, not a User directly — a vote for
+   * a guest (no account yet) is valid and automatically resolves to a real player once the
+   * coach links that entry (see linkCompositionGuest). Only the voter must be a real account. */
+  async voteMotm(matchId: string, voterId: string, votedForCompositionId: string): Promise<void> {
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     const composedUserIds = new Set(composition.map((entry) => entry.userId));
-    if (!composedUserIds.has(voterId) || !composedUserIds.has(votedForId)) {
+    const target = composition.find((entry) => entry.id === votedForCompositionId);
+    if (!composedUserIds.has(voterId) || !target) {
       throw new BadRequestException(
         'Seuls les joueurs ayant participé au match peuvent voter ou être élus',
       );
@@ -421,14 +461,19 @@ export class MatchesService {
     if (existing) {
       throw new BadRequestException('Ton vote est déjà enregistré et ne peut plus être modifié');
     }
-    const vote = this.motmVotesRepository.create({ matchId, voterId, votedForId });
+    const vote = this.motmVotesRepository.create({
+      matchId,
+      voterId,
+      votedForId: target.userId ?? null,
+      votedForGuestId: target.userId ? null : target.id,
+    });
     await this.motmVotesRepository.save(vote);
   }
 
   async getDefenseBoss(matchId: string, currentUserId: string): Promise<DefenseBossResponse> {
     const [composition, votes] = await Promise.all([
-      this.compositionsRepository.find({ where: { matchId } }),
-      this.defenseBossVotesRepository.find({ where: { matchId }, relations: { votedFor: true } }),
+      this.compositionsRepository.find({ where: { matchId }, relations: { user: true } }),
+      this.defenseBossVotesRepository.find({ where: { matchId } }),
     ]);
 
     // Guests (no account yet) can't vote — excluded from the eligible-voter count that
@@ -437,19 +482,28 @@ export class MatchesService {
     const totalVotes = votes.length;
     const hasEligibleTargets = composition.some((c) => c.position === PlayerPosition.DEFENDER);
     const revealed = isMotmRevealed(votes, totalPlayers);
+    const compositionById = new Map(composition.map((c) => [c.id, c]));
+    const compositionByUserId = new Map(
+      composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
+    );
+    const voteTarget = (v: MatchDefenseBossVote) =>
+      v.votedForGuestId ? compositionById.get(v.votedForGuestId) : compositionByUserId.get(v.votedForId!);
 
     let results: DefenseBossResultEntry[] | null = null;
     if (revealed) {
       const counts = new Map<string, DefenseBossResultEntry>();
       for (const vote of votes) {
-        const existing = counts.get(vote.votedForId);
+        const target = voteTarget(vote);
+        if (!target) continue;
+        const key = target.id;
+        const existing = counts.get(key);
         if (existing) {
           existing.votes += 1;
         } else {
-          counts.set(vote.votedForId, {
-            userId: vote.votedForId,
-            firstName: vote.votedFor.firstName,
-            lastName: vote.votedFor.lastName,
+          counts.set(key, {
+            userId: target.userId,
+            firstName: target.user?.firstName ?? target.guestFirstName ?? '',
+            lastName: target.user?.lastName ?? target.guestLastName ?? '',
             votes: 1,
           });
         }
@@ -457,8 +511,9 @@ export class MatchesService {
       results = [...counts.values()].sort((a, b) => b.votes - a.votes);
     }
 
+    const myVote = votes.find((v) => v.voterId === currentUserId);
     return {
-      myVoteUserId: votes.find((v) => v.voterId === currentUserId)?.votedForId ?? null,
+      myVoteCompositionId: myVote ? (voteTarget(myVote)?.id ?? null) : null,
       revealed,
       totalVotes,
       totalPlayers,
@@ -467,13 +522,17 @@ export class MatchesService {
     };
   }
 
-  async voteDefenseBoss(matchId: string, voterId: string, votedForId: string): Promise<void> {
+  async voteDefenseBoss(
+    matchId: string,
+    voterId: string,
+    votedForCompositionId: string,
+  ): Promise<void> {
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     const composedUserIds = new Set(composition.map((entry) => entry.userId));
     if (!composedUserIds.has(voterId)) {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent voter');
     }
-    const target = composition.find((entry) => entry.userId === votedForId);
+    const target = composition.find((entry) => entry.id === votedForCompositionId);
     if (!target || target.position !== PlayerPosition.DEFENDER) {
       throw new BadRequestException('Seul un défenseur du match peut être élu patron de la défense');
     }
@@ -487,7 +546,12 @@ export class MatchesService {
     if (existing) {
       throw new BadRequestException('Ton vote est déjà enregistré et ne peut plus être modifié');
     }
-    const vote = this.defenseBossVotesRepository.create({ matchId, voterId, votedForId });
+    const vote = this.defenseBossVotesRepository.create({
+      matchId,
+      voterId,
+      votedForId: target.userId ?? null,
+      votedForGuestId: target.userId ? null : target.id,
+    });
     await this.defenseBossVotesRepository.save(vote);
   }
 }
