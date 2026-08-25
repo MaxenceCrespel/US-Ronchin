@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { Check, Copy, Link2, Pencil, QrCode, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
@@ -277,18 +278,30 @@ function EditPlayerDialog({ player }: { player: User }) {
               </p>
             </div>
           ) : (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              disabled={resetPasswordMutation.isPending}
-              onClick={() => resetPasswordMutation.mutate()}
-            >
-              {resetPasswordMutation.isPending
-                ? 'Réinitialisation...'
-                : 'Réinitialiser le mot de passe'}
-            </Button>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                disabled={resetPasswordMutation.isPending}
+                onClick={() => resetPasswordMutation.mutate()}
+              >
+                {resetPasswordMutation.isPending
+                  ? 'Réinitialisation...'
+                  : 'Réinitialiser le mot de passe'}
+              </Button>
+              {resetPasswordMutation.isError && (
+                <p className="text-destructive text-sm">
+                  {isAxiosError(resetPasswordMutation.error) &&
+                  resetPasswordMutation.error.response?.data &&
+                  typeof resetPasswordMutation.error.response.data === 'object' &&
+                  'message' in resetPasswordMutation.error.response.data
+                    ? String(resetPasswordMutation.error.response.data.message)
+                    : 'Échec de la réinitialisation. Réessaie.'}
+                </p>
+              )}
+            </div>
           )}
         </div>
       </DialogContent>
