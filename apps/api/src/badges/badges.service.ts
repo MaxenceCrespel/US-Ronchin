@@ -62,6 +62,7 @@ const REPEATABLE_BADGE_KEYS = new Set([
   'double',
   'duo_magique',
   'clean_sheet',
+  'portier',
   'super_sub',
   'braquage',
   'traiteur',
@@ -200,6 +201,18 @@ export class BadgesService {
         return concededByUs === 0;
       }).length;
       const hasCleanSheet = cleanSheetCount > 0;
+      const hasRoc = cleanSheetCount >= 5;
+      const hasForteresse = cleanSheetCount >= 10;
+      const hasInebranlable = cleanSheetCount >= 20;
+
+      const goalkeeperCleanSheetCount = myComposition.filter((c) => {
+        const m = c.match;
+        if (!m || m.status !== 'PLAYED' || m.scoreHome == null || m.scoreAway == null) return false;
+        if (!c.isStarter || c.position !== PlayerPosition.GOALKEEPER) return false;
+        const concededByUs = m.homeAway === 'HOME' ? m.scoreAway : m.scoreHome;
+        return concededByUs === 0;
+      }).length;
+      const hasPortier = goalkeeperCleanSheetCount > 0;
 
       const superSubCount = myComposition.filter(
         (c) => !c.isStarter && (goalsByMatch.get(c.matchId) ?? 0) > 0,
@@ -459,6 +472,10 @@ export class BadgesService {
         early_bird: hasEarlyGoal,
         silent_hero: stats.matchesPlayed >= 10 && stats.goals === 0 && stats.assists === 0,
         clean_sheet: hasCleanSheet,
+        roc: hasRoc,
+        forteresse: hasForteresse,
+        inebranlable: hasInebranlable,
+        portier: hasPortier,
         super_sub: hasSuperSub,
         duo_magique: hasDuoMagique,
         porte_bonheur: maxWinStreak >= 3,
@@ -498,6 +515,7 @@ export class BadgesService {
         double: doubleCount,
         duo_magique: duoMagiqueCount,
         clean_sheet: cleanSheetCount,
+        portier: goalkeeperCleanSheetCount,
         super_sub: superSubCount,
         braquage: braquageCount,
         traiteur: traiteurCount,
