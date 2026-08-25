@@ -1,13 +1,16 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { JoinDto } from './dto/join.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from './types/authenticated-user';
 import { UserRole } from '../users/entities/user.entity';
 
 @Controller('auth')
@@ -45,5 +48,15 @@ export class AuthController {
   @Get('join-status')
   joinStatus(@Query('email') email: string) {
     return this.authService.getJoinStatus(email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  async changePassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(currentUser.id, dto.currentPassword, dto.newPassword);
+    return { success: true };
   }
 }

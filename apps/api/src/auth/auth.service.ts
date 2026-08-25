@@ -62,6 +62,15 @@ export class AuthService {
     return this.signTokens({ id: user.id, email: user.email, role: user.role });
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user.passwordHash || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.usersService.setPassword(userId, passwordHash);
+  }
+
   refresh(refreshToken: string) {
     let payload: { sub: string; email: string; role: UserRole };
     try {

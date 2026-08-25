@@ -41,6 +41,10 @@ export async function fetchJoinStatus(email: string): Promise<JoinStatus> {
   return data
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiClient.patch('/auth/change-password', { currentPassword, newPassword })
+}
+
 export async function approveUser(userId: string): Promise<User> {
   const { data } = await apiClient.patch<User>(`/users/${userId}/approve`)
   return data
