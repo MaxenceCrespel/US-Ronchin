@@ -70,9 +70,7 @@ const REPEATABLE_BADGE_KEYS = new Set([
   'super_sub',
   'braquage',
   'traiteur',
-  'vainqueur_soir',
   'cadeau_anniversaire',
-  'early_bird',
   'jekyll_hyde',
   'impact_immediat',
   'box_to_box',
@@ -213,10 +211,6 @@ export class BadgesService {
       const hasPoker = pokerCount > 0;
       const jekyllHydeCount = [...goalsByMatch.keys()].filter((matchId) => redMatches.has(matchId)).length;
       const hasJekyllHyde = jekyllHydeCount > 0;
-      const earlyGoalCount = eventsAsActor.filter(
-        (e) => e.type === MatchEventType.GOAL && e.minute != null && e.minute <= 5,
-      ).length;
-      const hasEarlyGoal = earlyGoalCount > 0;
 
       const assistMatchIds = new Set(eventsAsAssist.map((e) => e.matchId));
       const duoMagiqueCount = [...goalsByMatch.keys()].filter((matchId) => assistMatchIds.has(matchId)).length;
@@ -349,16 +343,6 @@ export class BadgesService {
         m.scoreHome != null &&
         m.scoreAway != null &&
         (m.homeAway === 'HOME' ? m.scoreHome > m.scoreAway : m.scoreAway > m.scoreHome);
-      const eveningWinnerCount = eventsAsActor.filter(
-        (e) =>
-          e.type === MatchEventType.GOAL &&
-          e.minute != null &&
-          e.minute >= 85 &&
-          e.match &&
-          isMatchWin(e.match),
-      ).length;
-      const hasEveningWinner = eveningWinnerCount > 0;
-
       const birthdayGoalCount = me?.birthDate
         ? eventsAsActor.filter(
             (e) => e.type === MatchEventType.GOAL && e.match && isNearBirthday(e.match.date, me.birthDate!),
@@ -466,6 +450,7 @@ export class BadgesService {
 
       const scorerMatchesByAssistTarget = new Map<string, Set<string>>();
       for (const e of eventsAsAssist) {
+        if (!e.userId) continue; // scorer not a registered account — no partner to track
         const set = scorerMatchesByAssistTarget.get(e.userId) ?? new Set<string>();
         set.add(e.matchId);
         scorerMatchesByAssistTarget.set(e.userId, set);
@@ -592,7 +577,6 @@ export class BadgesService {
         card_collector: stats.yellowCards >= 10,
         first_red: stats.redCards >= 1,
         banned: stats.redCards >= 2,
-        early_bird: hasEarlyGoal,
         silent_hero: stats.matchesPlayed >= 10 && stats.goals === 0 && stats.assists === 0,
         clean_sheet: hasCleanSheet,
         roc: hasRoc,
@@ -608,7 +592,6 @@ export class BadgesService {
         invite_surprise: hasInviteSurprise,
         footballeur_dimanche: hasFootballeurDimanche,
         double: hasDouble,
-        vainqueur_soir: hasEveningWinner,
         cadeau_anniversaire: hasBirthdayGoal,
         traiteur: hasTraiteur,
         altruiste: hasAltruiste,
@@ -660,9 +643,7 @@ export class BadgesService {
         super_sub: superSubCount,
         braquage: braquageCount,
         traiteur: traiteurCount,
-        vainqueur_soir: eveningWinnerCount,
         cadeau_anniversaire: birthdayGoalCount,
-        early_bird: earlyGoalCount,
         jekyll_hyde: jekyllHydeCount,
         impact_immediat: impactImmediatCount,
         box_to_box: boxToBoxCount,

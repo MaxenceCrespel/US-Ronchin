@@ -111,22 +111,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     emoji: '🐐',
   },
   {
-    key: 'early_bird',
-    category: 'GOALS',
-    rarity: 'COMMON',
-    title: 'Départ Canon',
-    description: 'Marquer un but dans les 5 premières minutes',
-    emoji: '🚀',
-  },
-  {
-    key: 'vainqueur_soir',
-    category: 'GOALS',
-    rarity: 'RARE',
-    title: 'Le Vainqueur du Soir',
-    description: 'Marquer le but de la victoire à partir de la 85e minute',
-    emoji: '🌙',
-  },
-  {
     key: 'cadeau_anniversaire',
     category: 'GOALS',
     rarity: 'EPIC',
