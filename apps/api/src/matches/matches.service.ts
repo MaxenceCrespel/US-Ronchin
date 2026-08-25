@@ -112,7 +112,7 @@ export class MatchesService {
     if (!wasPlayed && saved.status === MatchStatus.PLAYED) {
       const composition = await this.getComposition(saved.id);
       await this.pushNotificationsService.sendToUsers(
-        composition.map((c) => c.userId),
+        composition.map((c) => c.userId).filter((id): id is string => !!id),
         {
           title: 'Match terminé',
           body: `Le match contre ${saved.opponent} est marqué comme joué : votez pour l'homme du match et notez vos coéquipiers.`,
@@ -141,11 +141,48 @@ export class MatchesService {
     dto: SetCompositionDto,
   ): Promise<MatchComposition[]> {
     await this.findById(matchId);
+    for (const entry of dto.entries) {
+      const hasUser = !!entry.userId;
+      const hasGuestName = !!entry.guestFirstName && !!entry.guestLastName;
+      if (hasUser === hasGuestName) {
+        throw new BadRequestException(
+          'Chaque joueur doit être soit un compte du club, soit un nom pour un joueur non inscrit',
+        );
+      }
+    }
     await this.compositionsRepository.delete({ matchId });
     const entries = dto.entries.map((entry) =>
       this.compositionsRepository.create({ ...entry, matchId }),
     );
     return this.compositionsRepository.save(entries);
+  }
+
+  /** Once a guest composition entry's player creates a real account, the coach can retroactively
+   * link the entry to it — the match sheet then counts for that player's stats/badges. */
+  async linkCompositionGuest(
+    matchId: string,
+    compositionId: string,
+    userId: string,
+  ): Promise<MatchComposition> {
+    const entry = await this.compositionsRepository.findOne({
+      where: { id: compositionId, matchId },
+    });
+    if (!entry) {
+      throw new NotFoundException('Entrée de composition introuvable');
+    }
+    if (entry.userId) {
+      throw new BadRequestException('Cette entrée est déjà liée à un compte');
+    }
+    const alreadyComposed = await this.compositionsRepository.findOne({
+      where: { matchId, userId },
+    });
+    if (alreadyComposed) {
+      throw new BadRequestException('Ce joueur est déjà dans la composition de ce match');
+    }
+    entry.userId = userId;
+    entry.guestFirstName = null;
+    entry.guestLastName = null;
+    return this.compositionsRepository.save(entry);
   }
 
   getEvents(matchId: string): Promise<MatchEvent[]> {
@@ -236,10 +273,13 @@ export class MatchesService {
     }
 
     const composition = await this.compositionsRepository.find({ where: { matchId } });
-    const composedUserIds = new Set(composition.map((entry) => entry.userId));
+    // Guests (no account yet) can't be rated or rate teammates — excluded from both sides.
+    const composedUserIds = new Set(
+      composition.map((entry) => entry.userId).filter((id): id is string => !!id),
+    );
     const teammateIds = composition
       .map((entry) => entry.userId)
-      .filter((userId) => userId !== raterId);
+      .filter((userId): userId is string => !!userId && userId !== raterId);
 
     if (!composedUserIds.has(raterId)) {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent noter');
@@ -303,7 +343,11 @@ export class MatchesService {
       this.ratingsRepository.find({ where: { matchId } }),
     ]);
 
-    return composition.map((entry) => {
+    return composition
+      .filter((entry): entry is typeof entry & { userId: string; user: NonNullable<typeof entry.user> } =>
+        !!entry.userId && !!entry.user,
+      )
+      .map((entry) => {
       const entryRatings = ratings.filter((r) => r.ratedUserId === entry.userId);
       const average =
         entryRatings.length > 0
@@ -325,7 +369,9 @@ export class MatchesService {
       this.motmVotesRepository.find({ where: { matchId }, relations: { votedFor: true } }),
     ]);
 
-    const totalPlayers = composition.length;
+    // Guests (no account yet) can't vote — excluded from the eligible-voter count that
+    // gates when results get revealed.
+    const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
     const revealed = isMotmRevealed(votes, totalPlayers);
 
@@ -385,7 +431,9 @@ export class MatchesService {
       this.defenseBossVotesRepository.find({ where: { matchId }, relations: { votedFor: true } }),
     ]);
 
-    const totalPlayers = composition.length;
+    // Guests (no account yet) can't vote — excluded from the eligible-voter count that
+    // gates when results get revealed.
+    const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
     const hasEligibleTargets = composition.some((c) => c.position === PlayerPosition.DEFENDER);
     const revealed = isMotmRevealed(votes, totalPlayers);

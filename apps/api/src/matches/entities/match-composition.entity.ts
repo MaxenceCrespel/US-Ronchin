@@ -23,12 +23,20 @@ export class MatchComposition {
   @JoinColumn({ name: 'match_id' })
   match: Match;
 
-  @Column({ name: 'user_id' })
-  userId: string;
+  @Column({ name: 'user_id', nullable: true })
+  userId: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: User | null;
+
+  /** Set instead of userId for a player not yet registered in the app — the coach can
+   * later link the entry to a real account once that player signs up (linkCompositionGuest). */
+  @Column({ name: 'guest_first_name', type: 'varchar', length: 100, nullable: true })
+  guestFirstName: string | null;
+
+  @Column({ name: 'guest_last_name', type: 'varchar', length: 100, nullable: true })
+  guestLastName: string | null;
 
   @Column({ name: 'is_starter', default: false })
   isStarter: boolean;

@@ -3,7 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { CalendarCheck, Crown, ListChecks, Pencil, Shield, Star, Trash2, Users } from 'lucide-react'
+import {
+  CalendarCheck,
+  Crown,
+  Link2,
+  ListChecks,
+  Pencil,
+  Shield,
+  Star,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,7 +52,20 @@ import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labe
 import { attendanceButtonClass } from '@/lib/attendance-styles'
 import { useCelebration } from '@/lib/useCelebration'
 import { Confetti } from '@/components/Confetti'
-import type { AttendanceStatus, GoalType, MatchEventType, MatchHomeAway } from '@/lib/types'
+import type {
+  AttendanceStatus,
+  GoalType,
+  MatchComposition,
+  MatchEventType,
+  MatchHomeAway,
+  User,
+} from '@/lib/types'
+
+/** A composition entry that's a real registered player — MOTM/Defense Boss voting and
+ * ratings only ever operate on these, guests (no account yet) are excluded upstream. */
+type ComposedPlayer = MatchComposition & { userId: string; user: User }
+const isComposedPlayer = (entry: MatchComposition): entry is ComposedPlayer =>
+  !!entry.userId && !!entry.user
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchPlayers } from '@/features/players/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -59,6 +84,7 @@ import {
   fetchMyRatings,
   fetchRatingsSubmitted,
   fetchRatingsSummary,
+  linkCompositionGuest,
   setComposition,
   setMyMatchAttendance,
   submitRatings,
@@ -135,6 +161,72 @@ const GOAL_TYPE_LABELS: Record<GoalType, string> = {
 }
 
 const RATING_OPTIONS = Array.from({ length: 11 }, (_, i) => i)
+
+/** Once a guest composition entry's player creates a real account, the coach links the
+ * entry to it here — the match sheet then counts for that player's stats/badges. */
+function LinkGuestButton({ matchId, compositionId }: { matchId: string; compositionId: string }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
+  const compositionQuery = useQuery({
+    queryKey: ['composition', matchId],
+    queryFn: () => fetchComposition(matchId),
+  })
+  const composedIds = new Set(
+    (compositionQuery.data ?? []).map((e) => e.userId).filter((id): id is string => !!id),
+  )
+  const candidates = (playersQuery.data ?? []).filter(
+    (p) => isRosterPlayer(p) && !composedIds.has(p.id),
+  )
+
+  const mutation = useMutation({
+    mutationFn: () => linkCompositionGuest(matchId, compositionId, selectedUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['composition', matchId] })
+      setOpen(false)
+      setSelectedUserId('')
+    },
+  })
+
+  if (!open) {
+    return (
+      <Button type="button" size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-xs" onClick={() => setOpen(true)}>
+        <Link2 className="size-3" />
+        Lier à un compte
+      </Button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+        <SelectTrigger className="h-7 w-36 text-xs">
+          <SelectValue placeholder="Choisir un compte" />
+        </SelectTrigger>
+        <SelectContent>
+          {candidates.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.firstName} {p.lastName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        disabled={!selectedUserId || mutation.isPending}
+        onClick={() => mutation.mutate()}
+      >
+        OK
+      </Button>
+      {mutation.isError && (
+        <p className="text-destructive text-xs">Échec — réessaie.</p>
+      )}
+    </div>
+  )
+}
 
 function RatingDraftPicker({
   value,
@@ -265,27 +357,67 @@ export function MatchDetailPage() {
     {},
   )
   const [playerNotes, setPlayerNotes] = useState<Record<string, string>>({})
+  // Players not yet registered in the app — keyed by a synthetic id (their composition row
+  // id once saved, or a client-generated placeholder before the first save).
+  const [guests, setGuests] = useState<Record<string, { firstName: string; lastName: string }>>({})
+  const [newGuestFirstName, setNewGuestFirstName] = useState('')
+  const [newGuestLastName, setNewGuestLastName] = useState('')
   const [formation, setFormation] = useState(DEFAULT_FORMATION)
-  // Ordered starter userIds — index determines which fixed formation slot each player occupies.
+  // Ordered starter keys (userId, or a guest's key) — index determines which fixed formation slot each player occupies.
   const [slotOrder, setSlotOrder] = useState<string[]>([])
   useEffect(() => {
     if (compositionQuery.data) {
       const map: Record<string, { played: boolean; starter: boolean }> = {}
       const notes: Record<string, string> = {}
+      const guestMap: Record<string, { firstName: string; lastName: string }> = {}
       for (const entry of compositionQuery.data) {
-        map[entry.userId] = { played: true, starter: entry.isStarter }
-        if (entry.note) notes[entry.userId] = entry.note
+        const key = entry.userId ?? entry.id
+        map[key] = { played: true, starter: entry.isStarter }
+        if (entry.note) notes[key] = entry.note
+        if (!entry.userId && entry.guestFirstName && entry.guestLastName) {
+          guestMap[key] = { firstName: entry.guestFirstName, lastName: entry.guestLastName }
+        }
       }
       setSelectedPlayers(map)
       setPlayerNotes(notes)
+      setGuests(guestMap)
       setSlotOrder(
         compositionQuery.data
           .filter((e) => e.isStarter)
           .sort((a, b) => (a.formationY ?? 0) - (b.formationY ?? 0))
-          .map((e) => e.userId),
+          .map((e) => e.userId ?? e.id),
       )
     }
   }, [compositionQuery.data])
+
+  function addGuest() {
+    const firstName = newGuestFirstName.trim()
+    const lastName = newGuestLastName.trim()
+    if (!firstName || !lastName) return
+    const key = `guest-${crypto.randomUUID()}`
+    setGuests((prev) => ({ ...prev, [key]: { firstName, lastName } }))
+    setSelectedPlayers((prev) => ({ ...prev, [key]: { played: true, starter: false } }))
+    setNewGuestFirstName('')
+    setNewGuestLastName('')
+  }
+
+  function removeGuest(key: string) {
+    setGuests((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    setSelectedPlayers((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    setPlayerNotes((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
 
   const starterIds = Object.entries(selectedPlayers)
     .filter(([, v]) => v.played && v.starter)
@@ -318,11 +450,12 @@ export function MatchDetailPage() {
 
   const formationPlayers = slotOrder.map((id) => {
     const player = playersQuery.data?.find((p) => p.id === id)
+    const guest = guests[id]
     const pos = formationCoords[id] ?? { x: 50, y: 50 }
     return {
       userId: id,
-      firstName: player?.firstName ?? '',
-      lastName: player?.lastName ?? '',
+      firstName: player?.firstName ?? guest?.firstName ?? '',
+      lastName: player?.lastName ?? guest?.lastName ?? '',
       shirtNumber: player?.jerseyNumber ?? null,
       x: pos.x,
       y: pos.y,
@@ -335,12 +468,16 @@ export function MatchDetailPage() {
         matchId,
         Object.entries(selectedPlayers)
           .filter(([, v]) => v.played)
-          .map(([userId, v]) => {
-            const note = playerNotes[userId]?.trim() || undefined
-            if (!v.starter) return { userId, isStarter: false, note }
-            const pos = formationCoords[userId]
+          .map(([key, v]) => {
+            const note = playerNotes[key]?.trim() || undefined
+            const guest = guests[key]
+            const identity = guest
+              ? { guestFirstName: guest.firstName, guestLastName: guest.lastName }
+              : { userId: key }
+            if (!v.starter) return { ...identity, isStarter: false, note }
+            const pos = formationCoords[key]
             return {
-              userId,
+              ...identity,
               isStarter: true,
               position: pos ? bandForY(pos.y) : undefined,
               formationX: pos?.x,
@@ -353,11 +490,28 @@ export function MatchDetailPage() {
   })
 
   // Only players actually on the match sheet can have scored/been carded — falls back to
-  // the full roster if the composition hasn't been entered yet.
-  const eventPlayerPool =
+  // the full roster if the composition hasn't been entered yet. Guests (no account) show up
+  // by name too, so the coach doesn't have to retype them via "Autre" each time.
+  const eventPlayerPool: { id: string; firstName: string; lastName: string; isGuest: boolean }[] =
     compositionQuery.data && compositionQuery.data.length > 0
-      ? compositionQuery.data.map((entry) => entry.user)
-      : (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
+      ? compositionQuery.data.map((entry) =>
+          entry.user
+            ? {
+                id: entry.user.id,
+                firstName: entry.user.firstName,
+                lastName: entry.user.lastName,
+                isGuest: false,
+              }
+            : {
+                id: entry.id,
+                firstName: entry.guestFirstName ?? '',
+                lastName: entry.guestLastName ?? '',
+                isGuest: true,
+              },
+        )
+      : (playersQuery.data ?? [])
+          .filter((p) => isRosterPlayer(p))
+          .map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, isGuest: false }))
 
   const OTHER_SCORER = '__other__'
   const [eventType, setEventType] = useState<MatchEventType>('GOAL')
@@ -368,15 +522,22 @@ export function MatchDetailPage() {
   const [eventGoalType, setEventGoalType] = useState<GoalType | ''>('')
 
   const addEventMutation = useMutation({
-    mutationFn: () =>
-      addEvent(matchId, {
+    mutationFn: () => {
+      const selected = eventPlayerPool.find((p) => p.id === eventUserId)
+      return addEvent(matchId, {
         type: eventType,
-        userId: eventUserId !== OTHER_SCORER ? eventUserId : undefined,
-        scorerName: eventUserId === OTHER_SCORER ? eventScorerName.trim() : undefined,
+        userId: eventUserId !== OTHER_SCORER && !selected?.isGuest ? eventUserId : undefined,
+        scorerName:
+          eventUserId === OTHER_SCORER
+            ? eventScorerName.trim()
+            : selected?.isGuest
+              ? `${selected.firstName} ${selected.lastName}`.trim()
+              : undefined,
         assistUserId: eventType === 'GOAL' && eventAssistUserId ? eventAssistUserId : undefined,
         minute: eventMinute ? Number(eventMinute) : undefined,
         goalType: eventType === 'GOAL' && eventGoalType ? eventGoalType : undefined,
-      }),
+      })
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events', matchId] })
       setEventUserId('')
@@ -496,14 +657,17 @@ export function MatchDetailPage() {
       map[id] ??= { goals: 0, assists: 0, yellow: 0, red: 0 }
       map[id][key] += 1
     }
+    // A guest scorer has no userId — keyed by their name instead so their goals still show
+    // up against their composition row (see guestStatsKey below).
     for (const event of eventsQuery.data ?? []) {
+      const scorerKey = event.userId ?? (event.scorerName ? `name:${event.scorerName}` : null)
       if (event.type === 'GOAL') {
-        if (event.userId) bump(event.userId, 'goals')
+        if (scorerKey) bump(scorerKey, 'goals')
         if (event.assistUserId) bump(event.assistUserId, 'assists')
       } else if (event.type === 'YELLOW_CARD') {
-        if (event.userId) bump(event.userId, 'yellow')
+        if (scorerKey) bump(scorerKey, 'yellow')
       } else if (event.type === 'RED_CARD') {
-        if (event.userId) bump(event.userId, 'red')
+        if (scorerKey) bump(scorerKey, 'red')
       }
     }
     return map
@@ -519,7 +683,10 @@ export function MatchDetailPage() {
     new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
 
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
-  const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
+  // Guests (no account yet) can't vote or be voted for — excluded from every voting/rating pool.
+  const teammates =
+    compositionQuery.data?.filter(isComposedPlayer).filter((entry) => entry.userId !== user?.id) ??
+    []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
   // Voting/rating is mandatory for anyone who played, coach included — no role exception.
   const votingApplies = match.status === 'PLAYED' && iPlayed && hasComposition
@@ -791,8 +958,79 @@ export function MatchDetailPage() {
                         </TableRow>
                       )
                     })}
+                  {Object.entries(guests).map(([key, guest]) => {
+                    const state = selectedPlayers[key] ?? { played: false, starter: false }
+                    return (
+                      <TableRow key={key}>
+                        <TableCell>
+                          {guest.firstName} {guest.lastName}
+                          <span className="text-muted-foreground ml-1.5 text-xs">(non inscrit)</span>
+                        </TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={state.played}
+                            onCheckedChange={(checked) =>
+                              setSelectedPlayers((prev) => ({
+                                ...prev,
+                                [key]: { played: checked === true, starter: state.starter },
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={state.starter}
+                            disabled={!state.played}
+                            onCheckedChange={(checked) =>
+                              setSelectedPlayers((prev) => ({
+                                ...prev,
+                                [key]: { played: state.played, starter: checked === true },
+                              }))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            onClick={() => removeGuest(key)}
+                            aria-label="Retirer ce joueur"
+                          >
+                            <X className="size-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Prénom"
+                  className="h-8 w-28 text-xs"
+                  value={newGuestFirstName}
+                  onChange={(e) => setNewGuestFirstName(e.target.value)}
+                />
+                <Input
+                  placeholder="Nom"
+                  className="h-8 w-28 text-xs"
+                  value={newGuestLastName}
+                  onChange={(e) => setNewGuestLastName(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!newGuestFirstName.trim() || !newGuestLastName.trim()}
+                  onClick={addGuest}
+                >
+                  <UserPlus className="size-3.5" />
+                  Ajouter un joueur non inscrit
+                </Button>
+              </div>
 
               {formationPlayers.length > 0 && (
                 <div className="mt-4 flex flex-col gap-2">
@@ -841,10 +1079,10 @@ export function MatchDetailPage() {
                 players={(compositionQuery.data ?? [])
                   .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
                   .map((e) => ({
-                    userId: e.userId,
-                    firstName: e.user.firstName,
-                    lastName: e.user.lastName,
-                    shirtNumber: e.user.jerseyNumber,
+                    userId: e.userId ?? e.id,
+                    firstName: e.user?.firstName ?? e.guestFirstName ?? '',
+                    lastName: e.user?.lastName ?? e.guestLastName ?? '',
+                    shirtNumber: e.user?.jerseyNumber ?? null,
                     x: e.formationX!,
                     y: e.formationY!,
                   }))}
@@ -858,14 +1096,21 @@ export function MatchDetailPage() {
                   {(compositionQuery.data ?? [])
                     .filter((entry) => !entry.isStarter)
                     .map((entry) => (
-                      <div key={entry.id} className="flex items-center gap-2 text-sm">
-                        <PlayerAvatar
-                          avatarUrl={entry.user.avatarUrl}
-                          firstName={entry.user.firstName}
-                          lastName={entry.user.lastName}
-                          size="sm"
-                        />
-                        {entry.user.firstName} {entry.user.lastName}
+                      <div key={entry.id} className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 text-sm">
+                          <PlayerAvatar
+                            avatarUrl={entry.user?.avatarUrl}
+                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                            size="sm"
+                          />
+                          {entry.user
+                            ? `${entry.user.firstName} ${entry.user.lastName}`
+                            : `${entry.guestFirstName} ${entry.guestLastName}`}
+                        </div>
+                        {!entry.user && isCoach && (
+                          <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                        )}
                       </div>
                     ))}
                 </div>
@@ -874,9 +1119,16 @@ export function MatchDetailPage() {
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {compositionQuery.data?.map((entry) => (
-                <Badge key={entry.id} variant={entry.isStarter ? 'default' : 'secondary'}>
-                  {entry.user.firstName} {entry.user.lastName}
-                </Badge>
+                <div key={entry.id} className="flex flex-col items-start gap-0.5">
+                  <Badge variant={entry.isStarter ? 'default' : 'secondary'}>
+                    {entry.user
+                      ? `${entry.user.firstName} ${entry.user.lastName}`
+                      : `${entry.guestFirstName} ${entry.guestLastName}`}
+                  </Badge>
+                  {!entry.user && isCoach && (
+                    <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -926,6 +1178,7 @@ export function MatchDetailPage() {
                   {eventPlayerPool.map((player) => (
                     <SelectItem key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
+                      {player.isGuest && ' (non inscrit)'}
                     </SelectItem>
                   ))}
                   <SelectItem value={OTHER_SCORER}>Autre (pas encore inscrit)</SelectItem>
@@ -948,7 +1201,7 @@ export function MatchDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {eventPlayerPool
-                      .filter((p) => p.id !== eventUserId)
+                      .filter((p) => p.id !== eventUserId && !p.isGuest)
                       .map((player) => (
                         <SelectItem key={player.id} value={player.id}>
                           {player.firstName} {player.lastName}
@@ -1256,7 +1509,9 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => entry.userId !== user?.id)
+  const teammatesToRate = (compositionQuery.data ?? [])
+    .filter(isComposedPlayer)
+    .filter((entry) => entry.userId !== user?.id)
   const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.userId] != null)
 
   const ratingsCard = match.status === 'PLAYED' && hasComposition && (
@@ -1279,24 +1534,36 @@ export function MatchDetailPage() {
               const myRating = myRatingsQuery.data?.find((r) => r.ratedUserId === entry.userId)
 
               return (
-                <div key={entry.userId} className="flex flex-wrap items-center justify-between gap-2">
+                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2 text-sm font-medium">
-                    <AccountLevelRing
-                      userId={entry.userId}
-                      tier={levelsQuery.data?.[entry.userId]?.tier}
-                      ringWidth={2}
-                    >
+                    {entry.user ? (
+                      <AccountLevelRing
+                        userId={entry.userId!}
+                        tier={levelsQuery.data?.[entry.userId!]?.tier}
+                        ringWidth={2}
+                      >
+                        <PlayerAvatar
+                          avatarUrl={entry.user.avatarUrl}
+                          firstName={entry.user.firstName}
+                          lastName={entry.user.lastName}
+                          size="sm"
+                        />
+                      </AccountLevelRing>
+                    ) : (
                       <PlayerAvatar
-                        avatarUrl={entry.user.avatarUrl}
-                        firstName={entry.user.firstName}
-                        lastName={entry.user.lastName}
+                        firstName={entry.guestFirstName ?? ''}
+                        lastName={entry.guestLastName ?? ''}
                         size="sm"
                       />
-                    </AccountLevelRing>
-                    {entry.user.firstName} {entry.user.lastName}
+                    )}
+                    {entry.user
+                      ? `${entry.user.firstName} ${entry.user.lastName}`
+                      : `${entry.guestFirstName} ${entry.guestLastName}`}
                   </span>
 
-                  {!iPlayed ? (
+                  {!entry.user ? (
+                    <span className="text-muted-foreground text-xs">Pas encore de compte</span>
+                  ) : !iPlayed ? (
                     <span className="text-muted-foreground text-xs">
                       Seuls les joueurs ayant participé peuvent noter
                     </span>
@@ -1321,9 +1588,9 @@ export function MatchDetailPage() {
                     <span className="text-muted-foreground text-xs">Tu ne peux pas te noter toi-même</span>
                   ) : (
                     <RatingDraftPicker
-                      value={ratingDrafts[entry.userId]}
+                      value={ratingDrafts[entry.userId!]}
                       onChange={(value) =>
-                        setRatingDrafts((prev) => ({ ...prev, [entry.userId]: value }))
+                        setRatingDrafts((prev) => ({ ...prev, [entry.userId!]: value }))
                       }
                     />
                   )}
@@ -1386,7 +1653,7 @@ export function MatchDetailPage() {
         {motmWinner ? (
           <div className="flex items-center gap-2.5">
             <PlayerAvatar
-              avatarUrl={motmWinnerEntry?.user.avatarUrl}
+              avatarUrl={motmWinnerEntry?.user?.avatarUrl}
               firstName={motmWinner.firstName}
               lastName={motmWinner.lastName}
               size="sm"
@@ -1406,14 +1673,14 @@ export function MatchDetailPage() {
             <div className="flex flex-wrap justify-center gap-2">
               {(compositionQuery.data ?? []).map((entry, i) => (
                 <div
-                  key={entry.userId}
+                  key={entry.id}
                   className="animate-motm-sweep"
                   style={{ animationDelay: `${i * 0.12}s` }}
                 >
                   <PlayerAvatar
-                    avatarUrl={entry.user.avatarUrl}
-                    firstName={entry.user.firstName}
-                    lastName={entry.user.lastName}
+                    avatarUrl={entry.user?.avatarUrl}
+                    firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                    lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
                     size="sm"
                   />
                 </div>
@@ -1476,29 +1743,43 @@ export function MatchDetailPage() {
                 const isSelf = entry.userId === user?.id
                 const summary = ratingsSummaryQuery.data?.find((s) => s.userId === entry.userId)
                 const myRating = myRatingsQuery.data?.find((r) => r.ratedUserId === entry.userId)
-                const stats = eventStatsByUser[entry.userId] ?? {
+                const guestStatsKey = entry.guestFirstName
+                  ? `name:${entry.guestFirstName} ${entry.guestLastName}`
+                  : null
+                const statsKey = entry.userId ?? guestStatsKey
+                const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
                   goals: 0,
                   assists: 0,
                   yellow: 0,
                   red: 0,
                 }
                 return (
-                  <TableRow key={entry.userId}>
+                  <TableRow key={entry.id}>
                     <TableCell className="bg-card sticky left-0 z-10 px-1.5 font-medium sm:px-2">
                       <span className="flex items-center gap-1.5 sm:gap-2">
-                        <AccountLevelRing
-                          userId={entry.userId}
-                          tier={levelsQuery.data?.[entry.userId]?.tier}
-                          ringWidth={2}
-                        >
+                        {entry.user ? (
+                          <AccountLevelRing
+                            userId={entry.userId!}
+                            tier={levelsQuery.data?.[entry.userId!]?.tier}
+                            ringWidth={2}
+                          >
+                            <PlayerAvatar
+                              avatarUrl={entry.user.avatarUrl}
+                              firstName={entry.user.firstName}
+                              lastName={entry.user.lastName}
+                              size="sm"
+                            />
+                          </AccountLevelRing>
+                        ) : (
                           <PlayerAvatar
-                            avatarUrl={entry.user.avatarUrl}
-                            firstName={entry.user.firstName}
-                            lastName={entry.user.lastName}
+                            firstName={entry.guestFirstName ?? ''}
+                            lastName={entry.guestLastName ?? ''}
                             size="sm"
                           />
-                        </AccountLevelRing>
-                        {entry.user.firstName} {entry.user.lastName}
+                        )}
+                        {entry.user
+                          ? `${entry.user.firstName} ${entry.user.lastName}`
+                          : `${entry.guestFirstName} ${entry.guestLastName}`}
                       </span>
                     </TableCell>
                     <TableCell className="px-1.5 text-right sm:px-2">

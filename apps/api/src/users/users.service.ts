@@ -73,6 +73,7 @@ export class UsersService {
       }
     }
     for (const c of compositions) {
+      if (!c.userId) continue; // guest, not a registered account
       presenceCount.set(c.userId, (presenceCount.get(c.userId) ?? 0) + 1);
     }
 

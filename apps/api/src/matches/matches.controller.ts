@@ -19,6 +19,7 @@ import { MatchesService } from './matches.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
+import { LinkCompositionGuestDto } from './dto/link-composition-guest.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
@@ -66,7 +67,10 @@ export class MatchesController {
   @Get(':id/composition')
   async getComposition(@Param('id') id: string) {
     const composition = await this.matchesService.getComposition(id);
-    return composition.map((entry) => ({ ...entry, user: sanitizeUser(entry.user) }));
+    return composition.map((entry) => ({
+      ...entry,
+      user: entry.user ? sanitizeUser(entry.user) : null,
+    }));
   }
 
   @UseGuards(RolesGuard)
@@ -74,6 +78,17 @@ export class MatchesController {
   @Post(':id/composition')
   setComposition(@Param('id') id: string, @Body() dto: SetCompositionDto) {
     return this.matchesService.setComposition(id, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Patch(':id/composition/:compositionId/link')
+  linkCompositionGuest(
+    @Param('id') id: string,
+    @Param('compositionId') compositionId: string,
+    @Body() dto: LinkCompositionGuestDto,
+  ) {
+    return this.matchesService.linkCompositionGuest(id, compositionId, dto.userId);
   }
 
   @Get(':id/events')

@@ -162,7 +162,7 @@ export class StatsService {
     }
 
     const playersByMatch = new Map<string, number>();
-    for (const entry of compositions.filter((c) => inSeason(c.matchId))) {
+    for (const entry of compositions.filter((c) => inSeason(c.matchId) && c.userId)) {
       playersByMatch.set(entry.matchId, (playersByMatch.get(entry.matchId) ?? 0) + 1);
     }
 
@@ -197,7 +197,7 @@ export class StatsService {
     }
 
     const playersByMatch = new Map<string, number>();
-    for (const entry of compositions.filter((c) => inSeason(c.matchId))) {
+    for (const entry of compositions.filter((c) => inSeason(c.matchId) && c.userId)) {
       playersByMatch.set(entry.matchId, (playersByMatch.get(entry.matchId) ?? 0) + 1);
     }
 

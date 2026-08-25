@@ -465,6 +465,7 @@ export class BadgesService {
       }
       const playersByMatch = new Map<string, number>();
       for (const c of compositionsForMyMatches) {
+        if (!c.userId) continue; // guest, can't vote
         playersByMatch.set(c.matchId, (playersByMatch.get(c.matchId) ?? 0) + 1);
       }
       const hasIncompris = playedMatches.some((m) => {

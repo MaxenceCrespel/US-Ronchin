@@ -16,8 +16,21 @@ import {
 import { PlayerPosition } from '../../users/entities/user.entity';
 
 export class CompositionEntryDto {
+  /** Exactly one of userId/(guestFirstName+guestLastName) must be set — enforced in
+   * MatchesService.setComposition, same convention as CreateMatchEventDto's scorerName. */
+  @IsOptional()
   @IsUUID()
-  userId: string;
+  userId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  guestFirstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  guestLastName?: string;
 
   @IsBoolean()
   isStarter: boolean;

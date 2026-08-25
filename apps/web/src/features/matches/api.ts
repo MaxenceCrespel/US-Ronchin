@@ -70,7 +70,9 @@ export async function fetchComposition(matchId: string): Promise<MatchCompositio
 }
 
 export interface CompositionEntryInput {
-  userId: string
+  userId?: string
+  guestFirstName?: string
+  guestLastName?: string
   isStarter: boolean
   position?: PlayerPosition
   shirtNumber?: number
@@ -86,6 +88,18 @@ export async function setComposition(
   const { data } = await apiClient.post<MatchComposition[]>(`/matches/${matchId}/composition`, {
     entries,
   })
+  return data
+}
+
+export async function linkCompositionGuest(
+  matchId: string,
+  compositionId: string,
+  userId: string,
+): Promise<MatchComposition> {
+  const { data } = await apiClient.patch<MatchComposition>(
+    `/matches/${matchId}/composition/${compositionId}/link`,
+    { userId },
+  )
   return data
 }
 

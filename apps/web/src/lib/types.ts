@@ -111,8 +111,11 @@ export interface Match {
 export interface MatchComposition {
   id: string
   matchId: string
-  userId: string
-  user: User
+  userId: string | null
+  user: User | null
+  /** Set instead of userId/user for a player not yet registered in the app. */
+  guestFirstName: string | null
+  guestLastName: string | null
   isStarter: boolean
   position: PlayerPosition | null
   shirtNumber: number | null
