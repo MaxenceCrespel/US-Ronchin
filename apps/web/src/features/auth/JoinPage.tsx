@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -126,11 +127,19 @@ export function JoinPage() {
               {confirmPassword.length > 0 && !passwordsMatch && (
                 <p className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
               )}
-              {mutation.isError && (
-                <p className="text-destructive text-sm">
-                  Impossible de créer le compte (lien invalide/désactivé ou email déjà utilisé).
-                </p>
-              )}
+              {mutation.isError &&
+                (isAxiosError(mutation.error) && mutation.error.response?.status === 409 ? (
+                  <p className="text-destructive text-sm">
+                    Un compte existe déjà avec cet email.{' '}
+                    <Link to={`/login?email=${encodeURIComponent(email)}`} className="underline">
+                      Se connecter
+                    </Link>
+                  </p>
+                ) : (
+                  <p className="text-destructive text-sm">
+                    Impossible de créer le compte (lien invalide ou désactivé).
+                  </p>
+                ))}
               <Button type="submit" disabled={!passwordsMatch || mutation.isPending}>
                 {mutation.isPending ? 'Création...' : 'Créer mon compte'}
               </Button>
