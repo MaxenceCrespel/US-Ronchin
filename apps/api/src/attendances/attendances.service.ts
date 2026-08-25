@@ -2,13 +2,21 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
+import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+
+export interface GuestNameInput {
+  firstName: string;
+  lastName?: string;
+}
 
 @Injectable()
 export class AttendancesService {
   constructor(
     @InjectRepository(Attendance)
     private readonly attendancesRepository: Repository<Attendance>,
+    @InjectRepository(AttendanceGuest)
+    private readonly attendanceGuestsRepository: Repository<AttendanceGuest>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
   ) {}
@@ -16,7 +24,7 @@ export class AttendancesService {
   findBySession(trainingSessionId: string): Promise<Attendance[]> {
     return this.attendancesRepository.find({
       where: { trainingSessionId },
-      relations: { user: true },
+      relations: { user: true, guests: true },
     });
   }
 
@@ -24,7 +32,7 @@ export class AttendancesService {
     trainingSessionId: string,
     userId: string,
     status: AttendanceStatus,
-    guestCount = 0,
+    guests: GuestNameInput[] = [],
   ): Promise<Attendance> {
     const session = await this.sessionsRepository.findOne({ where: { id: trainingSessionId } });
     if (!session) {
@@ -47,14 +55,28 @@ export class AttendancesService {
         trainingSessionId,
         userId,
         status,
-        guestCount,
+        guestCount: guests.length,
       });
     } else {
       attendance.status = status;
-      attendance.guestCount = guestCount;
+      attendance.guestCount = guests.length;
     }
+    attendance = await this.attendancesRepository.save(attendance);
 
-    return this.attendancesRepository.save(attendance);
+    await this.attendanceGuestsRepository.delete({ attendanceId: attendance.id });
+    attendance.guests = guests.length
+      ? await this.attendanceGuestsRepository.save(
+          guests.map((g) =>
+            this.attendanceGuestsRepository.create({
+              attendanceId: attendance.id,
+              firstName: g.firstName,
+              lastName: g.lastName ?? null,
+            }),
+          ),
+        )
+      : [];
+
+    return attendance;
   }
 
   /** Coach-only: records what actually happened, independently of what the player declared.

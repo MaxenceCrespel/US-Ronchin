@@ -75,11 +75,11 @@ export async function fetchAttendances(sessionId: string): Promise<Attendance[]>
 export async function setMyAttendance(
   sessionId: string,
   status: AttendanceStatus,
-  guestCount?: number,
+  guests?: { firstName: string; lastName?: string }[],
 ): Promise<Attendance> {
   const { data } = await apiClient.put<Attendance>(
     `/training-sessions/${sessionId}/attendance`,
-    { status, guestCount },
+    { status, guests },
   )
   return data
 }

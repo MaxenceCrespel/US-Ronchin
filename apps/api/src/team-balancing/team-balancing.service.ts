@@ -75,7 +75,7 @@ export class TeamBalancingService {
 
     const presentAttendances = await this.attendancesRepository.find({
       where: { trainingSessionId: sessionId, status: AttendanceStatus.PRESENT },
-      relations: { user: true },
+      relations: { user: true, guests: true },
     });
     if (presentAttendances.length === 0) {
       throw new BadRequestException('Aucun joueur présent pour générer des équipes');
@@ -153,6 +153,10 @@ export class TeamBalancingService {
     const guestAssignments: { userId: null; guestLabel: string; teamIndex: number }[] = [];
     for (const attendance of presentAttendances) {
       for (let i = 0; i < attendance.guestCount; i++) {
+        const guest = attendance.guests?.[i];
+        const label = guest
+          ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
+          : `Invité de ${attendance.user.firstName} #${i + 1}`;
         let minTeam = 0;
         for (let t = 1; t < effectiveTeamCount; t++) {
           if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
@@ -160,7 +164,7 @@ export class TeamBalancingService {
         teamCounts[minTeam] += 1;
         guestAssignments.push({
           userId: null,
-          guestLabel: `Invité de ${attendance.user.firstName} #${i + 1}`,
+          guestLabel: label,
           teamIndex: minTeam,
         });
       }

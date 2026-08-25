@@ -68,6 +68,12 @@ export interface TrainingSession {
 
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'MAYBE'
 
+export interface AttendanceGuest {
+  id: string
+  firstName: string
+  lastName: string | null
+}
+
 export interface Attendance {
   id: string
   trainingSessionId: string
@@ -76,6 +82,7 @@ export interface Attendance {
   status: AttendanceStatus | null
   actualStatus: AttendanceStatus | null
   guestCount: number
+  guests: AttendanceGuest[]
   respondedAt: string
 }
 

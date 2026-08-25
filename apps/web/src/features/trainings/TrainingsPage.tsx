@@ -72,6 +72,11 @@ import { fetchTeams, generateTeams, moveTeamPlayer } from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
+interface GuestNameInput {
+  firstName: string
+  lastName?: string
+}
+
 const TEAM_STYLES = ['border-club-blue/30 bg-accent', 'border-red-400/40 bg-red-50']
 const TEAM_LABELS = ['Équipe Bleue', 'Équipe Rouge']
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
@@ -629,8 +634,8 @@ export function SessionCard({
   })
 
   const mutation = useMutation({
-    mutationFn: (vars: { status: AttendanceStatus; guestCount: number }) =>
-      setMyAttendance(sessionId, vars.status, vars.guestCount),
+    mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
+      setMyAttendance(sessionId, vars.status, vars.guests),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
     },
@@ -662,10 +667,15 @@ export function SessionCard({
   const hasStarted = new Date(`${date}T${startTime}`).getTime() <= Date.now()
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
-  const [guestCount, setGuestCount] = useState(0)
+  const [guests, setGuests] = useState<GuestNameInput[]>([])
+  const [newGuestFirstName, setNewGuestFirstName] = useState('')
+  const [newGuestLastName, setNewGuestLastName] = useState('')
   useEffect(() => {
-    setGuestCount(myAttendance?.guestCount ?? 0)
-  }, [myAttendance?.guestCount])
+    setGuests(
+      myAttendance?.guests.map((g) => ({ firstName: g.firstName, lastName: g.lastName ?? undefined })) ??
+        [],
+    )
+  }, [myAttendance?.guests])
 
   return (
     <Card
@@ -777,9 +787,9 @@ export function SessionCard({
               value={myAttendance?.status}
               disabled={mutation.isPending || hasStarted}
               onChange={(status) => {
-                const nextGuests = status === 'PRESENT' ? guestCount : 0
-                setGuestCount(nextGuests)
-                mutation.mutate({ status, guestCount: nextGuests })
+                const nextGuests = status === 'PRESENT' ? guests : []
+                setGuests(nextGuests)
+                mutation.mutate({ status, guests: nextGuests })
               }}
             />
             {hasStarted && (
@@ -791,34 +801,67 @@ export function SessionCard({
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
             {myAttendance?.status === 'PRESENT' && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">+1 / +2 avec toi :</span>
-                <div className="bg-muted/60 inline-flex items-center gap-2 rounded-full px-2 py-1">
-                  <button
+              <div className="flex flex-col gap-1.5 text-xs">
+                <span className="text-muted-foreground">Tu viens avec quelqu'un ?</span>
+                {guests.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {guests.map((g, i) => (
+                      <li key={i} className="flex items-center gap-1.5">
+                        <span className="bg-muted/60 rounded-full px-2 py-1">
+                          {g.firstName}
+                          {g.lastName ? ` ${g.lastName}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={mutation.isPending || hasStarted}
+                          onClick={() => {
+                            const next = guests.filter((_, idx) => idx !== i)
+                            setGuests(next)
+                            mutation.mutate({ status: 'PRESENT', guests: next })
+                          }}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          aria-label="Retirer cet invité"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Input
+                    placeholder="Prénom"
+                    className="h-7 w-24 text-xs"
+                    disabled={hasStarted}
+                    value={newGuestFirstName}
+                    onChange={(e) => setNewGuestFirstName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Nom (optionnel)"
+                    className="h-7 w-28 text-xs"
+                    disabled={hasStarted}
+                    value={newGuestLastName}
+                    onChange={(e) => setNewGuestLastName(e.target.value)}
+                  />
+                  <Button
                     type="button"
-                    disabled={mutation.isPending || guestCount === 0}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={mutation.isPending || hasStarted || !newGuestFirstName.trim()}
                     onClick={() => {
-                      const next = Math.max(0, guestCount - 1)
-                      setGuestCount(next)
-                      mutation.mutate({ status: 'PRESENT', guestCount: next })
+                      const next = [
+                        ...guests,
+                        { firstName: newGuestFirstName.trim(), lastName: newGuestLastName.trim() || undefined },
+                      ]
+                      setGuests(next)
+                      setNewGuestFirstName('')
+                      setNewGuestLastName('')
+                      mutation.mutate({ status: 'PRESENT', guests: next })
                     }}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-40"
                   >
-                    −
-                  </button>
-                  <span className="w-3 text-center font-semibold">{guestCount}</span>
-                  <button
-                    type="button"
-                    disabled={mutation.isPending}
-                    onClick={() => {
-                      const next = guestCount + 1
-                      setGuestCount(next)
-                      mutation.mutate({ status: 'PRESENT', guestCount: next })
-                    }}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-40"
-                  >
-                    +
-                  </button>
+                    Ajouter
+                  </Button>
                 </div>
               </div>
             )}
@@ -835,7 +878,7 @@ export function SessionCard({
                   className="animate-pop-in"
                 >
                   {a.user.firstName} {a.user.lastName[0]}.
-                  {a.guestCount > 0 && ` +${a.guestCount}`}
+                  {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                 </Badge>
               ))}
           </div>

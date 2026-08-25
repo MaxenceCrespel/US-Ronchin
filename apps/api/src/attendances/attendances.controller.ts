@@ -34,7 +34,7 @@ export class AttendancesController {
       sessionId,
       currentUser.id,
       dto.status,
-      dto.guestCount,
+      dto.guests,
     );
   }
 

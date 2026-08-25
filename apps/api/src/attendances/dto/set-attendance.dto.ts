@@ -1,14 +1,27 @@
-import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { AttendanceStatus } from '../entities/attendance.entity';
+
+export class AttendanceGuestDto {
+  @IsString()
+  @MaxLength(100)
+  firstName: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  lastName?: string;
+}
 
 export class SetAttendanceDto {
   @IsEnum(AttendanceStatus)
   status: AttendanceStatus;
 
-  /** Extra people the player brings along (friends, family...) — not app users, just a headcount.
-   * No upper bound — a coach welcoming a big group for an open training shouldn't hit a wall. */
+  /** Extra people the player brings along (friends, family...) — not app users, named so the
+   * coach knows who's actually showing up. No upper bound. */
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  guestCount?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttendanceGuestDto)
+  guests?: AttendanceGuestDto[];
 }

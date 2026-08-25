@@ -162,9 +162,9 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
   const players: User[] = [me, fabien, vincent, mehdi, yann]
 
   const attendances: Attendance[] = [
-    { id: 'demo-att-1', trainingSessionId: session.id, userId: fabien.id, user: fabien, status: 'PRESENT', actualStatus: null, guestCount: 0, respondedAt: new Date().toISOString() },
-    { id: 'demo-att-2', trainingSessionId: session.id, userId: vincent.id, user: vincent, status: 'PRESENT', actualStatus: null, guestCount: 1, respondedAt: new Date().toISOString() },
-    { id: 'demo-att-3', trainingSessionId: session.id, userId: mehdi.id, user: mehdi, status: 'MAYBE', actualStatus: null, guestCount: 0, respondedAt: new Date().toISOString() },
+    { id: 'demo-att-1', trainingSessionId: session.id, userId: fabien.id, user: fabien, status: 'PRESENT', actualStatus: null, guestCount: 0, guests: [], respondedAt: new Date().toISOString() },
+    { id: 'demo-att-2', trainingSessionId: session.id, userId: vincent.id, user: vincent, status: 'PRESENT', actualStatus: null, guestCount: 1, guests: [{ id: 'demo-guest-1', firstName: 'Léo', lastName: null }], respondedAt: new Date().toISOString() },
+    { id: 'demo-att-3', trainingSessionId: session.id, userId: mehdi.id, user: mehdi, status: 'MAYBE', actualStatus: null, guestCount: 0, guests: [], respondedAt: new Date().toISOString() },
   ]
 
   const badges: BadgeStatus[] = [
