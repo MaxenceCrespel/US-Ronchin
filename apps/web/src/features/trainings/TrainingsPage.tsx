@@ -799,9 +799,9 @@ export function SessionCard({
                   <span className="w-3 text-center font-semibold">{guestCount}</span>
                   <button
                     type="button"
-                    disabled={mutation.isPending || guestCount >= 5}
+                    disabled={mutation.isPending}
                     onClick={() => {
-                      const next = Math.min(5, guestCount + 1)
+                      const next = guestCount + 1
                       setGuestCount(next)
                       mutation.mutate({ status: 'PRESENT', guestCount: next })
                     }}
