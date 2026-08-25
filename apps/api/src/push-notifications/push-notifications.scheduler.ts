@@ -21,7 +21,7 @@ export class PushNotificationsScheduler {
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  @Cron(CronExpression.EVERY_DAY_AT_9AM, { timeZone: 'Europe/Paris' })
   async handleMissingResultReminders() {
     const today = new Date().toISOString().slice(0, 10);
     const matches = await this.matchesRepository.find({
@@ -49,7 +49,7 @@ export class PushNotificationsScheduler {
     }
   }
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron(CronExpression.EVERY_30_MINUTES, { timeZone: 'Europe/Paris' })
   async handleMissingAttendanceReminders() {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);

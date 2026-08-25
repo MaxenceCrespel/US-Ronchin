@@ -8,7 +8,7 @@ export class FffSyncScheduler {
 
   constructor(private readonly fffSyncService: FffSyncService) {}
 
-  @Cron('0 */6 * * *')
+  @Cron('0 */6 * * *', { timeZone: 'Europe/Paris' })
   async handleScheduledSync() {
     try {
       const log = await this.fffSyncService.sync(null);

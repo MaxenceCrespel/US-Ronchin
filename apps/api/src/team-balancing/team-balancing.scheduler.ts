@@ -8,7 +8,7 @@ export class TeamBalancingScheduler {
 
   constructor(private readonly teamBalancingService: TeamBalancingService) {}
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_MINUTE, { timeZone: 'Europe/Paris' })
   async handleAutoGeneration() {
     const sessions = await this.teamBalancingService.findUpcomingSessionsNeedingTeams();
     for (const session of sessions) {
