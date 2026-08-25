@@ -1,13 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
+import { TrainingSession } from '../trainings/entities/training-session.entity';
 
 @Injectable()
 export class AttendancesService {
   constructor(
     @InjectRepository(Attendance)
     private readonly attendancesRepository: Repository<Attendance>,
+    @InjectRepository(TrainingSession)
+    private readonly sessionsRepository: Repository<TrainingSession>,
   ) {}
 
   findBySession(trainingSessionId: string): Promise<Attendance[]> {
@@ -23,6 +26,18 @@ export class AttendancesService {
     status: AttendanceStatus,
     guestCount = 0,
   ): Promise<Attendance> {
+    const session = await this.sessionsRepository.findOne({ where: { id: trainingSessionId } });
+    if (!session) {
+      throw new NotFoundException('Séance introuvable');
+    }
+    const hasStarted =
+      new Date(`${session.date}T${session.startTime}`).getTime() <= Date.now();
+    if (hasStarted) {
+      throw new BadRequestException(
+        "L'entraînement a déjà commencé, tu ne peux plus modifier ta présence",
+      );
+    }
+
     let attendance = await this.attendancesRepository.findOne({
       where: { trainingSessionId, userId },
     });

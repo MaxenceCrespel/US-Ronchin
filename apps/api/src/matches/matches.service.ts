@@ -352,6 +352,15 @@ export class MatchesService {
     userId: string,
     status: AttendanceStatus,
   ): Promise<MatchAttendance> {
+    const match = await this.findById(matchId);
+    const hasKickedOff =
+      new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now();
+    if (hasKickedOff) {
+      throw new BadRequestException(
+        'Le match a déjà commencé, tu ne peux plus modifier ta présence',
+      );
+    }
+
     let attendance = await this.attendancesRepository.findOne({ where: { matchId, userId } });
     if (!attendance) {
       attendance = this.attendancesRepository.create({ matchId, userId, status });

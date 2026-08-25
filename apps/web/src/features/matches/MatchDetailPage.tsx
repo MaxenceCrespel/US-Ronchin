@@ -888,7 +888,7 @@ export function MatchDetailPage() {
                     size="sm"
                     variant="outline"
                     className={attendanceButtonClass(status, myAttendance?.status === status)}
-                    disabled={attendanceMutation.isPending}
+                    disabled={attendanceMutation.isPending || matchTimeHasPassed}
                     onClick={() => attendanceMutation.mutate(status)}
                   >
                     {ATTENDANCE_STATUS_LABELS[status]}
@@ -896,6 +896,14 @@ export function MatchDetailPage() {
                 )
               })}
             </div>
+            {matchTimeHasPassed && (
+              <p className="text-muted-foreground text-xs">
+                Le match a commencé — la présence ne peut plus être modifiée.
+              </p>
+            )}
+            {attendanceMutation.isError && (
+              <p className="text-destructive text-xs">Échec — réessaie.</p>
+            )}
             {attendanceQuery.data && attendanceQuery.data.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {attendanceQuery.data.map((a) => (

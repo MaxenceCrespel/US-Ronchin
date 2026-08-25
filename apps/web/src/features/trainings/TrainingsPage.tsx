@@ -659,6 +659,8 @@ export function SessionCard({
     onSuccess: invalidateSessions,
   })
 
+  const hasStarted = new Date(`${date}T${startTime}`).getTime() <= Date.now()
+
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
   const [guestCount, setGuestCount] = useState(0)
   useEffect(() => {
@@ -773,13 +775,21 @@ export function SessionCard({
           <div className="flex flex-col gap-2" data-tour="attendance-toggle">
             <AttendanceToggle
               value={myAttendance?.status}
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || hasStarted}
               onChange={(status) => {
                 const nextGuests = status === 'PRESENT' ? guestCount : 0
                 setGuestCount(nextGuests)
                 mutation.mutate({ status, guestCount: nextGuests })
               }}
             />
+            {hasStarted && (
+              <p className="text-muted-foreground text-xs">
+                L'entraînement a commencé — la présence ne peut plus être modifiée.
+              </p>
+            )}
+            {mutation.isError && (
+              <p className="text-destructive text-xs">Échec — réessaie.</p>
+            )}
             {myAttendance?.status === 'PRESENT' && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">+1 / +2 avec toi :</span>
@@ -870,6 +880,8 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
 
   const myAttendance = attendanceQuery.data?.find((a) => a.userId === currentUser?.id)
   const played = match.status === 'PLAYED'
+  const hasKickedOff =
+    new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
   const category = getMatchCategory(match)
 
   return (
@@ -913,11 +925,21 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
           </p>
         ) : (
-          <AttendanceToggle
-            value={myAttendance?.status}
-            disabled={mutation.isPending}
-            onChange={(status) => mutation.mutate(status)}
-          />
+          <>
+            <AttendanceToggle
+              value={myAttendance?.status}
+              disabled={mutation.isPending || hasKickedOff}
+              onChange={(status) => mutation.mutate(status)}
+            />
+            {hasKickedOff && (
+              <p className="text-muted-foreground text-xs">
+                Le match a commencé — la présence ne peut plus être modifiée.
+              </p>
+            )}
+            {mutation.isError && (
+              <p className="text-destructive text-xs">Échec — réessaie.</p>
+            )}
+          </>
         )}
         {attendanceQuery.data && attendanceQuery.data.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
