@@ -112,6 +112,15 @@ const FORMATIONS: Record<string, { label: string; rows: FormationRow[] }> = {
 const DEFAULT_FORMATION = '4-4-2'
 
 /** Largest-remainder split — keeps sensible row sizes even when the squad isn't exactly 11. */
+function shuffle<T>(arr: T[]): T[] {
+  const result = [...arr]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
+
 function splitByRatio(total: number, ratios: number[]): number[] {
   const sum = ratios.reduce((a, b) => a + b, 0)
   const raw = ratios.map((r) => (r / sum) * total)
@@ -267,6 +276,7 @@ export function MatchDetailPage() {
   // a successful save), so the layout doesn't jump around under the coach mid-edit.
   const [configOpen, setConfigOpen] = useState(false)
   const autoOpenedConfigRef = useRef(false)
+  const [configStep, setConfigStep] = useState<'presence' | 'formation' | 'events'>('presence')
 
   const [editingMatch, setEditingMatch] = useState(false)
   const [editOpponent, setEditOpponent] = useState('')
@@ -422,11 +432,14 @@ export function MatchDetailPage() {
   const starterIds = Object.entries(selectedPlayers)
     .filter(([, v]) => v.played && v.starter)
     .map(([id]) => id)
-  // Keep slotOrder in sync when starters are toggled: preserve existing order, append new ones.
+  // Keep slotOrder in sync when starters are toggled: preserve already-placed players'
+  // order (so dragging one doesn't get undone by an unrelated checkbox change), but any
+  // newly-added starter lands in a random slot rather than always at the end — the coach
+  // then drags to fine-tune instead of everyone showing up in checkbox order.
   useEffect(() => {
     setSlotOrder((prev) => {
       const kept = prev.filter((id) => starterIds.includes(id))
-      const added = starterIds.filter((id) => !kept.includes(id))
+      const added = shuffle(starterIds.filter((id) => !kept.includes(id)))
       return [...kept, ...added]
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -896,7 +909,219 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  function renderCompositionCard(editable: boolean) {
+  function renderPresenceStepCard() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="text-club-blue size-4" />
+            Étape 1/3 — Présence
+          </CardTitle>
+          <CardDescription>Coche les joueurs qui étaient présents au match.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Joueur</TableHead>
+                <TableHead>A joué</TableHead>
+                <TableHead>Titulaire</TableHead>
+                <TableHead>Note</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {playersQuery.data
+                ?.filter((p) => isRosterPlayer(p))
+                .map((player) => {
+                  const state = selectedPlayers[player.id] ?? { played: false, starter: false }
+                  return (
+                    <TableRow key={player.id}>
+                      <TableCell>
+                        {player.firstName} {player.lastName}
+                      </TableCell>
+                      <TableCell>
+                        <Checkbox
+                          checked={state.played}
+                          onCheckedChange={(checked) =>
+                            setSelectedPlayers((prev) => ({
+                              ...prev,
+                              [player.id]: { played: checked === true, starter: state.starter },
+                            }))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Checkbox
+                          checked={state.starter}
+                          disabled={!state.played}
+                          onCheckedChange={(checked) =>
+                            setSelectedPlayers((prev) => ({
+                              ...prev,
+                              [player.id]: { played: state.played, starter: checked === true },
+                            }))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {state.played && (
+                          <Input
+                            className="h-8 w-40 text-xs"
+                            placeholder="ex: licence de Quentin"
+                            value={playerNotes[player.id] ?? ''}
+                            onChange={(e) =>
+                              setPlayerNotes((prev) => ({ ...prev, [player.id]: e.target.value }))
+                            }
+                          />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              {Object.entries(guests).map(([key, guest]) => {
+                const state = selectedPlayers[key] ?? { played: false, starter: false }
+                return (
+                  <TableRow key={key}>
+                    <TableCell>
+                      {guest.firstName} {guest.lastName}
+                      <span className="text-muted-foreground ml-1.5 text-xs">(non inscrit)</span>
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={state.played}
+                        onCheckedChange={(checked) =>
+                          setSelectedPlayers((prev) => ({
+                            ...prev,
+                            [key]: { played: checked === true, starter: state.starter },
+                          }))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={state.starter}
+                        disabled={!state.played}
+                        onCheckedChange={(checked) =>
+                          setSelectedPlayers((prev) => ({
+                            ...prev,
+                            [key]: { played: state.played, starter: checked === true },
+                          }))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        onClick={() => removeGuest(key)}
+                        aria-label="Retirer ce joueur"
+                      >
+                        <X className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Input
+              placeholder="Prénom"
+              className="h-8 w-28 text-xs"
+              value={newGuestFirstName}
+              onChange={(e) => setNewGuestFirstName(e.target.value)}
+            />
+            <Input
+              placeholder="Nom"
+              className="h-8 w-28 text-xs"
+              value={newGuestLastName}
+              onChange={(e) => setNewGuestLastName(e.target.value)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!newGuestFirstName.trim() || !newGuestLastName.trim()}
+              onClick={addGuest}
+            >
+              <UserPlus className="size-3.5" />
+              Ajouter un joueur non inscrit
+            </Button>
+          </div>
+
+          <Button className="mt-4" onClick={() => setConfigStep('formation')}>
+            Suivant — Composition tactique
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  function renderFormationStepCard() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="text-club-blue size-4" />
+            Étape 2/3 — Composition tactique
+          </CardTitle>
+          <CardDescription>
+            Les titulaires sont placés au hasard — choisis une composition type puis glisse
+            les joueurs pour ajuster.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {formationPlayers.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <Select value={formation} onValueChange={setFormation}>
+                <SelectTrigger className="w-28 self-end">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(FORMATIONS).map(([key, f]) => (
+                    <SelectItem key={key} value={key}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <PitchFormationEditor players={formationPlayers} onSwap={swapSlots} />
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              Aucun titulaire sélectionné à l'étape précédente.
+            </p>
+          )}
+
+          {compositionMutation.isError && (
+            <p className="text-destructive mt-2 text-sm">
+              Échec de l'enregistrement de la composition. Réessaie — si ça persiste,
+              vérifie ta connexion ou reconnecte-toi.
+            </p>
+          )}
+          <div className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={() => setConfigStep('presence')}>
+              Précédent
+            </Button>
+            <Button
+              disabled={compositionMutation.isPending}
+              onClick={() =>
+                compositionMutation.mutate(undefined, {
+                  onSuccess: () => setConfigStep('events'),
+                })
+              }
+            >
+              {compositionMutation.isPending ? 'Enregistrement...' : 'Enregistrer et continuer'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  function renderCompositionCard() {
     return (
       <Card>
         <CardHeader>
@@ -906,180 +1131,7 @@ export function MatchDetailPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {editable ? (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Joueur</TableHead>
-                    <TableHead>A joué</TableHead>
-                    <TableHead>Titulaire</TableHead>
-                    <TableHead>Note</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {playersQuery.data
-                    ?.filter((p) => isRosterPlayer(p))
-                    .map((player) => {
-                      const state = selectedPlayers[player.id] ?? { played: false, starter: false }
-                      return (
-                        <TableRow key={player.id}>
-                          <TableCell>
-                            {player.firstName} {player.lastName}
-                          </TableCell>
-                          <TableCell>
-                            <Checkbox
-                              checked={state.played}
-                              onCheckedChange={(checked) =>
-                                setSelectedPlayers((prev) => ({
-                                  ...prev,
-                                  [player.id]: { played: checked === true, starter: state.starter },
-                                }))
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Checkbox
-                              checked={state.starter}
-                              disabled={!state.played}
-                              onCheckedChange={(checked) =>
-                                setSelectedPlayers((prev) => ({
-                                  ...prev,
-                                  [player.id]: { played: state.played, starter: checked === true },
-                                }))
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {state.played && (
-                              <Input
-                                className="h-8 w-40 text-xs"
-                                placeholder="ex: licence de Quentin"
-                                value={playerNotes[player.id] ?? ''}
-                                onChange={(e) =>
-                                  setPlayerNotes((prev) => ({ ...prev, [player.id]: e.target.value }))
-                                }
-                              />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  {Object.entries(guests).map(([key, guest]) => {
-                    const state = selectedPlayers[key] ?? { played: false, starter: false }
-                    return (
-                      <TableRow key={key}>
-                        <TableCell>
-                          {guest.firstName} {guest.lastName}
-                          <span className="text-muted-foreground ml-1.5 text-xs">(non inscrit)</span>
-                        </TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={state.played}
-                            onCheckedChange={(checked) =>
-                              setSelectedPlayers((prev) => ({
-                                ...prev,
-                                [key]: { played: checked === true, starter: state.starter },
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Checkbox
-                            checked={state.starter}
-                            disabled={!state.played}
-                            onCheckedChange={(checked) =>
-                              setSelectedPlayers((prev) => ({
-                                ...prev,
-                                [key]: { played: state.played, starter: checked === true },
-                              }))
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="size-7"
-                            onClick={() => removeGuest(key)}
-                            aria-label="Retirer ce joueur"
-                          >
-                            <X className="size-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Input
-                  placeholder="Prénom"
-                  className="h-8 w-28 text-xs"
-                  value={newGuestFirstName}
-                  onChange={(e) => setNewGuestFirstName(e.target.value)}
-                />
-                <Input
-                  placeholder="Nom"
-                  className="h-8 w-28 text-xs"
-                  value={newGuestLastName}
-                  onChange={(e) => setNewGuestLastName(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!newGuestFirstName.trim() || !newGuestLastName.trim()}
-                  onClick={addGuest}
-                >
-                  <UserPlus className="size-3.5" />
-                  Ajouter un joueur non inscrit
-                </Button>
-              </div>
-
-              {formationPlayers.length > 0 && (
-                <div className="mt-4 flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-muted-foreground text-xs">
-                      Choisis une composition type puis glisse les joueurs pour ajuster.
-                    </p>
-                    <Select value={formation} onValueChange={setFormation}>
-                      <SelectTrigger className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(FORMATIONS).map(([key, f]) => (
-                          <SelectItem key={key} value={key}>
-                            {f.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <PitchFormationEditor players={formationPlayers} onSwap={swapSlots} />
-                </div>
-              )}
-
-              {compositionMutation.isError && (
-                <p className="text-destructive mt-2 text-sm">
-                  Échec de l'enregistrement de la composition. Réessaie — si ça persiste,
-                  vérifie ta connexion ou reconnecte-toi.
-                </p>
-              )}
-              {compositionMutation.isSuccess && (
-                <p className="mt-2 text-sm text-emerald-600">Composition enregistrée.</p>
-              )}
-              <Button
-                className="mt-4"
-                onClick={() => compositionMutation.mutate()}
-                disabled={compositionMutation.isPending}
-              >
-                {compositionMutation.isPending ? 'Enregistrement...' : 'Enregistrer la composition'}
-              </Button>
-            </>
-          ) : (compositionQuery.data ?? []).some((e) => e.isStarter && e.formationX != null) ? (
+          {(compositionQuery.data ?? []).some((e) => e.isStarter && e.formationX != null) ? (
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-center">
               <PitchFormationEditor
                 readOnly
@@ -1150,7 +1202,7 @@ export function MatchDetailPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ListChecks className="text-club-blue size-4" />
-            Événements
+            {editable ? 'Étape 3/3 — Événements' : 'Événements'}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -1292,6 +1344,16 @@ export function MatchDetailPage() {
               <p className="text-muted-foreground text-sm">Aucun événement enregistré.</p>
             )}
           </div>
+          {editable && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setConfigStep('formation')}>
+                Précédent
+              </Button>
+              <Button variant="outline" onClick={() => setConfigOpen(false)}>
+                Terminer
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -1817,7 +1879,7 @@ export function MatchDetailPage() {
     </Card>
   )
 
-  const compositionSummaryView = renderCompositionCard(false)
+  const compositionSummaryView = renderCompositionCard()
 
   // MOTM vote, then patron de la défense (skipped if no defender played), then ratings —
   // advancing is implicit, driven by each gate rather than separate local step state.
@@ -1881,7 +1943,10 @@ export function MatchDetailPage() {
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => setConfigOpen((v) => !v)}
+          onClick={() => {
+            setConfigOpen((v) => !v)
+            setConfigStep('presence')
+          }}
         >
           {configOpen ? 'Fermer la configuration' : 'Configurer le match'}
         </Button>
@@ -1891,8 +1956,9 @@ export function MatchDetailPage() {
         <div className="flex flex-col gap-8">
           {scoreCard}
           {presenceCard}
-          {renderCompositionCard(true)}
-          {renderEventsCard(true)}
+          {configStep === 'presence' && renderPresenceStepCard()}
+          {configStep === 'formation' && renderFormationStepCard()}
+          {configStep === 'events' && renderEventsCard(true)}
         </div>
       ) : votesTabApplies ? (
         <div className="flex flex-col gap-8">
