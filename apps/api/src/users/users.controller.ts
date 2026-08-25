@@ -87,6 +87,18 @@ export class UsersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
+  @Patch(':id/reset-password')
+  async resetPassword(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    const target = await this.usersService.findById(id);
+    if (target.role === UserRole.SUPERADMIN && currentUser.role !== UserRole.SUPERADMIN) {
+      throw new ForbiddenException('Seul un super-admin peut réinitialiser ce mot de passe');
+    }
+    const temporaryPassword = await this.usersService.resetPassword(id);
+    return { temporaryPassword };
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
     await this.usersService.deleteUser(id, currentUser.id);

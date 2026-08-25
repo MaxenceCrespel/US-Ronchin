@@ -35,7 +35,7 @@ import { SUB_POSITION_LABELS } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import type { User, UserRole } from '@/lib/types'
-import { adminUpdateUser, deleteUser, fetchPlayers } from './api'
+import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
@@ -158,6 +158,7 @@ function EditPlayerDialog({ player }: { player: User }) {
     setIsPlayingCoach(player.isPlayingCoach)
     setIsLicensed(player.isLicensed)
     setLicenseNumber(player.licenseNumber ?? '')
+    setTemporaryPassword(null)
   }, [open, player])
 
   const mutation = useMutation({
@@ -172,6 +173,13 @@ function EditPlayerDialog({ player }: { player: User }) {
       queryClient.invalidateQueries({ queryKey: ['players'] })
       setOpen(false)
     },
+  })
+
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const resetPasswordMutation = useMutation({
+    mutationFn: () => resetPlayerPassword(player.id),
+    onSuccess: (password) => setTemporaryPassword(password),
   })
 
   return (
@@ -242,6 +250,47 @@ function EditPlayerDialog({ player }: { player: User }) {
             {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
         </form>
+
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <Label>Mot de passe</Label>
+          {temporaryPassword ? (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <Input readOnly value={temporaryPassword} onFocus={(e) => e.target.select()} />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    navigator.clipboard.writeText(temporaryPassword)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 1500)
+                  }}
+                  aria-label="Copier le mot de passe"
+                >
+                  {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Transmets-le à {player.firstName} (WhatsApp, SMS...) — il ne sera plus jamais
+                affiché. Il pourra le changer depuis son profil une fois connecté.
+              </p>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              disabled={resetPasswordMutation.isPending}
+              onClick={() => resetPasswordMutation.mutate()}
+            >
+              {resetPasswordMutation.isPending
+                ? 'Réinitialisation...'
+                : 'Réinitialiser le mot de passe'}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

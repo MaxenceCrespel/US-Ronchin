@@ -24,3 +24,10 @@ export async function adminUpdateUser(
 export async function deleteUser(userId: string): Promise<void> {
   await apiClient.delete(`/users/${userId}`)
 }
+
+export async function resetPlayerPassword(userId: string): Promise<string> {
+  const { data } = await apiClient.patch<{ temporaryPassword: string }>(
+    `/users/${userId}/reset-password`,
+  )
+  return data.temporaryPassword
+}

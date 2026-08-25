@@ -1,12 +1,26 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import { randomInt } from 'node:crypto';
 import { User, UserStatus } from './entities/user.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+
+const SALT_ROUNDS = 10;
+// Unambiguous charset — no 0/O, 1/l/I — a coach reads this off a screen to type or dictate it.
+const TEMP_PASSWORD_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+
+function generateTemporaryPassword(length = 10): string {
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += TEMP_PASSWORD_CHARSET[randomInt(TEMP_PASSWORD_CHARSET.length)];
+  }
+  return result;
+}
 
 @Injectable()
 export class UsersService {
@@ -85,6 +99,16 @@ export class UsersService {
     const user = await this.findById(userId);
     user.passwordHash = passwordHash;
     return this.usersRepository.save(user);
+  }
+
+  /** Coach-only: generates a fresh temporary password, saves its hash, and returns the
+   * PLAINTEXT once — never stored or logged anywhere, the coach must relay it to the player
+   * directly (WhatsApp, in person...) so they can change it from their own profile after. */
+  async resetPassword(userId: string): Promise<string> {
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, SALT_ROUNDS);
+    await this.setPassword(userId, passwordHash);
+    return temporaryPassword;
   }
 
   async createJoinedUser(data: {
