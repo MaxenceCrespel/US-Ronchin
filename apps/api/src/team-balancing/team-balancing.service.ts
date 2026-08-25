@@ -203,7 +203,12 @@ export class TeamBalancingService {
     for (const session of candidateSessions) {
       const sessionDateTime = new Date(`${session.date}T${session.startTime}`);
       const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / 60000;
-      if (diffMinutes > 29 && diffMinutes <= 30) {
+      // A single-minute window (diffMinutes > 29 && <= 30) meant one missed cron tick —
+      // an API restart/deploy right at that moment, most often — permanently skipped the
+      // session, since the window would never come back around. Widen it into a catch-up
+      // range instead: fire any time from 30 minutes out through 3 hours after kickoff,
+      // relying on the alreadyGenerated check below for idempotency rather than exact timing.
+      if (diffMinutes <= 30 && diffMinutes > -180) {
         const alreadyGenerated = await this.hasTeams(session.id);
         if (!alreadyGenerated) {
           sessionsNeedingTeams.push(session);
