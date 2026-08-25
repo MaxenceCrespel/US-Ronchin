@@ -80,6 +80,12 @@ const REPEATABLE_BADGE_KEYS = new Set([
  * to be meaningful — a month with just one session shouldn't count as a perfect month. */
 const MOIS_PARFAIT_MIN_OCCASIONS = 3;
 
+/** Badges that describe a standing (a comparative "currently true" title, e.g. "most
+ * matches without X"), not a one-off feat — every other badge is kept forever once earned,
+ * but these get their row deleted the moment they stop being true, so they stay evolutive
+ * instead of piling up on whoever briefly held the record. */
+const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee']);
+
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
   RARE: 3,
@@ -708,6 +714,13 @@ export class BadgesService {
             url: '/profile',
           });
         }
+      }
+
+      const toRevoke = [...existingByKey.entries()]
+        .filter(([key]) => REVOCABLE_BADGE_KEYS.has(key) && occurrenceCount(key) <= 0)
+        .map(([, row]) => row.id);
+      if (toRevoke.length > 0) {
+        await this.badgesRepository.delete(toRevoke);
       }
     }
 
