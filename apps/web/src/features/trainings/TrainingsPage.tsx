@@ -89,7 +89,7 @@ function formatDate(date: string) {
   })
 }
 
-function AttendanceToggle({
+export function AttendanceToggle({
   value,
   onChange,
   disabled,

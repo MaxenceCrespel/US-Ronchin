@@ -1,16 +1,19 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
-import { useQueries, useQuery } from '@tanstack/react-query'
-import { startOfWeek, endOfWeek, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote } from 'lucide-react'
+import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { addDays, differenceInCalendarDays, format } from 'date-fns'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
-import { fetchSessions } from '@/features/trainings/api'
-import { SessionCard } from '@/features/trainings/TrainingsPage'
+import type { AttendanceStatus } from '@/lib/types'
+import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
+import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import { fetchComposition, fetchMatches, fetchMotm } from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
@@ -32,6 +35,243 @@ function greeting() {
   return 'Bonsoir'
 }
 
+function relativeDayLabel(dateKey: string, todayKey: string) {
+  const diff = differenceInCalendarDays(new Date(`${dateKey}T00:00:00`), new Date(`${todayKey}T00:00:00`))
+  if (diff <= 0) return "Aujourd'hui"
+  if (diff === 1) return 'Demain'
+  return `Dans ${diff} jours`
+}
+
+interface GuestNameInput {
+  firstName: string
+  lastName?: string
+}
+
+function UpcomingSessionCard({
+  sessionId,
+  date,
+  startTime,
+  endTime,
+  location,
+  todayKey,
+}: {
+  sessionId: string
+  date: string
+  startTime: string
+  endTime: string
+  location: string
+  todayKey: string
+}) {
+  const queryClient = useQueryClient()
+  const currentUser = useAuthStore((s) => s.user)
+
+  const attendancesQuery = useQuery({
+    queryKey: ['attendances', sessionId],
+    queryFn: () => fetchAttendances(sessionId),
+  })
+
+  const mutation = useMutation({
+    mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
+      setMyAttendance(sessionId, vars.status, vars.guests),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+    },
+  })
+
+  // Same 30-min-before-kickoff lock as the dedicated Entraînements page — teams get
+  // auto-generated at that point, so a later change would desync them from reality.
+  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 30 * 60_000 <= Date.now()
+
+  const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
+  const [guests, setGuests] = useState<GuestNameInput[]>([])
+  const [newGuestFirstName, setNewGuestFirstName] = useState('')
+  const [newGuestLastName, setNewGuestLastName] = useState('')
+  useEffect(() => {
+    setGuests(
+      myAttendance?.guests.map((g) => ({ firstName: g.firstName, lastName: g.lastName ?? undefined })) ??
+        [],
+    )
+  }, [myAttendance?.guests])
+
+  const presentCount = attendancesQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+  const guestTotal =
+    attendancesQuery.data
+      ?.filter((a) => a.status === 'PRESENT')
+      .reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+
+  return (
+    <Card className="border-club-blue/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="bg-club-blue/10 text-club-blue animate-net-wobble flex size-9 shrink-0 items-center justify-center rounded-full">
+              <Dumbbell className="size-4.5" />
+            </span>
+            <div>
+              <p className="text-base font-semibold">Entraînement</p>
+              <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
+                <span>{formatDate(date)}</span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="size-3" />
+                  {startTime.slice(0, 5)} - {endTime.slice(0, 5)}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="size-3" />
+                  {location}
+                </span>
+              </div>
+            </div>
+          </div>
+          <Badge variant="outline" className="border-club-blue/40 text-club-blue shrink-0 whitespace-nowrap">
+            {relativeDayLabel(date, todayKey)}
+          </Badge>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t pt-3" data-tour="attendance-toggle">
+          <AttendanceToggle
+            value={myAttendance?.status}
+            disabled={mutation.isPending || hasStarted}
+            onChange={(status) => {
+              const nextGuests = status === 'PRESENT' ? guests : []
+              setGuests(nextGuests)
+              mutation.mutate({ status, guests: nextGuests })
+            }}
+          />
+          {hasStarted && (
+            <p className="text-muted-foreground text-xs">
+              Les équipes ont été générées — la présence ne peut plus être modifiée.
+            </p>
+          )}
+          {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {myAttendance?.status === 'PRESENT' && (
+            <div className="flex flex-col gap-1.5 text-xs">
+              <span className="text-muted-foreground">Tu viens avec quelqu'un ?</span>
+              {guests.length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {guests.map((g, i) => (
+                    <li key={i} className="flex items-center gap-1.5">
+                      <span className="bg-muted/60 rounded-full px-2 py-1">
+                        {g.firstName}
+                        {g.lastName ? ` ${g.lastName}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={mutation.isPending || hasStarted}
+                        onClick={() => {
+                          const next = guests.filter((_, idx) => idx !== i)
+                          setGuests(next)
+                          mutation.mutate({ status: 'PRESENT', guests: next })
+                        }}
+                        className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                        aria-label="Retirer cet invité"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Input
+                  placeholder="Prénom"
+                  className="h-7 w-24 text-xs"
+                  disabled={hasStarted}
+                  value={newGuestFirstName}
+                  onChange={(e) => setNewGuestFirstName(e.target.value)}
+                />
+                <Input
+                  placeholder="Nom (optionnel)"
+                  className="h-7 w-28 text-xs"
+                  disabled={hasStarted}
+                  value={newGuestLastName}
+                  onChange={(e) => setNewGuestLastName(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={mutation.isPending || hasStarted || !newGuestFirstName.trim()}
+                  onClick={() => {
+                    const next = [
+                      ...guests,
+                      { firstName: newGuestFirstName.trim(), lastName: newGuestLastName.trim() || undefined },
+                    ]
+                    setGuests(next)
+                    setNewGuestFirstName('')
+                    setNewGuestLastName('')
+                    mutation.mutate({ status: 'PRESENT', guests: next })
+                  }}
+                >
+                  Ajouter
+                </Button>
+              </div>
+            </div>
+          )}
+          {presentCount > 0 && (
+            <p className="text-muted-foreground text-xs">
+              <strong className="text-foreground">{presentCount + guestTotal}</strong> sur le terrain
+              {guestTotal > 0 &&
+                ` (${presentCount} joueur${presentCount > 1 ? 's' : ''} + ${guestTotal} invité${guestTotal > 1 ? 's' : ''})`}
+            </p>
+          )}
+        </div>
+
+        <Link
+          to={`/trainings?session=${sessionId}`}
+          className="text-club-blue inline-flex items-center gap-1 self-start text-xs font-medium hover:underline"
+        >
+          Voir le pointage complet
+          <ChevronRight className="size-3" />
+        </Link>
+      </CardContent>
+    </Card>
+  )
+}
+
+function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, venue, todayKey }: {
+  matchId: string
+  date: string
+  kickOffTime: string | null
+  opponent: string
+  homeAway: 'HOME' | 'AWAY'
+  venue: string | null
+  todayKey: string
+}) {
+  const subLabel = venue ?? (homeAway === 'HOME' ? 'Domicile' : 'Extérieur')
+  return (
+    <Link to={`/matches/${matchId}`}>
+      <Card className="border-club-gold/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+        <CardContent className="flex items-center gap-3 p-4">
+          <span className="bg-club-gold/15 flex size-9 shrink-0 items-center justify-center rounded-full text-amber-700">
+            <Trophy className="size-4.5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">vs {opponent}</p>
+            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
+              <span>{formatDate(date)}</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3" />
+                {(kickOffTime ?? '00:00').slice(0, 5)}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="size-3" />
+                {subLabel}
+              </span>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <Badge variant="outline" className="border-club-gold/50 whitespace-nowrap text-amber-700">
+              {relativeDayLabel(date, todayKey)}
+            </Badge>
+            <ChevronRight className="text-muted-foreground size-4" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+}
+
 export function HomePage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
@@ -39,14 +279,14 @@ export function HomePage() {
   // date-fns's format() reads local date parts — toISOString() would convert to UTC first
   // and shift the key back a day for anyone west of Paris at midnight-to-2am CEST.
   const todayKey = format(new Date(), 'yyyy-MM-dd')
-  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
-  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
-  const weekStartKey = format(weekStart, 'yyyy-MM-dd')
-  const weekEndKey = format(weekEnd, 'yyyy-MM-dd')
+  // Wide enough window to always have 3 upcoming sessions to show, even with a low
+  // weekly training cadence — recomputed daily since todayKey changes, so the query
+  // key stays stable within a day (no refetch loop).
+  const upcomingRangeEndKey = format(addDays(new Date(), 60), 'yyyy-MM-dd')
 
   const sessionsQuery = useQuery({
-    queryKey: ['training-sessions', weekStartKey, weekEndKey],
-    queryFn: () => fetchSessions(weekStartKey, weekEndKey),
+    queryKey: ['training-sessions', todayKey, upcomingRangeEndKey],
+    queryFn: () => fetchSessions(todayKey, upcomingRangeEndKey),
   })
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
   const playerStatsQuery = useQuery({
@@ -142,33 +382,25 @@ export function HomePage() {
         to: `/matches/${m.id}`,
       }))
 
-  const weekEvents = useMemo(() => {
-    const sessions = (sessionsQuery.data ?? []).map((s) => ({
-      kind: 'session' as const,
-      id: s.id,
-      date: s.date,
-      time: s.startTime,
-      cancelled: s.cancelled,
-      item: s,
-    }))
-    const matches = (matchesQuery.data ?? [])
-      .filter((m) => m.date >= weekStartKey && m.date <= weekEndKey)
-      .map((m) => ({
-        kind: 'match' as const,
-        id: m.id,
-        date: m.date,
-        time: m.kickOffTime ?? '00:00',
-        cancelled: false,
-        item: m,
-      }))
+  // Only ever the next 3 of each kind, and never anything already past — a cancelled
+  // session isn't something to prepare for anymore, so it doesn't take up a slot either.
+  const upcomingSessions = useMemo(() => {
     const now = Date.now()
-    return [...sessions, ...matches]
-      .sort((a, b) => (a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date)))
-      .map((event) => ({
-        ...event,
-        isPast: new Date(`${event.date}T${event.time}`).getTime() < now,
-      }))
-  }, [sessionsQuery.data, matchesQuery.data, weekStartKey, weekEndKey])
+    return (sessionsQuery.data ?? [])
+      .filter((s) => !s.cancelled && new Date(`${s.date}T${s.startTime}`).getTime() >= now)
+      .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+      .slice(0, 3)
+  }, [sessionsQuery.data])
+
+  const upcomingMatches = useMemo(() => {
+    const now = Date.now()
+    return (matchesQuery.data ?? [])
+      .filter(
+        (m) => m.status === 'SCHEDULED' && new Date(`${m.date}T${m.kickOffTime ?? '00:00'}`).getTime() >= now,
+      )
+      .sort((a, b) => (a.date === b.date ? (a.kickOffTime ?? '').localeCompare(b.kickOffTime ?? '') : a.date.localeCompare(b.date)))
+      .slice(0, 3)
+  }, [matchesQuery.data])
 
   const recentResults = useMemo(
     () =>
@@ -225,78 +457,72 @@ export function HomePage() {
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-medium">📅 Programme de la semaine</h2>
-        {sessionsQuery.isLoading || matchesQuery.isLoading ? (
-          <p className="text-muted-foreground text-sm">Chargement...</p>
-        ) : weekEvents.length === 0 ? (
-          <Card>
-            <CardContent className="text-muted-foreground py-6 text-center text-sm">
-              Rien de prévu cette semaine.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {weekEvents.map((event) => {
-              if (event.kind === 'session') {
-                return (
-                  <SessionCard
-                    key={event.id}
-                    sessionId={event.item.id}
-                    date={event.item.date}
-                    startTime={event.item.startTime}
-                    endTime={event.item.endTime}
-                    location={event.item.location}
-                    cancelled={event.item.cancelled}
+        <h2 className="mb-3 text-lg font-medium">📅 À venir</h2>
+        <Tabs defaultValue="trainings">
+          <TabsList className="mb-3">
+            <TabsTrigger value="trainings">
+              <Dumbbell className="size-3.5" />
+              Entraînements
+            </TabsTrigger>
+            <TabsTrigger value="matches">
+              <Trophy className="size-3.5" />
+              Matchs
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="trainings">
+            {sessionsQuery.isLoading ? (
+              <p className="text-muted-foreground text-sm">Chargement...</p>
+            ) : upcomingSessions.length === 0 ? (
+              <Card>
+                <CardContent className="text-muted-foreground py-6 text-center text-sm">
+                  Aucun entraînement à venir.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {upcomingSessions.map((session) => (
+                  <UpcomingSessionCard
+                    key={session.id}
+                    sessionId={session.id}
+                    date={session.date}
+                    startTime={session.startTime}
+                    endTime={session.endTime}
+                    location={session.location}
+                    todayKey={todayKey}
                   />
-                )
-              }
+                ))}
+              </div>
+            )}
+          </TabsContent>
 
-              const dimmed = event.isPast
-              const subLabel = event.item.venue ?? (event.item.homeAway === 'HOME' ? 'Domicile' : 'Extérieur')
-
-              return (
-                <Link key={event.id} to={`/matches/${event.id}`}>
-                  <Card
-                    className={cn(
-                      'gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-                      dimmed ? 'bg-muted border-muted-foreground/30' : 'border-club-gold/70',
-                    )}
-                  >
-                    <CardContent className="flex items-center gap-3 px-4 py-3 text-sm">
-                      <span
-                        className={cn(
-                          'flex size-9 shrink-0 items-center justify-center rounded-full',
-                          dimmed ? 'bg-background text-muted-foreground' : 'bg-club-gold/15 text-amber-700',
-                        )}
-                      >
-                        <Trophy className="size-4.5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={cn('block truncate font-medium', dimmed && 'text-muted-foreground')}>
-                          vs {event.item.opponent}
-                        </span>
-                        <span className="text-muted-foreground block truncate text-xs capitalize">
-                          {formatDate(event.date)} · {event.time.slice(0, 5)} · {subLabel}
-                        </span>
-                      </span>
-                      {event.item.status === 'PLAYED' ? (
-                        <span className="shrink-0 font-semibold">
-                          {event.item.scoreHome ?? '-'} - {event.item.scoreAway ?? '-'}
-                        </span>
-                      ) : dimmed ? (
-                        <Badge variant="secondary" className="shrink-0">
-                          Terminé
-                        </Badge>
-                      ) : (
-                        <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
-              )
-            })}
-          </div>
-        )}
+          <TabsContent value="matches">
+            {matchesQuery.isLoading ? (
+              <p className="text-muted-foreground text-sm">Chargement...</p>
+            ) : upcomingMatches.length === 0 ? (
+              <Card>
+                <CardContent className="text-muted-foreground py-6 text-center text-sm">
+                  Aucun match à venir.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {upcomingMatches.map((match) => (
+                  <UpcomingMatchCard
+                    key={match.id}
+                    matchId={match.id}
+                    date={match.date}
+                    kickOffTime={match.kickOffTime}
+                    opponent={match.opponent}
+                    homeAway={match.homeAway}
+                    venue={match.venue}
+                    todayKey={todayKey}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {myStats && <MyStatsCard stats={myStats} />}
