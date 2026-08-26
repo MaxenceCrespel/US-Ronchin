@@ -24,6 +24,23 @@ export const SUB_POSITION_LABELS: Record<PlayerSubPosition, string> = {
   STRIKER: 'Attaquant',
 }
 
+/** Short codes for tight table columns — spelled-out labels above are for everywhere
+ * else (forms, filters), these are only for cramped spaces like the roster table. */
+export const SUB_POSITION_ABBR: Record<PlayerSubPosition, string> = {
+  GOALKEEPER: 'GB',
+  CENTER_BACK: 'DC',
+  RIGHT_BACK: 'DD',
+  LEFT_BACK: 'DG',
+  DEFENSIVE_MIDFIELDER: 'MDF',
+  CENTER_MIDFIELDER: 'MC',
+  RIGHT_MIDFIELDER: 'MD',
+  LEFT_MIDFIELDER: 'MG',
+  ATTACKING_MIDFIELDER: 'MOC',
+  RIGHT_WINGER: 'AD',
+  LEFT_WINGER: 'AG',
+  STRIKER: 'BU',
+}
+
 export const FOOT_LABELS: Record<PreferredFoot, string> = {
   LEFT: 'Gauche',
   RIGHT: 'Droit',

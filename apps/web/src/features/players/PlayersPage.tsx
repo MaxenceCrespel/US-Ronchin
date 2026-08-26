@@ -32,7 +32,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { approveUser, createInvitation } from '@/features/auth/api'
-import { SUB_POSITION_LABELS } from '@/lib/labels'
+import { SUB_POSITION_ABBR } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import type { User, UserRole } from '@/lib/types'
@@ -564,7 +564,9 @@ export function PlayersPage() {
                           size="sm"
                         />
                       </AccountLevelRing>
-                      {player.firstName} {player.lastName}
+                      <span className="text-xs font-medium">
+                        {player.firstName} {player.lastName}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -583,7 +585,7 @@ export function PlayersPage() {
                   <TableCell>{player.isLicensed ? 'Licencié' : 'Non licencié'}</TableCell>
                   <TableCell>
                     {player.positions && player.positions.length > 0
-                      ? player.positions.map((p) => SUB_POSITION_LABELS[p]).join(', ')
+                      ? player.positions.map((p) => SUB_POSITION_ABBR[p]).join(', ')
                       : '—'}
                   </TableCell>
                   <TableCell>{player.jerseyNumber ?? '—'}</TableCell>

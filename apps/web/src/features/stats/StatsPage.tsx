@@ -283,7 +283,7 @@ function RosterStatsTable({ season }: { season: string }) {
               <TableBody>
                 {roster.map((p) => (
                   <TableRow key={p.userId}>
-                    <TableCell className="bg-card sticky left-0 z-10 font-medium">
+                    <TableCell className="bg-card sticky left-0 z-10 text-xs font-medium">
                       {p.firstName} {p.lastName}
                     </TableCell>
                     <TableCell className="text-right">{p.matchesPlayed}</TableCell>
