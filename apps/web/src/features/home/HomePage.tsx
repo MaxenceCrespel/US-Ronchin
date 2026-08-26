@@ -3,20 +3,14 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { startOfWeek, endOfWeek, format } from 'date-fns'
-import {
-  UserCheck,
-  AlertTriangle,
-  ChevronRight,
-  Dumbbell,
-  Trophy,
-  Vote,
-} from 'lucide-react'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { fetchSessions } from '@/features/trainings/api'
+import { SessionCard } from '@/features/trainings/TrainingsPage'
 import { fetchComposition, fetchMatches, fetchMotm } from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
@@ -241,62 +235,67 @@ export function HomePage() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="gap-0 py-0">
-            <CardContent className="flex flex-col divide-y p-0">
-              {weekEvents.map((event) => {
-                const isMatch = event.kind === 'match'
-                const dimmed = event.isPast || event.cancelled
-                const subLabel = isMatch
-                  ? (event.item.venue ?? (event.item.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'))
-                  : event.item.location
-
+          <div className="flex flex-col gap-4">
+            {weekEvents.map((event) => {
+              if (event.kind === 'session') {
                 return (
-                  <Link
+                  <SessionCard
                     key={event.id}
-                    to={isMatch ? `/matches/${event.id}` : `/trainings?session=${event.id}`}
+                    sessionId={event.item.id}
+                    date={event.item.date}
+                    startTime={event.item.startTime}
+                    endTime={event.item.endTime}
+                    location={event.item.location}
+                    cancelled={event.item.cancelled}
+                  />
+                )
+              }
+
+              const dimmed = event.isPast
+              const subLabel = event.item.venue ?? (event.item.homeAway === 'HOME' ? 'Domicile' : 'Extérieur')
+
+              return (
+                <Link key={event.id} to={`/matches/${event.id}`}>
+                  <Card
                     className={cn(
-                      'flex items-center gap-3 px-4 py-3 text-sm transition-colors',
-                      dimmed ? 'bg-muted hover:bg-muted/80' : 'hover:bg-accent/50',
+                      'gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+                      dimmed ? 'bg-muted border-muted-foreground/30' : 'border-club-gold/70',
                     )}
                   >
-                    <span
-                      className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-full',
-                        dimmed
-                          ? 'bg-background text-muted-foreground'
-                          : isMatch
-                            ? 'bg-club-gold/15 text-amber-700'
-                            : 'bg-club-blue/10 text-club-blue',
+                    <CardContent className="flex items-center gap-3 px-4 py-3 text-sm">
+                      <span
+                        className={cn(
+                          'flex size-9 shrink-0 items-center justify-center rounded-full',
+                          dimmed ? 'bg-background text-muted-foreground' : 'bg-club-gold/15 text-amber-700',
+                        )}
+                      >
+                        <Trophy className="size-4.5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={cn('block truncate font-medium', dimmed && 'text-muted-foreground')}>
+                          vs {event.item.opponent}
+                        </span>
+                        <span className="text-muted-foreground block truncate text-xs capitalize">
+                          {formatDate(event.date)} · {event.time.slice(0, 5)} · {subLabel}
+                        </span>
+                      </span>
+                      {event.item.status === 'PLAYED' ? (
+                        <span className="shrink-0 font-semibold">
+                          {event.item.scoreHome ?? '-'} - {event.item.scoreAway ?? '-'}
+                        </span>
+                      ) : dimmed ? (
+                        <Badge variant="secondary" className="shrink-0">
+                          Terminé
+                        </Badge>
+                      ) : (
+                        <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                       )}
-                    >
-                      {isMatch ? <Trophy className="size-4" /> : <Dumbbell className="size-4" />}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className={cn('block truncate font-medium', dimmed && 'text-muted-foreground')}>
-                        {isMatch ? `vs ${event.item.opponent}` : 'Entraînement'}
-                        {event.cancelled && ' (annulé)'}
-                      </span>
-                      <span className="text-muted-foreground block truncate text-xs capitalize">
-                        {formatDate(event.date)} · {event.time.slice(0, 5)}
-                        {subLabel ? ` · ${subLabel}` : ''}
-                      </span>
-                    </span>
-                    {isMatch && event.item.status === 'PLAYED' ? (
-                      <span className="shrink-0 font-semibold">
-                        {event.item.scoreHome ?? '-'} - {event.item.scoreAway ?? '-'}
-                      </span>
-                    ) : dimmed ? (
-                      <Badge variant="secondary" className="shrink-0">
-                        {event.cancelled ? 'Annulé' : 'Terminé'}
-                      </Badge>
-                    ) : (
-                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-                    )}
-                  </Link>
-                )
-              })}
-            </CardContent>
-          </Card>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
         )}
       </div>
 
