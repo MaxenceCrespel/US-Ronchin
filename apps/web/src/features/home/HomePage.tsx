@@ -2,13 +2,21 @@ import { useMemo } from 'react'
 import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote } from 'lucide-react'
+import { startOfWeek, endOfWeek, format } from 'date-fns'
+import {
+  UserCheck,
+  AlertTriangle,
+  ChevronRight,
+  Dumbbell,
+  Trophy,
+  Vote,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { fetchSessions } from '@/features/trainings/api'
-import { SessionCard, MatchCard } from '@/features/trainings/TrainingsPage'
 import { fetchComposition, fetchMatches, fetchMotm } from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
@@ -34,12 +42,17 @@ export function HomePage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
 
-  const todayKey = new Date().toISOString().slice(0, 10)
-  const in3WeeksKey = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // date-fns's format() reads local date parts — toISOString() would convert to UTC first
+  // and shift the key back a day for anyone west of Paris at midnight-to-2am CEST.
+  const todayKey = format(new Date(), 'yyyy-MM-dd')
+  const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 })
+  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
+  const weekStartKey = format(weekStart, 'yyyy-MM-dd')
+  const weekEndKey = format(weekEnd, 'yyyy-MM-dd')
 
   const sessionsQuery = useQuery({
-    queryKey: ['training-sessions', todayKey, in3WeeksKey],
-    queryFn: () => fetchSessions(todayKey, in3WeeksKey),
+    queryKey: ['training-sessions', weekStartKey, weekEndKey],
+    queryFn: () => fetchSessions(weekStartKey, weekEndKey),
   })
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
   const playerStatsQuery = useQuery({
@@ -135,29 +148,33 @@ export function HomePage() {
         to: `/matches/${m.id}`,
       }))
 
-  const upcoming = useMemo(() => {
-    const sessions = (sessionsQuery.data ?? [])
-      .filter((s) => !s.cancelled)
-      .map((s) => ({
-        kind: 'session' as const,
-        id: s.id,
-        date: s.date,
-        time: s.startTime,
-        item: s,
-      }))
+  const weekEvents = useMemo(() => {
+    const sessions = (sessionsQuery.data ?? []).map((s) => ({
+      kind: 'session' as const,
+      id: s.id,
+      date: s.date,
+      time: s.startTime,
+      cancelled: s.cancelled,
+      item: s,
+    }))
     const matches = (matchesQuery.data ?? [])
-      .filter((m) => m.status !== 'PLAYED' && m.date >= todayKey)
+      .filter((m) => m.date >= weekStartKey && m.date <= weekEndKey)
       .map((m) => ({
         kind: 'match' as const,
         id: m.id,
         date: m.date,
-        time: m.kickOffTime ?? '23:59',
+        time: m.kickOffTime ?? '00:00',
+        cancelled: false,
         item: m,
       }))
+    const now = Date.now()
     return [...sessions, ...matches]
       .sort((a, b) => (a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date)))
-      .slice(0, 2)
-  }, [sessionsQuery.data, matchesQuery.data, todayKey])
+      .map((event) => ({
+        ...event,
+        isPast: new Date(`${event.date}T${event.time}`).getTime() < now,
+      }))
+  }, [sessionsQuery.data, matchesQuery.data, weekStartKey, weekEndKey])
 
   const recentResults = useMemo(
     () =>
@@ -214,33 +231,68 @@ export function HomePage() {
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-medium">⚽ À venir</h2>
+        <h2 className="mb-3 text-lg font-medium">📅 Programme de la semaine</h2>
         {sessionsQuery.isLoading || matchesQuery.isLoading ? (
           <p className="text-muted-foreground text-sm">Chargement...</p>
-        ) : upcoming.length === 0 ? (
+        ) : weekEvents.length === 0 ? (
           <Card>
             <CardContent className="text-muted-foreground py-6 text-center text-sm">
-              Rien de prévu pour le moment.
+              Rien de prévu cette semaine.
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {upcoming.map((event) =>
-              event.kind === 'session' ? (
-                <SessionCard
-                  key={event.id}
-                  sessionId={event.item.id}
-                  date={event.item.date}
-                  startTime={event.item.startTime}
-                  endTime={event.item.endTime}
-                  location={event.item.location}
-                  cancelled={event.item.cancelled}
-                />
-              ) : (
-                <MatchCard key={event.id} match={event.item} />
-              ),
-            )}
-          </div>
+          <Card className="gap-0 py-0">
+            <CardContent className="flex flex-col divide-y p-0">
+              {weekEvents.map((event) => {
+                const isMatch = event.kind === 'match'
+                const dimmed = event.isPast || event.cancelled
+                const subLabel = isMatch
+                  ? (event.item.venue ?? (event.item.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'))
+                  : event.item.location
+
+                return (
+                  <Link
+                    key={event.id}
+                    to={isMatch ? `/matches/${event.id}` : '/trainings'}
+                    className={cn(
+                      'hover:bg-accent/50 flex items-center gap-3 px-4 py-3 text-sm transition-colors',
+                      dimmed && 'opacity-50',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'flex size-8 shrink-0 items-center justify-center rounded-full',
+                        isMatch ? 'bg-club-gold/15 text-amber-700' : 'bg-club-blue/10 text-club-blue',
+                      )}
+                    >
+                      {isMatch ? <Trophy className="size-4" /> : <Dumbbell className="size-4" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {isMatch ? `vs ${event.item.opponent}` : 'Entraînement'}
+                        {event.cancelled && ' (annulé)'}
+                      </span>
+                      <span className="text-muted-foreground block truncate text-xs capitalize">
+                        {formatDate(event.date)} · {event.time.slice(0, 5)}
+                        {subLabel ? ` · ${subLabel}` : ''}
+                      </span>
+                    </span>
+                    {isMatch && event.item.status === 'PLAYED' ? (
+                      <span className="shrink-0 font-semibold">
+                        {event.item.scoreHome ?? '-'} - {event.item.scoreAway ?? '-'}
+                      </span>
+                    ) : dimmed ? (
+                      <Badge variant="secondary" className="shrink-0">
+                        {event.cancelled ? 'Annulé' : 'Terminé'}
+                      </Badge>
+                    ) : (
+                      <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+                    )}
+                  </Link>
+                )
+              })}
+            </CardContent>
+          </Card>
         )}
       </div>
 
