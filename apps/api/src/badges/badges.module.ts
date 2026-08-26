@@ -13,6 +13,7 @@ import { MatchAttendance } from '../matches/entities/match-attendance.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { BadgesService } from './badges.service';
 import { BadgesController } from './badges.controller';
+import { BadgesScheduler } from './badges.scheduler';
 import { StatsModule } from '../stats/stats.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 
@@ -35,6 +36,6 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     PushNotificationsModule,
   ],
   controllers: [BadgesController],
-  providers: [BadgesService],
+  providers: [BadgesService, BadgesScheduler],
 })
 export class BadgesModule {}
