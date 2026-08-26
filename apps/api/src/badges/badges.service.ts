@@ -16,7 +16,7 @@ import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
-import { getCurrentSeasonLabel } from '../stats/season.util';
+import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, previousSeasonLabel } from '../stats/season.util';
 
 /** What actually happened at training, not what the player declared beforehand. */
 function effectiveStatus(a: Attendance): AttendanceStatus | null {
@@ -155,11 +155,22 @@ export class BadgesService {
   ) {}
 
   async getForUser(userId: string): Promise<BadgeStatus[]> {
-    const allStats = await this.statsService.getPlayerStats();
+    const currentSeasonLabel = getCurrentSeasonLabel();
+    const seasonBounds = getSeasonBounds(currentSeasonLabel);
+    const [allStats, seasonStatsAll, prevSeasonStatsAll] = await Promise.all([
+      this.statsService.getPlayerStats(),
+      this.statsService.getPlayerStats(currentSeasonLabel),
+      this.statsService.getPlayerStats(previousSeasonLabel(currentSeasonLabel)),
+    ]);
     const stats = allStats.find((p) => p.userId === userId);
     let progressByKey: Record<string, { current: number; target: number }> = {};
 
     if (stats) {
+      // Badges whose description says "dans la saison" (sniper, goat, hot_head...) read
+      // from this instead of `stats` above — same shape, just scoped to the season in
+      // progress. getPlayerStats always returns one row per existing user regardless of
+      // season, so this is guaranteed to be found whenever `stats` was.
+      const seasonStats = seasonStatsAll.find((p) => p.userId === userId)!;
       // All events involving this user, either as the actor (userId) or as the
       // assist provider (assistUserId) — badges like "Duo Magique" need both.
       const [
@@ -199,12 +210,18 @@ export class BadgesService {
       const goalsByMatch = new Map<string, number>();
       const yellowMatches = new Set<string>();
       const redMatches = new Set<string>();
-      const goalTypeCounts = new Map<GoalType, number>();
+      // Season-scoped separately from goalsByMatch/yellowMatches/redMatches below — those
+      // feed all-time badges (hat-trick, poker...), but "3 headers/penalties dans la
+      // saison" needs only this season's goals, not the player's career total.
+      const goalTypeCountsInSeason = new Map<GoalType, number>();
       for (const event of eventsAsActor) {
         if (event.type === MatchEventType.GOAL) {
           goalsByMatch.set(event.matchId, (goalsByMatch.get(event.matchId) ?? 0) + 1);
-          if (event.goalType) {
-            goalTypeCounts.set(event.goalType, (goalTypeCounts.get(event.goalType) ?? 0) + 1);
+          if (event.goalType && event.match && isInSeason(event.match.date, seasonBounds)) {
+            goalTypeCountsInSeason.set(
+              event.goalType,
+              (goalTypeCountsInSeason.get(event.goalType) ?? 0) + 1,
+            );
           }
         } else if (event.type === MatchEventType.YELLOW_CARD) {
           yellowMatches.add(event.matchId);
@@ -212,8 +229,8 @@ export class BadgesService {
           redMatches.add(event.matchId);
         }
       }
-      const hasAigleDesSurfaces = (goalTypeCounts.get(GoalType.HEAD) ?? 0) >= 3;
-      const hasSpecialiste = (goalTypeCounts.get(GoalType.PENALTY) ?? 0) >= 3;
+      const hasAigleDesSurfaces = (goalTypeCountsInSeason.get(GoalType.HEAD) ?? 0) >= 3;
+      const hasSpecialiste = (goalTypeCountsInSeason.get(GoalType.PENALTY) ?? 0) >= 3;
       const hatTrickCount = [...goalsByMatch.values()].filter((c) => c >= 3).length;
       const hasHatTrick = hatTrickCount > 0;
       const pokerCount = [...goalsByMatch.values()].filter((c) => c >= 4).length;
@@ -499,19 +516,30 @@ export class BadgesService {
         return winnerUserIds.includes(userId);
       });
 
+      // A season-end recap, not a live standing — evaluated on the season that just
+      // finished (prevSeasonStatsAll), so it only ever reflects a completed season rather
+      // than flip-flopping as matches happen and whoever's "unluckiest so far" changes.
       // Meant to single out ONE unlucky player — with a small squad, several players often
       // tie on matches played, and awarding it to everyone tied made it common rather than
       // the rare, singular badge its EPIC rarity and description promise. Only stands when
       // exactly one player holds that max.
-      const zeroMotmPlayers = allStats.filter((p) => p.motmCount === 0 && p.matchesPlayed > 0);
-      const maxZeroMotmMatches =
-        zeroMotmPlayers.length > 0 ? Math.max(...zeroMotmPlayers.map((p) => p.matchesPlayed)) : 0;
-      const playersAtMaxZeroMotm = zeroMotmPlayers.filter((p) => p.matchesPlayed === maxZeroMotmMatches);
+      const prevSeasonStats = prevSeasonStatsAll.find((p) => p.userId === userId);
+      const zeroMotmPlayersPrevSeason = prevSeasonStatsAll.filter(
+        (p) => p.motmCount === 0 && p.matchesPlayed > 0,
+      );
+      const maxZeroMotmMatchesPrevSeason =
+        zeroMotmPlayersPrevSeason.length > 0
+          ? Math.max(...zeroMotmPlayersPrevSeason.map((p) => p.matchesPlayed))
+          : 0;
+      const playersAtMaxZeroMotmPrevSeason = zeroMotmPlayersPrevSeason.filter(
+        (p) => p.matchesPlayed === maxZeroMotmMatchesPrevSeason,
+      );
       const hasDernierDeCordee =
-        stats.motmCount === 0 &&
-        stats.matchesPlayed > 0 &&
-        stats.matchesPlayed === maxZeroMotmMatches &&
-        playersAtMaxZeroMotm.length === 1;
+        !!prevSeasonStats &&
+        prevSeasonStats.motmCount === 0 &&
+        prevSeasonStats.matchesPlayed > 0 &&
+        prevSeasonStats.matchesPlayed === maxZeroMotmMatchesPrevSeason &&
+        playersAtMaxZeroMotmPrevSeason.length === 1;
 
       const myMotmVoteMatchIds = new Set(
         motmVotesForMyMatches.filter((v) => v.voterId === userId).map((v) => v.matchId),
@@ -581,13 +609,13 @@ export class BadgesService {
         hat_trick: hasHatTrick,
         poker: hasPoker,
         fox_in_the_box: goalsByMatch.size >= 5,
-        sniper: stats.goals >= 10,
-        sharpshooter: stats.goals >= 20,
-        goat: stats.goals >= 50,
+        sniper: seasonStats.goals >= 10,
+        sharpshooter: seasonStats.goals >= 20,
+        goat: seasonStats.goals >= 50,
         first_assist: stats.assists >= 1,
-        playmaker: stats.assists >= 5,
-        elite_passer: stats.assists >= 10,
-        postman: stats.assists >= 15,
+        playmaker: seasonStats.assists >= 5,
+        elite_passer: seasonStats.assists >= 10,
+        postman: seasonStats.assists >= 15,
         motm_first: stats.motmCount >= 1,
         motm_hero: stats.motmCount >= 3,
         motm_legend: stats.motmCount >= 5,
@@ -604,10 +632,10 @@ export class BadgesService {
         centurion: stats.matchesPlayed >= 50,
         statue: stats.matchesPlayed >= 100,
         first_yellow: stats.yellowCards >= 1,
-        hot_head: stats.yellowCards >= 5,
-        card_collector: stats.yellowCards >= 10,
+        hot_head: seasonStats.yellowCards >= 5,
+        card_collector: seasonStats.yellowCards >= 10,
         first_red: stats.redCards >= 1,
-        banned: stats.redCards >= 2,
+        banned: seasonStats.redCards >= 2,
         silent_hero: stats.matchesPlayed >= 10 && stats.goals === 0 && stats.assists === 0,
         clean_sheet: hasCleanSheet,
         roc: hasRoc,
@@ -668,13 +696,13 @@ export class BadgesService {
       // the underlying numbers already exist as local values above, this just pairs each
       // with the threshold from its own eligibility check.
       progressByKey = {
-        sniper: { current: stats.goals, target: 10 },
-        sharpshooter: { current: stats.goals, target: 20 },
-        goat: { current: stats.goals, target: 50 },
+        sniper: { current: seasonStats.goals, target: 10 },
+        sharpshooter: { current: seasonStats.goals, target: 20 },
+        goat: { current: seasonStats.goals, target: 50 },
         fox_in_the_box: { current: goalsByMatch.size, target: 5 },
-        playmaker: { current: stats.assists, target: 5 },
-        elite_passer: { current: stats.assists, target: 10 },
-        postman: { current: stats.assists, target: 15 },
+        playmaker: { current: seasonStats.assists, target: 5 },
+        elite_passer: { current: seasonStats.assists, target: 10 },
+        postman: { current: seasonStats.assists, target: 15 },
         motm_hero: { current: stats.motmCount, target: 3 },
         motm_legend: { current: stats.motmCount, target: 5 },
         diva: { current: stats.motmCount, target: 10 },
@@ -690,9 +718,9 @@ export class BadgesService {
         road_captain: { current: stats.matchesPlayed, target: 30 },
         centurion: { current: stats.matchesPlayed, target: 50 },
         statue: { current: stats.matchesPlayed, target: 100 },
-        hot_head: { current: stats.yellowCards, target: 5 },
-        card_collector: { current: stats.yellowCards, target: 10 },
-        banned: { current: stats.redCards, target: 2 },
+        hot_head: { current: seasonStats.yellowCards, target: 5 },
+        card_collector: { current: seasonStats.yellowCards, target: 10 },
+        banned: { current: seasonStats.redCards, target: 2 },
         roc: { current: cleanSheetCount, target: 5 },
         forteresse: { current: cleanSheetCount, target: 10 },
         inebranlable: { current: cleanSheetCount, target: 20 },

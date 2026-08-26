@@ -738,7 +738,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rarity: 'EPIC',
     title: 'Le Dernier de Cordée',
     description:
-      "Avoir joué le plus de matchs de l'équipe sans jamais avoir été élu homme du match",
+      "Bilan de la saison passée : avoir joué le plus de matchs de l'équipe sans jamais avoir été élu homme du match",
     emoji: '🐢',
   },
   {

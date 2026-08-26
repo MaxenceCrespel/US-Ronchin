@@ -23,3 +23,10 @@ export function getSeasonBounds(label: string): SeasonBounds {
 export function isInSeason(date: string, bounds: SeasonBounds): boolean {
   return date >= bounds.start && date <= bounds.end;
 }
+
+/** "2025-2026" for label "2026-2027" — seasons run back to back with no gap, so "the
+ * season right before this one" is always well-defined. */
+export function previousSeasonLabel(label: string): string {
+  const [startYear] = label.split('-').map(Number);
+  return `${startYear - 1}-${startYear}`;
+}
