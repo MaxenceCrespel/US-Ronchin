@@ -1287,31 +1287,41 @@ export function TrainingsPage() {
         )}
       </div>
 
+      {/* max-h + overflow-hidden on DialogContent itself keeps its box (and the close
+          button pinned to its top-right corner) within the viewport no matter how tall
+          the card gets — teams generated on a session, or a long composition on a match,
+          used to push DialogContent past both edges of the screen with nothing capping
+          its height, leaving the close button off-screen and unreachable on mobile. Only
+          the inner wrapper scrolls, so the close button never moves. */}
       <Dialog open={activeSessionId !== null} onOpenChange={(open) => !open && setActiveSessionId(null)}>
-        <DialogContent className="max-w-md border-0 bg-transparent p-0 shadow-none">
+        <DialogContent className="max-h-[85vh] max-w-md overflow-hidden border-0 bg-transparent p-0 shadow-none">
           <DialogHeader className="sr-only">
             <DialogTitle>Entraînement</DialogTitle>
           </DialogHeader>
-          {activeSession && (
-            <SessionCard
-              sessionId={activeSession.id}
-              date={activeSession.date}
-              startTime={activeSession.startTime}
-              endTime={activeSession.endTime}
-              location={activeSession.location}
-              cancelled={activeSession.cancelled}
-              inDialog
-            />
-          )}
+          <div className="max-h-[85vh] overflow-y-auto">
+            {activeSession && (
+              <SessionCard
+                sessionId={activeSession.id}
+                date={activeSession.date}
+                startTime={activeSession.startTime}
+                endTime={activeSession.endTime}
+                location={activeSession.location}
+                cancelled={activeSession.cancelled}
+                inDialog
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={activeMatchId !== null} onOpenChange={(open) => !open && setActiveMatchId(null)}>
-        <DialogContent className="max-w-md border-0 bg-transparent p-0 shadow-none">
+        <DialogContent className="max-h-[85vh] max-w-md overflow-hidden border-0 bg-transparent p-0 shadow-none">
           <DialogHeader className="sr-only">
             <DialogTitle>Match</DialogTitle>
           </DialogHeader>
-          {activeMatch && <MatchCard match={activeMatch} inDialog />}
+          <div className="max-h-[85vh] overflow-y-auto">
+            {activeMatch && <MatchCard match={activeMatch} inDialog />}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
