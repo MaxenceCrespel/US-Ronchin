@@ -15,12 +15,13 @@ export function MyStatsCard({ stats }: { stats: PlayerStats }) {
         </CardTitle>
         <CardDescription>Récapitulatif de ta saison</CardDescription>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-6">
+      <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           ['Matchs joués', stats.matchesPlayed],
           ['Buts', stats.goals],
           ['Passes déc.', stats.assists],
           ['Homme du match', stats.motmCount],
+          ['Patron de la défense', stats.patronDefenseCount],
           ['Cartons jaunes', stats.yellowCards],
           ['Cartons rouges', stats.redCards],
         ].map(([label, value]) => (

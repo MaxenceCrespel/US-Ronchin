@@ -499,12 +499,19 @@ export class BadgesService {
         return winnerUserIds.includes(userId);
       });
 
-      const zeroMotmMatchCounts = allStats
-        .filter((p) => p.motmCount === 0 && p.matchesPlayed > 0)
-        .map((p) => p.matchesPlayed);
-      const maxZeroMotmMatches = zeroMotmMatchCounts.length > 0 ? Math.max(...zeroMotmMatchCounts) : 0;
+      // Meant to single out ONE unlucky player — with a small squad, several players often
+      // tie on matches played, and awarding it to everyone tied made it common rather than
+      // the rare, singular badge its EPIC rarity and description promise. Only stands when
+      // exactly one player holds that max.
+      const zeroMotmPlayers = allStats.filter((p) => p.motmCount === 0 && p.matchesPlayed > 0);
+      const maxZeroMotmMatches =
+        zeroMotmPlayers.length > 0 ? Math.max(...zeroMotmPlayers.map((p) => p.matchesPlayed)) : 0;
+      const playersAtMaxZeroMotm = zeroMotmPlayers.filter((p) => p.matchesPlayed === maxZeroMotmMatches);
       const hasDernierDeCordee =
-        stats.motmCount === 0 && stats.matchesPlayed > 0 && stats.matchesPlayed === maxZeroMotmMatches;
+        stats.motmCount === 0 &&
+        stats.matchesPlayed > 0 &&
+        stats.matchesPlayed === maxZeroMotmMatches &&
+        playersAtMaxZeroMotm.length === 1;
 
       const myMotmVoteMatchIds = new Set(
         motmVotesForMyMatches.filter((v) => v.voterId === userId).map((v) => v.matchId),

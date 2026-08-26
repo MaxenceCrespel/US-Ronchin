@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Crown } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Crown, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -135,6 +135,91 @@ function SeasonRecordCard({ season }: { season: string }) {
   )
 }
 
+type RosterSortKey =
+  | 'name'
+  | 'matchesPlayed'
+  | 'goals'
+  | 'assists'
+  | 'motmCount'
+  | 'patronDefenseCount'
+  | 'yellowCards'
+  | 'redCards'
+  | 'averageRating'
+  | 'trainingAttendanceRate'
+  | 'skillScore'
+
+const ROSTER_SORT_VALUE: Record<RosterSortKey, (p: PlayerStats) => number | string> = {
+  name: (p) => `${p.lastName} ${p.firstName}`.toLowerCase(),
+  matchesPlayed: (p) => p.matchesPlayed,
+  goals: (p) => p.goals,
+  assists: (p) => p.assists,
+  motmCount: (p) => p.motmCount,
+  patronDefenseCount: (p) => p.patronDefenseCount,
+  yellowCards: (p) => p.yellowCards,
+  redCards: (p) => p.redCards,
+  averageRating: (p) => p.averageRating ?? -1,
+  trainingAttendanceRate: (p) => p.trainingAttendanceRate ?? -1,
+  skillScore: (p) => p.skillScore,
+}
+
+// Text sorts alphabetically first by default; every numeric stat sorts highest-first —
+// that's the order you'd actually want when scanning a column of goals or cards.
+const ROSTER_SORT_DEFAULT_DIR: Record<RosterSortKey, 'asc' | 'desc'> = {
+  name: 'asc',
+  matchesPlayed: 'desc',
+  goals: 'desc',
+  assists: 'desc',
+  motmCount: 'desc',
+  patronDefenseCount: 'desc',
+  yellowCards: 'desc',
+  redCards: 'desc',
+  averageRating: 'desc',
+  trainingAttendanceRate: 'desc',
+  skillScore: 'desc',
+}
+
+function SortableHead({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  align = 'right',
+}: {
+  label: string
+  sortKey: RosterSortKey
+  activeKey: RosterSortKey
+  dir: 'asc' | 'desc'
+  onSort: (key: RosterSortKey) => void
+  align?: 'left' | 'right'
+}) {
+  const active = sortKey === activeKey
+  return (
+    <TableHead className={align === 'right' ? 'text-right' : undefined}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'hover:text-foreground inline-flex items-center gap-1',
+          align === 'right' && 'flex-row-reverse',
+          active && 'text-foreground font-semibold',
+        )}
+      >
+        {label}
+        {active ? (
+          dir === 'asc' ? (
+            <ArrowUp className="size-3" />
+          ) : (
+            <ArrowDown className="size-3" />
+          )
+        ) : (
+          <ArrowUpDown className="size-3 opacity-30" />
+        )}
+      </button>
+    </TableHead>
+  )
+}
+
 function RosterStatsTable({ season }: { season: string }) {
   const playerStatsQuery = useQuery({
     queryKey: ['stats', 'players', season],
@@ -142,12 +227,29 @@ function RosterStatsTable({ season }: { season: string }) {
   })
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
 
+  const [sortKey, setSortKey] = useState<RosterSortKey>('skillScore')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function handleSort(key: RosterSortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(ROSTER_SORT_DEFAULT_DIR[key])
+    }
+  }
+
   const playerIds = new Set(
     (playersQuery.data ?? []).filter((p) => isRosterPlayer(p)).map((p) => p.id),
   )
   const roster = (playerStatsQuery.data ?? [])
     .filter((p) => playerIds.has(p.userId))
-    .sort((a, b) => b.skillScore - a.skillScore)
+    .sort((a, b) => {
+      const va = ROSTER_SORT_VALUE[sortKey](a)
+      const vb = ROSTER_SORT_VALUE[sortKey](b)
+      const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
 
   return (
     <Card data-tour="stats-roster-table">
@@ -162,15 +264,16 @@ function RosterStatsTable({ season }: { season: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Joueur</TableHead>
-                  <TableHead className="text-right">MJ</TableHead>
-                  <TableHead className="text-right">Buts</TableHead>
-                  <TableHead className="text-right">Passes D.</TableHead>
-                  <TableHead className="text-right">HDM</TableHead>
-                  <TableHead className="text-right">🟨</TableHead>
-                  <TableHead className="text-right">🟥</TableHead>
-                  <TableHead className="text-right">Note moy.</TableHead>
-                  <TableHead className="text-right">Assiduité</TableHead>
+                  <SortableHead label="Joueur" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
+                  <SortableHead label="MJ" sortKey="matchesPlayed" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Buts" sortKey="goals" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Passes D." sortKey="assists" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="HDM" sortKey="motmCount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Patron" sortKey="patronDefenseCount" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="🟨" sortKey="yellowCards" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="🟥" sortKey="redCards" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Note moy." sortKey="averageRating" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortableHead label="Assiduité" sortKey="trainingAttendanceRate" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -187,6 +290,16 @@ function RosterStatsTable({ season }: { season: string }) {
                         <span className="inline-flex items-center gap-1">
                           <Crown className="text-club-gold size-3.5" />
                           {p.motmCount}
+                        </span>
+                      ) : (
+                        0
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {p.patronDefenseCount > 0 ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Shield className="text-club-blue size-3.5" />
+                          {p.patronDefenseCount}
                         </span>
                       ) : (
                         0
