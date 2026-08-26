@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { resizeImageFile } from '@/lib/image-resize'
 import { updateProfile, uploadAvatar, deleteAvatar } from './api'
 import { changePassword } from '@/features/auth/api'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
@@ -177,10 +178,7 @@ export function ProfilePage() {
   const [preferredFoot, setPreferredFoot] = useState<PreferredFoot | ''>(
     user?.preferredFoot ?? '',
   )
-  const [heightCm, setHeightCm] = useState(user?.heightCm?.toString() ?? '')
-  const [weightKg, setWeightKg] = useState(user?.weightKg?.toString() ?? '')
   const [birthDate, setBirthDate] = useState(user?.birthDate ?? '')
-  const [phone, setPhone] = useState(user?.phone ?? '')
 
   const levelQuery = useAccountLevel(user?.id ?? '')
 
@@ -190,16 +188,13 @@ export function ProfilePage() {
         positions,
         jerseyNumber: jerseyNumber ? Number(jerseyNumber) : undefined,
         preferredFoot: preferredFoot || undefined,
-        heightCm: heightCm ? Number(heightCm) : undefined,
-        weightKg: weightKg ? Number(weightKg) : undefined,
         birthDate: birthDate || undefined,
-        phone: phone || undefined,
       }),
     onSuccess: (updated) => setUser(updated),
   })
 
   const avatarMutation = useMutation({
-    mutationFn: uploadAvatar,
+    mutationFn: async (file: File) => uploadAvatar(await resizeImageFile(file)),
     onSuccess: (updated) => setUser(updated),
   })
   const removeAvatarMutation = useMutation({
@@ -269,6 +264,11 @@ export function ProfilePage() {
                 Supprimer la photo
               </button>
             )}
+            {avatarMutation.isError && (
+              <span className="text-destructive text-xs">
+                Échec de l'envoi — réessaie avec une autre photo.
+              </span>
+            )}
           </div>
         </div>
         <CardTitle className="flex items-center gap-2">
@@ -311,41 +311,6 @@ export function ProfilePage() {
               type="date"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="phone">Téléphone</Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="06 12 34 56 78"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="heightCm">Taille (cm)</Label>
-            <Input
-              id="heightCm"
-              type="number"
-              min={100}
-              max={230}
-              value={heightCm}
-              onChange={(e) => setHeightCm(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="weightKg">Poids (kg)</Label>
-            <Input
-              id="weightKg"
-              type="number"
-              min={30}
-              max={200}
-              value={weightKg}
-              onChange={(e) => setWeightKg(e.target.value)}
             />
           </div>
         </CardContent>

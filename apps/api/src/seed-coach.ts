@@ -48,9 +48,6 @@ async function seedCoach() {
     positions: [PlayerSubPosition.CENTER_MIDFIELDER],
     preferredFoot: PreferredFoot.RIGHT,
     birthDate: '1985-01-01',
-    phone: '0600000000',
-    heightCm: 180,
-    weightKg: 78,
     // Without this, the onboarding tour auto-opens on first login (see
     // OnboardingTour.tsx) and swaps in fake demo data over the real page —
     // breaks any automated flow expecting the real home page content.

@@ -1,12 +1,6 @@
 import type { User } from './types'
 
-const REQUIRED_SCALAR_FIELDS: (keyof User)[] = [
-  'birthDate',
-  'preferredFoot',
-  'phone',
-  'heightCm',
-  'weightKg',
-]
+const REQUIRED_SCALAR_FIELDS: (keyof User)[] = ['birthDate', 'preferredFoot']
 
 export function isProfileComplete(user: User): boolean {
   return (

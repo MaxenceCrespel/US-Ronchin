@@ -5,10 +5,7 @@ export interface UpdateProfileInput {
   positions?: PlayerSubPosition[]
   jerseyNumber?: number
   preferredFoot?: PreferredFoot
-  heightCm?: number
-  weightKg?: number
   birthDate?: string
-  phone?: string
   hasSeenOnboarding?: boolean
 }
 

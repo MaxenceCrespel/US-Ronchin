@@ -94,17 +94,8 @@ export class User {
   @Column({ name: 'preferred_foot', type: 'enum', enum: PreferredFoot, nullable: true })
   preferredFoot: PreferredFoot | null;
 
-  @Column({ name: 'height_cm', type: 'int', nullable: true })
-  heightCm: number | null;
-
-  @Column({ name: 'weight_kg', type: 'int', nullable: true })
-  weightKg: number | null;
-
   @Column({ name: 'birth_date', type: 'date', nullable: true })
   birthDate: string | null;
-
-  @Column({ type: 'varchar', nullable: true })
-  phone: string | null;
 
   /** Stores a resized image as a base64 data URI — small enough (~256px, compressed) to embed directly. */
   @Column({ name: 'avatar_url', type: 'text', nullable: true })

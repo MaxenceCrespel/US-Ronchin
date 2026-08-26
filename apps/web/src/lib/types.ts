@@ -30,10 +30,7 @@ export interface User {
   positions: PlayerSubPosition[]
   jerseyNumber: number | null
   preferredFoot: PreferredFoot | null
-  heightCm: number | null
-  weightKg: number | null
   birthDate: string | null
-  phone: string | null
   avatarUrl: string | null
   accountActivated: boolean
   hasSeenOnboarding: boolean

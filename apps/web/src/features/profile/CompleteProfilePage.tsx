@@ -27,9 +27,6 @@ export function CompleteProfilePage() {
   const [positions, setPositions] = useState<PlayerSubPosition[]>([])
   const [preferredFoot, setPreferredFoot] = useState<PreferredFoot | ''>('')
   const [birthDate, setBirthDate] = useState('')
-  const [heightCm, setHeightCm] = useState('')
-  const [weightKg, setWeightKg] = useState('')
-  const [phone, setPhone] = useState('')
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -37,9 +34,6 @@ export function CompleteProfilePage() {
         positions,
         preferredFoot: preferredFoot || undefined,
         birthDate: birthDate || undefined,
-        heightCm: heightCm ? Number(heightCm) : undefined,
-        weightKg: weightKg ? Number(weightKg) : undefined,
-        phone: phone || undefined,
       }),
     onSuccess: (updated) => {
       setUser(updated)
@@ -49,8 +43,7 @@ export function CompleteProfilePage() {
 
   if (!user) return null
 
-  const canSubmit =
-    positions.length > 0 && !!preferredFoot && !!birthDate && !!heightCm && !!weightKg && !!phone
+  const canSubmit = positions.length > 0 && !!preferredFoot && !!birthDate
 
   return (
     <div className="flex min-h-svh items-center justify-center px-4 py-10">
@@ -122,44 +115,6 @@ export function CompleteProfilePage() {
                 required
                 value={birthDate}
                 onChange={(e) => setBirthDate(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="phone">Téléphone</Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="06 12 34 56 78"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="heightCm">Taille (cm)</Label>
-              <Input
-                id="heightCm"
-                type="number"
-                min={100}
-                max={230}
-                required
-                value={heightCm}
-                onChange={(e) => setHeightCm(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="weightKg">Poids (kg)</Label>
-              <Input
-                id="weightKg"
-                type="number"
-                min={30}
-                max={200}
-                required
-                value={weightKg}
-                onChange={(e) => setWeightKg(e.target.value)}
               />
             </div>
 

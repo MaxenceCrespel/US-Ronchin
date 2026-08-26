@@ -1,14 +1,4 @@
-import {
-  IsArray,
-  IsBoolean,
-  IsEnum,
-  IsInt,
-  IsOptional,
-  IsPhoneNumber,
-  IsString,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { PlayerSubPosition, PreferredFoot } from '../entities/user.entity';
 
 export class UpdateProfileDto {
@@ -28,24 +18,8 @@ export class UpdateProfileDto {
   preferredFoot?: PreferredFoot;
 
   @IsOptional()
-  @IsInt()
-  @Min(100)
-  @Max(230)
-  heightCm?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(30)
-  @Max(200)
-  weightKg?: number;
-
-  @IsOptional()
   @IsString()
   birthDate?: string;
-
-  @IsOptional()
-  @IsPhoneNumber('FR')
-  phone?: string;
 
   @IsOptional()
   @IsBoolean()
