@@ -1,11 +1,10 @@
-import { IsInt, IsUUID, Max, Min } from 'class-validator';
+import { IsIn, IsUUID } from 'class-validator';
+import { RATING_VALUES } from '../rating-values';
 
 export class RatePlayerDto {
   @IsUUID()
   ratedUserId: string;
 
-  @IsInt()
-  @Min(0)
-  @Max(10)
+  @IsIn(RATING_VALUES)
   rating: number;
 }

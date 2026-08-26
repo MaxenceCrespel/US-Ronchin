@@ -37,7 +37,12 @@ export class PlayerRating {
   @JoinColumn({ name: 'rated_user_id' })
   ratedUser: User;
 
-  @Column({ type: 'int' })
+  // Half-point steps (0, 0.5, 1, ..., 10) — `real` rather than `numeric` so node-postgres
+  // returns a plain JS number, no string-to-number transformer needed. `default: 0` is
+  // required for the int→real migration itself: without it, TypeORM's synchronize
+  // recreates the column via `ADD COLUMN ... NOT NULL`, which Postgres rejects outright
+  // on a non-empty table with no default to backfill existing rows.
+  @Column({ type: 'real', default: 0 })
   rating: number;
 
   @CreateDateColumn({ name: 'created_at' })

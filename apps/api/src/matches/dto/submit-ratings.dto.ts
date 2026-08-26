@@ -1,13 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsUUID, Max, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsUUID, ValidateNested } from 'class-validator';
+import { RATING_VALUES } from '../rating-values';
 
 export class RatingEntryDto {
   @IsUUID()
   ratedUserId: string;
 
-  @IsInt()
-  @Min(0)
-  @Max(10)
+  @IsIn(RATING_VALUES)
   rating: number;
 }
 

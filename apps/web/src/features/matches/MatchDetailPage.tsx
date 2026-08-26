@@ -170,7 +170,7 @@ const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   OWN_GOAL: 'Contre son camp',
 }
 
-const RATING_OPTIONS = Array.from({ length: 11 }, (_, i) => i)
+const RATING_OPTIONS = Array.from({ length: 21 }, (_, i) => i * 0.5)
 
 /** Once a guest composition entry's player creates a real account, the coach links the
  * entry to it here — the match sheet then counts for that player's stats/badges. */
