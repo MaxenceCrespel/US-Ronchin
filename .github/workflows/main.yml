@@ -8,6 +8,16 @@ on:
   schedule:
     - cron: "0 7 * * *"
 
+# The nightly schedule run and a push-triggered run both end up executing
+# `docker compose up -d --build` on the same VPS in Deploy-Staging — without
+# serializing them, two overlapping runs race on Docker's container rename
+# step and one fails with a "container name already in use" conflict.
+# cancel-in-progress stays false so a legitimate deploy is never killed
+# mid-flight, which would leave the VPS in a half-updated state.
+concurrency:
+  group: ronchin-ci-cd
+  cancel-in-progress: false
+
 permissions:
   security-events: write
   contents: read
