@@ -255,20 +255,24 @@ export function HomePage() {
                     key={event.id}
                     to={isMatch ? `/matches/${event.id}` : '/trainings'}
                     className={cn(
-                      'hover:bg-accent/50 flex items-center gap-3 px-4 py-3 text-sm transition-colors',
-                      dimmed && 'opacity-50',
+                      'flex items-center gap-3 px-4 py-3 text-sm transition-colors',
+                      dimmed ? 'bg-muted hover:bg-muted/80' : 'hover:bg-accent/50',
                     )}
                   >
                     <span
                       className={cn(
                         'flex size-8 shrink-0 items-center justify-center rounded-full',
-                        isMatch ? 'bg-club-gold/15 text-amber-700' : 'bg-club-blue/10 text-club-blue',
+                        dimmed
+                          ? 'bg-background text-muted-foreground'
+                          : isMatch
+                            ? 'bg-club-gold/15 text-amber-700'
+                            : 'bg-club-blue/10 text-club-blue',
                       )}
                     >
                       {isMatch ? <Trophy className="size-4" /> : <Dumbbell className="size-4" />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">
+                      <span className={cn('block truncate font-medium', dimmed && 'text-muted-foreground')}>
                         {isMatch ? `vs ${event.item.opponent}` : 'Entraînement'}
                         {event.cancelled && ' (annulé)'}
                       </span>

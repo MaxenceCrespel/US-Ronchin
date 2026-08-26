@@ -687,20 +687,31 @@ export function SessionCard({
     )
   }, [myAttendance?.guests])
 
+  const dimmed = cancelled || isPast
+
   return (
     <Card
       className={cn(
-        'border-club-blue/70 gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-        (cancelled || isPast) && 'opacity-60',
+        'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+        dimmed ? 'bg-muted border-muted-foreground/30' : 'border-club-blue/70',
       )}
     >
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <span className="bg-club-blue/10 text-club-blue animate-net-wobble flex size-9 shrink-0 items-center justify-center rounded-full">
+            <span
+              className={cn(
+                'flex size-9 shrink-0 items-center justify-center rounded-full',
+                dimmed
+                  ? 'bg-background text-muted-foreground'
+                  : 'bg-club-blue/10 text-club-blue animate-net-wobble',
+              )}
+            >
               <Dumbbell className="size-4.5" />
             </span>
-            <span className="text-base font-semibold">Entraînement</span>
+            <span className={cn('text-base font-semibold', dimmed && 'text-muted-foreground')}>
+              Entraînement
+            </span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
             {cancelled ? (
@@ -940,25 +951,34 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
   const hasKickedOff =
     new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
   const category = getMatchCategory(match)
+  const dimmed = !played && hasKickedOff
 
   return (
     <Card
       className={cn(
         'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-        MATCH_CATEGORY_BORDER[category],
-        (played || hasKickedOff) && 'opacity-60',
+        dimmed ? 'bg-muted border-muted-foreground/30' : MATCH_CATEGORY_BORDER[category],
       )}
     >
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <span className="bg-club-gold/15 animate-net-wobble flex size-9 shrink-0 items-center justify-center rounded-full text-amber-700">
+            <span
+              className={cn(
+                'flex size-9 shrink-0 items-center justify-center rounded-full',
+                dimmed
+                  ? 'bg-background text-muted-foreground'
+                  : 'bg-club-gold/15 text-amber-700 animate-net-wobble',
+              )}
+            >
               <Trophy className="size-4.5" />
             </span>
-            <span className="text-base font-semibold">vs {match.opponent}</span>
+            <span className={cn('text-base font-semibold', dimmed && 'text-muted-foreground')}>
+              vs {match.opponent}
+            </span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
-            {!played && hasKickedOff && <Badge variant="secondary">Terminé</Badge>}
+            {dimmed && <Badge variant="secondary">Terminé</Badge>}
             <Badge variant="outline">{MATCH_CATEGORY_LABELS[category]}</Badge>
           </div>
         </CardTitle>
