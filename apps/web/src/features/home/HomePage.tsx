@@ -11,10 +11,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
+import { ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import type { AttendanceStatus } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
-import { fetchComposition, fetchMatches, fetchMotm } from '@/features/matches/api'
+import {
+  fetchComposition,
+  fetchMatches,
+  fetchMatchAttendance,
+  fetchMotm,
+  setMyMatchAttendance,
+} from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
 import { MyStatsCard } from '@/features/stats/MyStatsCard'
@@ -238,37 +245,85 @@ function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, ven
   venue: string | null
   todayKey: string
 }) {
+  const queryClient = useQueryClient()
+  const currentUser = useAuthStore((s) => s.user)
   const subLabel = venue ?? (homeAway === 'HOME' ? 'Domicile' : 'Extérieur')
+
+  const attendanceQuery = useQuery({
+    queryKey: ['match-attendance', matchId],
+    queryFn: () => fetchMatchAttendance(matchId),
+  })
+
+  const mutation = useMutation({
+    mutationFn: (status: AttendanceStatus) => setMyMatchAttendance(matchId, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', matchId] }),
+  })
+
+  // Same rationale as training sessions: locked from 30 min before kickoff, the moment
+  // the coach relies on declared presence to finalize the composition.
+  const hasStarted = new Date(`${date}T${kickOffTime ?? '00:00'}`).getTime() - 30 * 60_000 <= Date.now()
+  const myAttendance = attendanceQuery.data?.find((a) => a.userId === currentUser?.id)
+
   return (
-    <Link to={`/matches/${matchId}`}>
-      <Card className="border-club-gold/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-        <CardContent className="flex items-center gap-3 p-4">
-          <span className="bg-club-gold/15 flex size-9 shrink-0 items-center justify-center rounded-full text-amber-700">
-            <Trophy className="size-4.5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">vs {opponent}</p>
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
-              <span>{formatDate(date)}</span>
-              <span className="inline-flex items-center gap-1">
-                <Clock className="size-3" />
-                {(kickOffTime ?? '00:00').slice(0, 5)}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <MapPin className="size-3" />
-                {subLabel}
-              </span>
+    <Card className="border-club-gold/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <CardContent className="flex flex-col gap-3 p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="bg-club-gold/15 flex size-9 shrink-0 items-center justify-center rounded-full text-amber-700">
+              <Trophy className="size-4.5" />
+            </span>
+            <div>
+              <p className="text-base font-semibold">vs {opponent}</p>
+              <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
+                <span>{formatDate(date)}</span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="size-3" />
+                  {(kickOffTime ?? '00:00').slice(0, 5)}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="size-3" />
+                  {subLabel}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <Badge variant="outline" className="border-club-gold/50 whitespace-nowrap text-amber-700">
-              {relativeDayLabel(date, todayKey)}
-            </Badge>
-            <ChevronRight className="text-muted-foreground size-4" />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+          <Badge variant="outline" className="border-club-gold/50 shrink-0 whitespace-nowrap text-amber-700">
+            {relativeDayLabel(date, todayKey)}
+          </Badge>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t pt-3">
+          <AttendanceToggle
+            value={myAttendance?.status}
+            disabled={mutation.isPending || hasStarted}
+            onChange={(status) => mutation.mutate(status)}
+          />
+          {hasStarted && (
+            <p className="text-muted-foreground text-xs">
+              Le match a commencé — la présence ne peut plus être modifiée.
+            </p>
+          )}
+          {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {attendanceQuery.data && attendanceQuery.data.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {attendanceQuery.data.map((a) => (
+                <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
+                  {a.user.firstName} {a.user.lastName[0]}.
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <Link
+          to={`/matches/${matchId}`}
+          className="text-club-blue inline-flex items-center gap-1 self-start text-xs font-medium hover:underline"
+        >
+          Voir la fiche du match
+          <ChevronRight className="size-3" />
+        </Link>
+      </CardContent>
+    </Card>
   )
 }
 
