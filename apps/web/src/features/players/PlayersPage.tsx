@@ -162,11 +162,13 @@ function EditPlayerDialog({ player }: { player: User }) {
     setTemporaryPassword(null)
   }, [open, player])
 
+  const canBeOnRoster = role === 'COACH' || role === 'SUPERADMIN'
+
   const mutation = useMutation({
     mutationFn: () =>
       adminUpdateUser(player.id, {
         role,
-        isPlayingCoach: role === 'COACH' ? isPlayingCoach : undefined,
+        isPlayingCoach: canBeOnRoster ? isPlayingCoach : undefined,
         isLicensed,
         licenseNumber: licenseNumber || undefined,
       }),
@@ -216,7 +218,7 @@ function EditPlayerDialog({ player }: { player: User }) {
             </Select>
           </div>
 
-          {role === 'COACH' && (
+          {canBeOnRoster && (
             <div className="flex items-center gap-2">
               <Checkbox
                 id="isPlayingCoach"
@@ -224,7 +226,8 @@ function EditPlayerDialog({ player }: { player: User }) {
                 onCheckedChange={(checked) => setIsPlayingCoach(checked === true)}
               />
               <Label htmlFor="isPlayingCoach">
-                Coach-joueur (compté comme joueur partout : compo, stats, badges...)
+                {role === 'SUPERADMIN' ? 'Admin-joueur' : 'Coach-joueur'} (compté comme joueur
+                partout : compo, stats, badges...)
               </Label>
             </div>
           )}
@@ -543,12 +546,16 @@ export function PlayersPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={player.role === 'COACH' ? 'default' : 'secondary'}>
+                    <Badge variant={player.role === 'PLAYER' ? 'secondary' : 'default'}>
                       {player.role === 'COACH'
                         ? player.isPlayingCoach
                           ? 'Coach-Joueur'
                           : 'Coach'
-                        : 'Joueur'}
+                        : player.role === 'SUPERADMIN'
+                          ? player.isPlayingCoach
+                            ? 'Admin-Joueur'
+                            : 'Admin'
+                          : 'Joueur'}
                     </Badge>
                   </TableCell>
                   <TableCell>{player.isLicensed ? 'Licencié' : 'Non licencié'}</TableCell>
