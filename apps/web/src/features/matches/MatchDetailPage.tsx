@@ -683,8 +683,12 @@ export function MatchDetailPage() {
   const { active: motmCelebration, trigger: triggerMotmCelebration } = useCelebration()
   useEffect(() => {
     if (!motmQuery.data?.revealed || !user) return
-    const winner = motmQuery.data.results?.[0]
-    if (winner?.userId !== user.id) return
+    const results = motmQuery.data.results
+    // A tie means several joint winners — everyone tied for the top vote count, not just
+    // whoever happens to be first in the array, gets the celebration.
+    const topVotes = results?.[0]?.votes
+    const amWinner = topVotes != null && results!.some((r) => r.votes === topVotes && r.userId === user.id)
+    if (!amWinner) return
 
     const flagKey = `motm-celebrated-${matchId}-${user.id}`
     try {
@@ -711,8 +715,10 @@ export function MatchDetailPage() {
   const { active: defenseBossCelebration, trigger: triggerDefenseBossCelebration } = useCelebration()
   useEffect(() => {
     if (!defenseBossQuery.data?.revealed || !user) return
-    const winner = defenseBossQuery.data.results?.[0]
-    if (winner?.userId !== user.id) return
+    const results = defenseBossQuery.data.results
+    const topVotes = results?.[0]?.votes
+    const amWinner = topVotes != null && results!.some((r) => r.votes === topVotes && r.userId === user.id)
+    if (!amWinner) return
 
     const flagKey = `defense-boss-celebrated-${matchId}-${user.id}`
     try {
@@ -1451,7 +1457,9 @@ export function MatchDetailPage() {
                       className="flex items-center justify-between text-sm"
                     >
                       <span className="flex items-center gap-2">
-                        {index === 0 && <Crown className="text-club-gold size-4" />}
+                        {r.votes === motmQuery.data!.results![0].votes && (
+                          <Crown className="text-club-gold size-4" />
+                        )}
                         {r.firstName} {r.lastName}
                       </span>
                       <Badge variant="secondary">{r.votes} vote(s)</Badge>
@@ -1569,7 +1577,9 @@ export function MatchDetailPage() {
                       className="flex items-center justify-between text-sm"
                     >
                       <span className="flex items-center gap-2">
-                        {index === 0 && <Shield className="text-club-blue size-4" />}
+                        {r.votes === defenseBossQuery.data!.results![0].votes && (
+                          <Shield className="text-club-blue size-4" />
+                        )}
                         {r.firstName} {r.lastName}
                       </span>
                       <Badge variant="secondary">{r.votes} vote(s)</Badge>
@@ -1776,10 +1786,10 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const motmWinner = motmQuery.data?.revealed ? (motmQuery.data.results?.[0] ?? null) : null
-  const motmWinnerEntry = motmWinner
-    ? compositionQuery.data?.find((e) => e.userId === motmWinner.userId)
-    : undefined
+  // A tie means several joint MOTM winners, not one arbitrarily picked from the array.
+  const motmResults = motmQuery.data?.revealed ? (motmQuery.data.results ?? []) : []
+  const motmWinners =
+    motmResults.length > 0 ? motmResults.filter((r) => r.votes === motmResults[0].votes) : []
 
   const recapHeader = (
     <Card>
@@ -1803,19 +1813,31 @@ export function MatchDetailPage() {
           {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
         </p>
 
-        {motmWinner ? (
-          <div className="flex items-center gap-2.5">
-            <PlayerAvatar
-              avatarUrl={motmWinnerEntry?.user?.avatarUrl}
-              firstName={motmWinner.firstName}
-              lastName={motmWinner.lastName}
-              size="sm"
-              className="border-club-gold ring-club-gold/40 border-2 ring-2"
-            />
-            <span className="flex items-center gap-1.5 text-sm font-medium">
-              <Crown className="text-club-gold size-4" />
-              {motmWinner.firstName} {motmWinner.lastName}
-            </span>
+        {motmWinners.length > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            {motmWinners.map((winner) => {
+              const entry = compositionQuery.data?.find((e) => e.userId === winner.userId)
+              return (
+                <div key={winner.userId} className="flex items-center gap-2.5">
+                  <PlayerAvatar
+                    avatarUrl={entry?.user?.avatarUrl}
+                    firstName={winner.firstName}
+                    lastName={winner.lastName}
+                    size="sm"
+                    className="border-club-gold ring-club-gold/40 border-2 ring-2"
+                  />
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <Crown className="text-club-gold size-4" />
+                    {winner.firstName} {winner.lastName}
+                  </span>
+                </div>
+              )
+            })}
+            {motmWinners.length > 1 && (
+              <span className="text-muted-foreground text-xs">
+                Égalité — homme du match partagé.
+              </span>
+            )}
           </div>
         ) : hasComposition ? (
           <div className="flex flex-col items-center gap-3 py-1">
@@ -1823,22 +1845,15 @@ export function MatchDetailPage() {
               <Crown className="text-club-gold size-5" />
             </div>
             <span className="text-muted-foreground text-xs">Homme du match : vote en cours…</span>
-            <div className="flex flex-wrap justify-center gap-2">
-              {(compositionQuery.data ?? []).map((entry, i) => (
-                <div
-                  key={entry.id}
-                  className="animate-motm-sweep"
-                  style={{ animationDelay: `${i * 0.12}s` }}
-                >
-                  <PlayerAvatar
-                    avatarUrl={entry.user?.avatarUrl}
-                    firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
-                    lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                    size="sm"
-                  />
-                </div>
-              ))}
-            </div>
+            {motmQuery.data && (
+              <div className="w-full max-w-xs">
+                <VoteProgress
+                  totalVotes={motmQuery.data.totalVotes}
+                  totalPlayers={motmQuery.data.totalPlayers}
+                  votingClosesAt={motmQuery.data.votingClosesAt}
+                />
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -2045,6 +2060,12 @@ export function MatchDetailPage() {
               <TabsTrigger value="stats">Stats</TabsTrigger>
             </TabsList>
             <TabsContent value="resume" className="flex flex-col gap-8">
+              {/* Persistent even after voting or for someone not eligible to vote (coach,
+                  didn't play) — the forced-vote modal above only shows these cards to
+                  people who still need to vote, so without this everyone else never sees
+                  where the vote stands. */}
+              {motmCard}
+              {defenseBossCard}
               {compositionSummaryView}
             </TabsContent>
             <TabsContent value="stats" className="flex flex-col gap-8">

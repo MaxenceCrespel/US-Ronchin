@@ -8,7 +8,7 @@ import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
-import { isMotmRevealed, computeMotmWinner, resolveWinnerUserId } from '../matches/motm-utils';
+import { isMotmRevealed, computeMotmWinners, resolveWinnerUserIds } from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
@@ -172,8 +172,9 @@ export class StatsService {
     for (const [matchId, matchVotes] of votesByMatch) {
       const totalPlayers = playersByMatch.get(matchId) ?? 0;
       if (!isMotmRevealed(matchVotes, totalPlayers)) continue;
-      const winnerId = resolveWinnerUserId(computeMotmWinner(matchVotes), compositionById);
-      if (winnerId) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
+      // A tie awards everyone tied for the top spot, not just one arbitrarily picked.
+      const winnerIds = resolveWinnerUserIds(computeMotmWinners(matchVotes), compositionById);
+      for (const winnerId of winnerIds) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
     }
     return counts;
   }
@@ -209,8 +210,9 @@ export class StatsService {
     for (const [matchId, matchVotes] of votesByMatch) {
       const totalPlayers = playersByMatch.get(matchId) ?? 0;
       if (!isMotmRevealed(matchVotes, totalPlayers)) continue;
-      const winnerId = resolveWinnerUserId(computeMotmWinner(matchVotes), compositionById);
-      if (winnerId) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
+      // A tie awards everyone tied for the top spot, not just one arbitrarily picked.
+      const winnerIds = resolveWinnerUserIds(computeMotmWinners(matchVotes), compositionById);
+      for (const winnerId of winnerIds) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
     }
     return counts;
   }

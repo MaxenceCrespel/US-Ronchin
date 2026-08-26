@@ -10,7 +10,7 @@ interface VoteLike {
 }
 
 /** Opaque grouping key for tallying — a real user id as-is, or a "guest:<compositionId>"
- * key for a still-unlinked guest. Resolve to an actual user id with resolveWinnerUserId. */
+ * key for a still-unlinked guest. Resolve to actual user ids with resolveWinnerUserIds. */
 function targetKey(vote: VoteLike): string {
   return vote.votedForId ?? `guest:${vote.votedForGuestId}`;
 }
@@ -30,34 +30,32 @@ export function isMotmRevealed(votes: VoteLike[], totalPlayers: number): boolean
   return Date.now() - first.getTime() >= MOTM_REVEAL_DELAY_MS;
 }
 
-/** Winner is whoever has the most votes; ties broken by first to reach that count. Returns
- * a target key (see targetKey) — resolve it with resolveWinnerUserId. */
-export function computeMotmWinner(votes: VoteLike[]): string | null {
+/** Everyone tied for the most votes — a 3-way tie means 3 winners, not one arbitrarily
+ * picked. Returns target keys (see targetKey) — resolve them with resolveWinnerUserIds. */
+export function computeMotmWinners(votes: VoteLike[]): string[] {
+  if (votes.length === 0) return [];
   const counts = new Map<string, number>();
-  let winnerKey: string | null = null;
-  let max = 0;
   for (const vote of votes) {
     const key = targetKey(vote);
-    const next = (counts.get(key) ?? 0) + 1;
-    counts.set(key, next);
-    if (next > max) {
-      max = next;
-      winnerKey = key;
-    }
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return winnerKey;
+  const max = Math.max(...counts.values());
+  return [...counts.entries()].filter(([, count]) => count === max).map(([key]) => key);
 }
 
-/** Resolves a computeMotmWinner key to a real user id — null if the winner is still an
- * unlinked guest, in which case nobody's stats/badges count it yet (they will once the
- * coach links that composition entry to an account). */
-export function resolveWinnerUserId(
-  winnerKey: string | null,
+/** Resolves computeMotmWinners keys to real user ids — a winner still an unlinked guest is
+ * dropped (nobody's stats/badges count them yet; they will once the coach links that
+ * composition entry to an account), so the result can be shorter than the input. */
+export function resolveWinnerUserIds(
+  winnerKeys: string[],
   compositionById: Map<string, { userId: string | null }>,
-): string | null {
-  if (!winnerKey) return null;
-  if (winnerKey.startsWith('guest:')) {
-    return compositionById.get(winnerKey.slice('guest:'.length))?.userId ?? null;
+): string[] {
+  const resolved: string[] = [];
+  for (const key of winnerKeys) {
+    const userId = key.startsWith('guest:')
+      ? (compositionById.get(key.slice('guest:'.length))?.userId ?? null)
+      : key;
+    if (userId) resolved.push(userId);
   }
-  return winnerKey;
+  return resolved;
 }
