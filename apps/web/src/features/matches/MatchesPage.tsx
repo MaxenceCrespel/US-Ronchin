@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarX2, ChevronLeft, ChevronRight, FileUp, RefreshCw } from 'lucide-react'
 import { addMonths, format, isSameMonth, startOfMonth, subMonths } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -27,9 +27,15 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import type { MatchHomeAway } from '@/lib/types'
-import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
-import { createMatch, fetchMatches } from './api'
+import {
+  getMatchCategory,
+  MATCH_CATEGORY_BORDER,
+  MATCH_CATEGORY_FILL,
+  MATCH_CATEGORY_LABELS,
+} from '@/lib/match-category'
+import { createMatch, fetchMatches, fetchMotm } from './api'
 import { fetchFffSyncLogs, runFffSync } from '@/features/settings/api'
+import { VoteProgress } from './VoteProgress'
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', {
@@ -95,6 +101,21 @@ export function MatchesPage() {
       isSameMonth(new Date(`${m.date}T00:00:00`), selectedMonth),
     )
   }, [matchesQuery.data, selectedMonth])
+
+  const playedMonthMatches = useMemo(
+    () => monthMatches.filter((m) => m.status === 'PLAYED'),
+    [monthMatches],
+  )
+  // One MOTM lookup per played match this month — bounded to a handful of cards, cheap
+  // enough to fetch eagerly so the "temps restant" gauge shows without opening each match.
+  const motmQueries = useQueries({
+    queries: playedMonthMatches.map((m) => ({
+      queryKey: ['motm', m.id],
+      queryFn: () => fetchMotm(m.id),
+      refetchInterval: 30000,
+    })),
+  })
+  const motmByMatchId = new Map(playedMonthMatches.map((m, i) => [m.id, motmQueries[i]?.data]))
 
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -253,7 +274,7 @@ export function MatchesPage() {
                       {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
                     </p>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex flex-col gap-3">
                     {match.status === 'PLAYED' ? (
                       <p className="animate-pop-in text-2xl font-semibold">
                         {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
@@ -263,6 +284,19 @@ export function MatchesPage() {
                         {match.venue ?? 'Lieu à définir'}
                       </p>
                     )}
+                    {(() => {
+                      const motm = motmByMatchId.get(match.id)
+                      if (!motm || motm.revealed || motm.totalPlayers === 0) return null
+                      return (
+                        <VoteProgress
+                          totalVotes={motm.totalVotes}
+                          totalPlayers={motm.totalPlayers}
+                          votingClosesAt={motm.votingClosesAt}
+                          barClassName={MATCH_CATEGORY_FILL[category]}
+                          compact
+                        />
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               </Link>

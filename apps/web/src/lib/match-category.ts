@@ -20,3 +20,11 @@ export const MATCH_CATEGORY_BORDER: Record<MatchCategory, string> = {
   CUP: 'border-club-gold',
   LEAGUE: 'border-club-blue',
 }
+
+/** Same accent as MATCH_CATEGORY_BORDER, as a solid fill — for progress bars/badges that
+ * need to match the category color rather than just border it. */
+export const MATCH_CATEGORY_FILL: Record<MatchCategory, string> = {
+  FRIENDLY: 'bg-[#8b5a2b]',
+  CUP: 'bg-club-gold',
+  LEAGUE: 'bg-club-blue',
+}
