@@ -16,12 +16,17 @@ export function PlayerAvatar({
   avatarUrl,
   firstName,
   lastName,
+  shirtNumber,
   size = 'md',
   className,
 }: {
   avatarUrl?: string | null
   firstName?: string
   lastName?: string
+  /** When set, the fallback (no photo) shows this instead of initials — pass it in any
+   * match-composition context (line-up, voting, stats table) where the squad number is
+   * more useful than initials. Omit elsewhere (profile, generic roster) to keep initials. */
+  shirtNumber?: number | null
   size?: keyof typeof SIZE_CLASSES
   className?: string
 }) {
@@ -29,7 +34,7 @@ export function PlayerAvatar({
     <Avatar className={cn(SIZE_CLASSES[size], 'border-club-blue/20 border', className)}>
       {avatarUrl && <AvatarImage src={avatarUrl} alt={`${firstName ?? ''} ${lastName ?? ''}`} />}
       <AvatarFallback className="bg-club-blue text-white">
-        {initials(firstName, lastName)}
+        {shirtNumber != null ? shirtNumber : initials(firstName, lastName)}
       </AvatarFallback>
     </Avatar>
   )

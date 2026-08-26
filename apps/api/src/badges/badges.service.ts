@@ -81,10 +81,11 @@ const REPEATABLE_BADGE_KEYS = new Set([
 const MOIS_PARFAIT_MIN_OCCASIONS = 3;
 
 /** Badges that describe a standing (a comparative "currently true" title, e.g. "most
- * matches without X"), not a one-off feat — every other badge is kept forever once earned,
- * but these get their row deleted the moment they stop being true, so they stay evolutive
- * instead of piling up on whoever briefly held the record. */
-const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee']);
+ * matches without X", or "voted on every match so far") rather than a one-off feat —
+ * every other badge is kept forever once earned, but these get their row deleted the
+ * moment they stop being true, so they stay evolutive instead of piling up on whoever
+ * briefly held the record or skipping a single vote after having earned it once. */
+const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee', 'fair_play']);
 
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
@@ -544,8 +545,12 @@ export class BadgesService {
       const myMotmVoteMatchIds = new Set(
         motmVotesForMyMatches.filter((v) => v.voterId === userId).map((v) => v.matchId),
       );
+      // 90% rather than every single match — now that this is revocable, requiring 100%
+      // meant one missed vote (ever) permanently wiped it out until earning it back from
+      // zero, which felt punitive for what's meant to be a "generally reliable" badge.
+      const votedMatchCount = playedMatches.filter((m) => myMotmVoteMatchIds.has(m.id)).length;
       const hasFairPlay =
-        playedMatches.length > 0 && playedMatches.every((m) => myMotmVoteMatchIds.has(m.id));
+        playedMatches.length >= 3 && votedMatchCount / playedMatches.length >= 0.9;
 
       const hasTaulier = stats.matchesPlayed >= 10 && starterMatchCount / stats.matchesPlayed >= 0.8;
 

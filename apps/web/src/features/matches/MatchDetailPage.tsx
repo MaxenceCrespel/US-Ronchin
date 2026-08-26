@@ -1176,6 +1176,7 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user?.avatarUrl}
                             firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                             lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                             size="sm"
                           />
                           {entry.user
@@ -1426,6 +1427,7 @@ export function MatchDetailPage() {
                         avatarUrl={voted.user?.avatarUrl}
                         firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
                         lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
+                        shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
                         size="lg"
                         className="border-club-gold ring-club-gold/40 border-2 ring-4"
                       />
@@ -1455,6 +1457,7 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user?.avatarUrl}
                             firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                             lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -1548,6 +1551,7 @@ export function MatchDetailPage() {
                         avatarUrl={voted.user?.avatarUrl}
                         firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
                         lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
+                        shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
                         size="lg"
                         className="border-club-blue ring-club-blue/40 border-2 ring-4"
                       />
@@ -1577,6 +1581,7 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user?.avatarUrl}
                             firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                             lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -1656,6 +1661,7 @@ export function MatchDetailPage() {
                           avatarUrl={entry.user.avatarUrl}
                           firstName={entry.user.firstName}
                           lastName={entry.user.lastName}
+                          shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
                           size="sm"
                         />
                       </AccountLevelRing>
@@ -1770,6 +1776,7 @@ export function MatchDetailPage() {
                     avatarUrl={entry?.user?.avatarUrl}
                     firstName={winner.firstName}
                     lastName={winner.lastName}
+                    shirtNumber={entry?.shirtNumber ?? entry?.user?.jerseyNumber ?? null}
                     size="sm"
                     className="border-club-gold ring-club-gold/40 border-2 ring-2"
                   />
@@ -1882,6 +1889,7 @@ export function MatchDetailPage() {
                               avatarUrl={entry.user.avatarUrl}
                               firstName={entry.user.firstName}
                               lastName={entry.user.lastName}
+                              shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
                               size="sm"
                             />
                           </AccountLevelRing>
