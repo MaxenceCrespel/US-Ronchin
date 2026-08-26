@@ -27,6 +27,7 @@ import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import {
+  AccountLevelDialog,
   AccountLevelRing,
   TIER_BADGE_CLASS,
   TIER_LABELS,
@@ -214,14 +215,27 @@ export function ProfilePage() {
       <CardHeader>
         <div className="flex items-center gap-4">
           <div className="relative">
-            <AccountLevelRing userId={user.id} ringWidth={4}>
-              <PlayerAvatar
-                avatarUrl={user.avatarUrl}
-                firstName={user.firstName}
-                lastName={user.lastName}
-                size="xl"
-              />
-            </AccountLevelRing>
+            {levelQuery.data ? (
+              <AccountLevelDialog level={levelQuery.data}>
+                <AccountLevelRing userId={user.id} ringWidth={4}>
+                  <PlayerAvatar
+                    avatarUrl={user.avatarUrl}
+                    firstName={user.firstName}
+                    lastName={user.lastName}
+                    size="xl"
+                  />
+                </AccountLevelRing>
+              </AccountLevelDialog>
+            ) : (
+              <AccountLevelRing userId={user.id} ringWidth={4}>
+                <PlayerAvatar
+                  avatarUrl={user.avatarUrl}
+                  firstName={user.firstName}
+                  lastName={user.lastName}
+                  size="xl"
+                />
+              </AccountLevelRing>
+            )}
             {avatarMutation.isPending && (
               <div className="bg-background/60 absolute inset-0 flex items-center justify-center rounded-full">
                 <FootballSpinner className="text-xs" />

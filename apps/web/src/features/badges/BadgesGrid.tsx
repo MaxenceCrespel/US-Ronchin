@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { BadgeCategory, BadgeRarity, BadgeStatus } from '@/lib/types'
-import { fetchMyBadges } from './api'
+import { fetchBadgesForUser } from './api'
 
 const CATEGORY_LABELS: Record<BadgeCategory, string> = {
   GOALS: 'Buts',
@@ -96,7 +96,7 @@ function formatEarnedDate(iso: string) {
 }
 
 export function BadgesGrid({ userId }: { userId: string }) {
-  const badgesQuery = useQuery({ queryKey: ['badges', userId], queryFn: fetchMyBadges })
+  const badgesQuery = useQuery({ queryKey: ['badges', userId], queryFn: () => fetchBadgesForUser(userId) })
   const [activeBadge, setActiveBadge] = useState<BadgeStatus | null>(null)
   const [expanded, setExpanded] = useState(true)
 

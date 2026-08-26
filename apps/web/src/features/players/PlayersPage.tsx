@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { Check, Copy, Link2, Pencil, QrCode, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import { Award, Check, Copy, Link2, Pencil, QrCode, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,7 @@ import type { User, UserRole } from '@/lib/types'
 import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
+import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 
 function JoinLinkCard() {
@@ -142,6 +143,27 @@ function JoinLinkCard() {
         </p>
       </CardContent>
     </Card>
+  )
+}
+
+function PlayerBadgesDialog({ player }: { player: User }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="icon" variant="ghost" className="size-7" aria-label="Voir les badges">
+          <Award className="size-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Badges — {player.firstName} {player.lastName}
+          </DialogTitle>
+        </DialogHeader>
+        {open && <BadgesGrid userId={player.id} />}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -589,6 +611,7 @@ export function PlayersPage() {
                   {isCoach && (
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <PlayerBadgesDialog player={player} />
                         <EditPlayerDialog player={player} />
                         {player.id !== user?.id && <DeletePlayerDialog player={player} />}
                       </div>
