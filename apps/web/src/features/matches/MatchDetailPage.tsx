@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   CalendarCheck,
+  Clock,
   Crown,
   Link2,
   ListChecks,
@@ -257,6 +258,59 @@ function RatingDraftPicker({
         ))}
       </SelectContent>
     </Select>
+  )
+}
+
+function formatCountdown(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60_000))
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours > 0) return `${hours} h ${String(minutes).padStart(2, '0')} min`
+  return `${minutes} min`
+}
+
+/** Shared tracker for MOTM / patron de la défense voting — visible to everyone regardless
+ * of whether they've voted, so the whole group can see where it stands. Ticks the countdown
+ * live once the 24h window has actually started (first vote cast). */
+function VoteProgress({
+  totalVotes,
+  totalPlayers,
+  votingClosesAt,
+}: {
+  totalVotes: number
+  totalPlayers: number
+  votingClosesAt: string | null
+}) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!votingClosesAt) return
+    const id = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [votingClosesAt])
+
+  const pct = totalPlayers > 0 ? Math.min(100, (totalVotes / totalPlayers) * 100) : 0
+  const remainingMs = votingClosesAt ? new Date(votingClosesAt).getTime() - now : null
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+        <div
+          className="bg-club-gold h-full rounded-full transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+        <span>
+          {totalVotes}/{totalPlayers} ont voté
+        </span>
+        {remainingMs != null && remainingMs > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <Clock className="size-3" />
+            {formatCountdown(remainingMs)} restantes
+          </span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -1377,8 +1431,15 @@ export function MatchDetailPage() {
             <CardDescription>
               {motmQuery.data?.revealed
                 ? 'Résultat révélé.'
-                : `Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote (${motmQuery.data?.totalVotes ?? 0}/${motmQuery.data?.totalPlayers ?? 0}).`}
+                : 'Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote.'}
             </CardDescription>
+            {!motmQuery.data?.revealed && motmQuery.data && (
+              <VoteProgress
+                totalVotes={motmQuery.data.totalVotes}
+                totalPlayers={motmQuery.data.totalPlayers}
+                votingClosesAt={motmQuery.data.votingClosesAt}
+              />
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {motmQuery.data?.revealed ? (
@@ -1488,8 +1549,15 @@ export function MatchDetailPage() {
             <CardDescription>
               {defenseBossQuery.data?.revealed
                 ? 'Résultat révélé.'
-                : `Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote (${defenseBossQuery.data?.totalVotes ?? 0}/${defenseBossQuery.data?.totalPlayers ?? 0}).`}
+                : 'Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote.'}
             </CardDescription>
+            {!defenseBossQuery.data?.revealed && defenseBossQuery.data && (
+              <VoteProgress
+                totalVotes={defenseBossQuery.data.totalVotes}
+                totalPlayers={defenseBossQuery.data.totalPlayers}
+                votingClosesAt={defenseBossQuery.data.votingClosesAt}
+              />
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {defenseBossQuery.data?.revealed ? (

@@ -17,7 +17,7 @@ import { SetCompositionDto } from './dto/set-composition.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
-import { isMotmRevealed } from './motm-utils';
+import { isMotmRevealed, firstVoteAt, MOTM_REVEAL_DELAY_MS } from './motm-utils';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 export interface RatingSummaryEntry {
@@ -41,6 +41,8 @@ export interface MotmResponse {
   revealed: boolean;
   totalVotes: number;
   totalPlayers: number;
+  /** When the 24h reveal window closes — null until the first vote is cast. */
+  votingClosesAt: string | null;
   results: MotmResultEntry[] | null;
 }
 
@@ -57,6 +59,8 @@ export interface DefenseBossResponse {
   revealed: boolean;
   totalVotes: number;
   totalPlayers: number;
+  /** When the 24h reveal window closes — null until the first vote is cast. */
+  votingClosesAt: string | null;
   /** False when no defender played this match — the vote step doesn't apply. */
   hasEligibleTargets: boolean;
   results: DefenseBossResultEntry[] | null;
@@ -408,6 +412,8 @@ export class MatchesService {
     const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
     const revealed = isMotmRevealed(votes, totalPlayers);
+    const first = firstVoteAt(votes);
+    const votingClosesAt = first ? new Date(first.getTime() + MOTM_REVEAL_DELAY_MS).toISOString() : null;
     const compositionById = new Map(composition.map((c) => [c.id, c]));
     const compositionByUserId = new Map(
       composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
@@ -444,6 +450,7 @@ export class MatchesService {
       revealed,
       totalVotes,
       totalPlayers,
+      votingClosesAt,
       results,
     };
   }
@@ -491,6 +498,8 @@ export class MatchesService {
     const totalVotes = votes.length;
     const hasEligibleTargets = composition.some((c) => c.position === PlayerPosition.DEFENDER);
     const revealed = isMotmRevealed(votes, totalPlayers);
+    const first = firstVoteAt(votes);
+    const votingClosesAt = first ? new Date(first.getTime() + MOTM_REVEAL_DELAY_MS).toISOString() : null;
     const compositionById = new Map(composition.map((c) => [c.id, c]));
     const compositionByUserId = new Map(
       composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
@@ -526,6 +535,7 @@ export class MatchesService {
       revealed,
       totalVotes,
       totalPlayers,
+      votingClosesAt,
       hasEligibleTargets,
       results,
     };

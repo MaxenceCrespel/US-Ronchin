@@ -246,6 +246,7 @@ export interface MotmResponse {
   revealed: boolean
   totalVotes: number
   totalPlayers: number
+  votingClosesAt: string | null
   results: MotmResultEntry[] | null
 }
 
@@ -262,6 +263,7 @@ export interface DefenseBossResponse {
   revealed: boolean
   totalVotes: number
   totalPlayers: number
+  votingClosesAt: string | null
   hasEligibleTargets: boolean
   results: DefenseBossResultEntry[] | null
 }
