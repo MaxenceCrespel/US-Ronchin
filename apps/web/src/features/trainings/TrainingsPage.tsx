@@ -518,6 +518,7 @@ function CoachValidationSection({
 }) {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
+  const currentUser = useAuthStore((s) => s.user)
   const playersQuery = useQuery({
     queryKey: ['players'],
     queryFn: fetchPlayers,
@@ -532,7 +533,12 @@ function CoachValidationSection({
     },
   })
 
-  const players = (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
+  // A non-playing coach isn't a "roster player" and would otherwise never see themselves
+  // here — but a coach who actually attended still needs to be able to point themselves.
+  const rosterPlayers = (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
+  const me = playersQuery.data?.find((p) => p.id === currentUser?.id)
+  const players =
+    me && !rosterPlayers.some((p) => p.id === me.id) ? [me, ...rosterPlayers] : rosterPlayers
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
@@ -664,7 +670,8 @@ export function SessionCard({
     onSuccess: invalidateSessions,
   })
 
-  const hasStarted = new Date(`${date}T${startTime}`).getTime() <= Date.now()
+  // Locked from 30 min before kickoff — the same moment teams get auto-generated.
+  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 30 * 60_000 <= Date.now()
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
   const [guests, setGuests] = useState<GuestNameInput[]>([])
@@ -794,7 +801,7 @@ export function SessionCard({
             />
             {hasStarted && (
               <p className="text-muted-foreground text-xs">
-                L'entraînement a commencé — la présence ne peut plus être modifiée.
+                Les équipes ont été générées — la présence ne peut plus être modifiée.
               </p>
             )}
             {mutation.isError && (

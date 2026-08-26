@@ -38,11 +38,14 @@ export class AttendancesService {
     if (!session) {
       throw new NotFoundException('Séance introuvable');
     }
-    const hasStarted =
-      new Date(`${session.date}T${session.startTime}`).getTime() <= Date.now();
-    if (hasStarted) {
+    // Locked from 30 min before kickoff — the same moment the teams get auto-generated
+    // from declared presence, a late change at that point would desync the teams from
+    // who's actually shown up.
+    const lockAt =
+      new Date(`${session.date}T${session.startTime}`).getTime() - 30 * 60_000;
+    if (Date.now() >= lockAt) {
       throw new BadRequestException(
-        "L'entraînement a déjà commencé, tu ne peux plus modifier ta présence",
+        "Les équipes ont été générées, tu ne peux plus modifier ta présence",
       );
     }
 
