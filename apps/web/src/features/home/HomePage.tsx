@@ -253,7 +253,7 @@ export function HomePage() {
                 return (
                   <Link
                     key={event.id}
-                    to={isMatch ? `/matches/${event.id}` : '/trainings'}
+                    to={isMatch ? `/matches/${event.id}` : `/trainings?session=${event.id}`}
                     className={cn(
                       'flex items-center gap-3 px-4 py-3 text-sm transition-colors',
                       dimmed ? 'bg-muted hover:bg-muted/80' : 'hover:bg-accent/50',

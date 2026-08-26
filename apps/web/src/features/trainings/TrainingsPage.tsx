@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   addWeeks,
   eachDayOfInterval,
@@ -1096,6 +1096,24 @@ export function TrainingsPage() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null)
   const activeSession = (sessionsQuery.data ?? []).find((s) => s.id === activeSessionId) ?? null
   const activeMatch = (matchesQuery.data ?? []).find((m) => m.id === activeMatchId) ?? null
+
+  // Deep link from elsewhere (e.g. the home page's "Programme de la semaine") straight to
+  // one training's detail dialog, instead of just landing on this page generically.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const targetId = searchParams.get('session')
+    if (!targetId || !sessionsQuery.data) return
+    const target = sessionsQuery.data.find((s) => s.id === targetId)
+    if (!target) return
+    setSelectedDate(target.date)
+    setActiveSessionId(target.id)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('session')
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, sessionsQuery.data])
 
   return (
     <div className="flex flex-col gap-4">
