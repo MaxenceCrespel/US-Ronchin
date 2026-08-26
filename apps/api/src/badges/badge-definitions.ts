@@ -255,7 +255,8 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'MOTM',
     rarity: 'RARE',
     title: 'Le Fair-Play',
-    description: 'Voter pour l’homme du match sur au moins 90% des matchs où tu as toi-même joué',
+    description:
+      'Voter pour l’homme du match sur au moins 90% des matchs où tu as toi-même joué (à partir de 3 matchs joués)',
     emoji: '🗳️',
   },
 
