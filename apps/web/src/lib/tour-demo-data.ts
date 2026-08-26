@@ -168,14 +168,14 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
   ]
 
   const badges: BadgeStatus[] = [
-    { key: 'first_goal', category: 'GOALS', rarity: 'COMMON', title: 'Premier but', description: 'Marquer ton premier but', emoji: '⚽', earned: true, earnedAt: iso(addDays(today, -60)), count: 1 },
-    { key: 'hat_trick', category: 'GOALS', rarity: 'RARE', title: 'Le Coup du Chapeau', description: 'Marquer 3 buts dans un seul match', emoji: '🎩', earned: true, earnedAt: iso(addDays(today, -30)), count: 1 },
-    { key: 'streak_10', category: 'ATTENDANCE', rarity: 'RARE', title: 'Machine de guerre', description: "10 entraînements d'affilée sans absence", emoji: '⚡', earned: true, earnedAt: iso(addDays(today, -5)), count: 1 },
-    { key: 'motm_first', category: 'MOTM', rarity: 'COMMON', title: 'Homme du match', description: 'Être élu homme du match', emoji: '👑', earned: true, earnedAt: iso(addDays(today, -9)), count: 1 },
-    { key: 'porte_bonheur', category: 'IMPACT', rarity: 'COMMON', title: 'Le Porte-Bonheur', description: 'Être sur la feuille de match lors de 3 victoires consécutives', emoji: '🍀', earned: false, earnedAt: null, count: 0 },
-    { key: 'goat', category: 'GOALS', rarity: 'LEGENDARY', title: 'La Légende (G.O.A.T.)', description: '50 buts dans la saison — bon courage', emoji: '🐐', earned: false, earnedAt: null, count: 0 },
-    { key: 'sang_froid', category: 'DISCIPLINE', rarity: 'EPIC', title: 'Sang-Froid', description: "20 matchs d'affilée sans le moindre carton", emoji: '🧊', earned: false, earnedAt: null, count: 0 },
-    { key: 'pere_noel', category: 'ASSISTS', rarity: 'EPIC', title: 'Le Père Noël', description: '5 passes décisives de suite sans marquer', emoji: '🎅', earned: false, earnedAt: null, count: 0 },
+    { key: 'first_goal', category: 'GOALS', rarity: 'COMMON', title: 'Premier but', description: 'Marquer ton premier but', emoji: '⚽', earned: true, earnedAt: iso(addDays(today, -60)), count: 1, progress: null },
+    { key: 'hat_trick', category: 'GOALS', rarity: 'RARE', title: 'Le Coup du Chapeau', description: 'Marquer 3 buts dans un seul match', emoji: '🎩', earned: true, earnedAt: iso(addDays(today, -30)), count: 1, progress: null },
+    { key: 'streak_10', category: 'ATTENDANCE', rarity: 'RARE', title: 'Machine de guerre', description: "10 entraînements d'affilée sans absence", emoji: '⚡', earned: true, earnedAt: iso(addDays(today, -5)), count: 1, progress: { current: 10, target: 10 } },
+    { key: 'motm_first', category: 'MOTM', rarity: 'COMMON', title: 'Homme du match', description: 'Être élu homme du match', emoji: '👑', earned: true, earnedAt: iso(addDays(today, -9)), count: 1, progress: null },
+    { key: 'porte_bonheur', category: 'IMPACT', rarity: 'COMMON', title: 'Le Porte-Bonheur', description: 'Être sur la feuille de match lors de 3 victoires consécutives', emoji: '🍀', earned: false, earnedAt: null, count: 0, progress: null },
+    { key: 'goat', category: 'GOALS', rarity: 'LEGENDARY', title: 'La Légende (G.O.A.T.)', description: '50 buts dans la saison — bon courage', emoji: '🐐', earned: false, earnedAt: null, count: 0, progress: { current: 6, target: 50 } },
+    { key: 'sang_froid', category: 'DISCIPLINE', rarity: 'EPIC', title: 'Sang-Froid', description: "20 matchs d'affilée sans le moindre carton", emoji: '🧊', earned: false, earnedAt: null, count: 0, progress: null },
+    { key: 'pere_noel', category: 'ASSISTS', rarity: 'EPIC', title: 'Le Père Noël', description: '5 passes décisives de suite sans marquer', emoji: '🎅', earned: false, earnedAt: null, count: 0, progress: null },
   ]
 
   return [

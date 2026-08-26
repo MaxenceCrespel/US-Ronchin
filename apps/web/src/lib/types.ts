@@ -205,6 +205,7 @@ export interface BadgeStatus {
   earned: boolean
   earnedAt: string | null
   count: number
+  progress: { current: number; target: number } | null
 }
 
 export type AccountTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'RUBY'

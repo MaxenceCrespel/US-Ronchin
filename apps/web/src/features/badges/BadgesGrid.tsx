@@ -175,6 +175,22 @@ export function BadgesGrid({ userId }: { userId: string }) {
           </DialogHeader>
           <div className="flex flex-col items-center gap-2 text-center">
             <p className="text-muted-foreground text-sm">{activeBadge?.description}</p>
+            {activeBadge?.progress && (
+              <div className="flex w-full flex-col gap-1">
+                <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                  <div
+                    className="bg-club-blue h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (activeBadge.progress.current / activeBadge.progress.target) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-muted-foreground text-xs font-medium">
+                  {Math.min(activeBadge.progress.current, activeBadge.progress.target)}/
+                  {activeBadge.progress.target}
+                </p>
+              </div>
+            )}
             {activeBadge?.earned ? (
               <p className="text-xs font-medium text-emerald-600">
                 {activeBadge.count > 1

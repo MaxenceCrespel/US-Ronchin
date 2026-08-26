@@ -121,6 +121,8 @@ export interface BadgeStatus {
   earned: boolean;
   earnedAt: Date | null;
   count: number;
+  /** Only set for badges with a simple numeric threshold — lets the UI show "14/20". */
+  progress: { current: number; target: number } | null;
 }
 
 @Injectable()
@@ -155,6 +157,7 @@ export class BadgesService {
   async getForUser(userId: string): Promise<BadgeStatus[]> {
     const allStats = await this.statsService.getPlayerStats();
     const stats = allStats.find((p) => p.userId === userId);
+    let progressByKey: Record<string, { current: number; target: number }> = {};
 
     if (stats) {
       // All events involving this user, either as the actor (userId) or as the
@@ -653,6 +656,50 @@ export class BadgesService {
         metronome: hasMetronome,
       };
 
+      // Only the badges with a simple "count vs threshold" shape get a progress readout —
+      // the underlying numbers already exist as local values above, this just pairs each
+      // with the threshold from its own eligibility check.
+      progressByKey = {
+        sniper: { current: stats.goals, target: 10 },
+        sharpshooter: { current: stats.goals, target: 20 },
+        goat: { current: stats.goals, target: 50 },
+        fox_in_the_box: { current: goalsByMatch.size, target: 5 },
+        playmaker: { current: stats.assists, target: 5 },
+        elite_passer: { current: stats.assists, target: 10 },
+        postman: { current: stats.assists, target: 15 },
+        motm_hero: { current: stats.motmCount, target: 3 },
+        motm_legend: { current: stats.motmCount, target: 5 },
+        diva: { current: stats.motmCount, target: 10 },
+        streak_5: { current: stats.presenceStreak, target: 5 },
+        streak_10: { current: stats.presenceStreak, target: 10 },
+        streak_20: { current: stats.presenceStreak, target: 20 },
+        terminator: { current: stats.presenceStreak, target: 30 },
+        pillar: { current: stats.trainingsPresent, target: 20 },
+        lifetime_member: { current: stats.trainingsPresent, target: 50 },
+        vest_forever: { current: stats.trainingsPresent, target: 75 },
+        stakhanoviste: { current: stats.trainingsPresent, target: 100 },
+        veteran: { current: stats.matchesPlayed, target: 15 },
+        road_captain: { current: stats.matchesPlayed, target: 30 },
+        centurion: { current: stats.matchesPlayed, target: 50 },
+        statue: { current: stats.matchesPlayed, target: 100 },
+        hot_head: { current: stats.yellowCards, target: 5 },
+        card_collector: { current: stats.yellowCards, target: 10 },
+        banned: { current: stats.redCards, target: 2 },
+        roc: { current: cleanSheetCount, target: 5 },
+        forteresse: { current: cleanSheetCount, target: 10 },
+        inebranlable: { current: cleanSheetCount, target: 20 },
+        mains_or: { current: goalkeeperCleanSheetCount, target: 5 },
+        mains_diamant: { current: goalkeeperCleanSheetCount, target: 10 },
+        mains_legendaires: { current: goalkeeperCleanSheetCount, target: 20 },
+        veteran_defense: { current: defenderStartCount, target: 15 },
+        cadre_defensif: { current: defenderStartCount, target: 30 },
+        legende_arriere_garde: { current: defenderStartCount, target: 50 },
+        patron_hero: { current: stats.patronDefenseCount, target: 3 },
+        patron_legend: { current: stats.patronDefenseCount, target: 5 },
+        patron_diva: { current: stats.patronDefenseCount, target: 10 },
+        historique: { current: seasonsActive.size, target: 3 },
+      };
+
       const repeatableCounts: Record<string, number> = {
         hat_trick: hatTrickCount,
         poker: pokerCount,
@@ -734,6 +781,7 @@ export class BadgesService {
         earned: !!row,
         earnedAt: row?.earnedAt ?? null,
         count: row?.count ?? 0,
+        progress: progressByKey[d.key] ?? null,
       };
     });
   }
