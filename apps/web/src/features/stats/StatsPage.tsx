@@ -185,6 +185,7 @@ function SortableHead({
   dir,
   onSort,
   align = 'right',
+  stickyLeft = false,
 }: {
   label: string
   sortKey: RosterSortKey
@@ -192,10 +193,13 @@ function SortableHead({
   dir: 'asc' | 'desc'
   onSort: (key: RosterSortKey) => void
   align?: 'left' | 'right'
+  stickyLeft?: boolean
 }) {
   const active = sortKey === activeKey
   return (
-    <TableHead className={align === 'right' ? 'text-right' : undefined}>
+    <TableHead
+      className={cn(align === 'right' && 'text-right', stickyLeft && 'bg-card sticky left-0 z-10')}
+    >
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -264,7 +268,7 @@ function RosterStatsTable({ season }: { season: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <SortableHead label="Joueur" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
+                  <SortableHead label="Joueur" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={handleSort} align="left" stickyLeft />
                   <SortableHead label="MJ" sortKey="matchesPlayed" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortableHead label="Buts" sortKey="goals" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                   <SortableHead label="Passes D." sortKey="assists" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
@@ -279,7 +283,7 @@ function RosterStatsTable({ season }: { season: string }) {
               <TableBody>
                 {roster.map((p) => (
                   <TableRow key={p.userId}>
-                    <TableCell className="font-medium">
+                    <TableCell className="bg-card sticky left-0 z-10 font-medium">
                       {p.firstName} {p.lastName}
                     </TableCell>
                     <TableCell className="text-right">{p.matchesPlayed}</TableCell>

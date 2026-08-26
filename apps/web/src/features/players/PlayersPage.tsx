@@ -534,11 +534,11 @@ export function PlayersPage() {
         <CardHeader>
           <CardTitle>Joueurs de l'équipe</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="-mx-2 overflow-x-auto px-2">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
+                <TableHead className="bg-card sticky left-0 z-10">Nom</TableHead>
                 <TableHead>Rôle</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Poste</TableHead>
@@ -550,7 +550,7 @@ export function PlayersPage() {
             <TableBody>
               {playersQuery.data?.map((player) => (
                 <TableRow key={player.id}>
-                  <TableCell>
+                  <TableCell className="bg-card sticky left-0 z-10">
                     <div className="flex items-center gap-2.5">
                       <AccountLevelRing
                         userId={player.id}
