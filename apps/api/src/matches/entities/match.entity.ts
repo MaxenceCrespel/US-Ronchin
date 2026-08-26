@@ -72,6 +72,15 @@ export class Match {
   })
   resultReminderSentAt: Date | null;
 
+  /** Set once the "results are in" push has gone out for each vote — reveal itself is
+   * computed live from votes (see motm-utils.ts), not stored, so these are what keep the
+   * one-shot notification from firing again on every later poll that finds it still revealed. */
+  @Column({ name: 'motm_revealed_notified_at', type: 'timestamptz', nullable: true })
+  motmRevealedNotifiedAt: Date | null;
+
+  @Column({ name: 'defense_boss_revealed_notified_at', type: 'timestamptz', nullable: true })
+  defenseBossRevealedNotifiedAt: Date | null;
+
   @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'created_by' })
   creator: User;

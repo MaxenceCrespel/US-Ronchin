@@ -5,6 +5,7 @@ import { TrainingTeamAssignment } from './entities/training-team-assignment.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { StatsService } from '../stats/stats.service';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
 
 const DEFAULT_TEAM_COUNT = 2;
@@ -47,6 +48,7 @@ export class TeamBalancingService {
     @InjectRepository(Attendance)
     private readonly attendancesRepository: Repository<Attendance>,
     private readonly statsService: StatsService,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   getTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
@@ -175,6 +177,14 @@ export class TeamBalancingService {
       this.assignmentsRepository.create({ trainingSessionId: sessionId, ...a }),
     );
     await this.assignmentsRepository.save(entities);
+
+    // Invite everyone present to come see which team they landed on — covers both the
+    // scheduler's auto-generation (30 min before kickoff) and a coach re-generating by hand.
+    await this.pushNotificationsService.sendToUsers(presentUserIds, {
+      title: 'Équipes prêtes !',
+      body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
+      url: `/trainings?session=${sessionId}`,
+    });
 
     return this.getTeams(sessionId);
   }

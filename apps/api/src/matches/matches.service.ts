@@ -121,7 +121,7 @@ export class MatchesService {
         composition.map((c) => c.userId).filter((id): id is string => !!id),
         {
           title: 'Match terminé',
-          body: `Le match contre ${saved.opponent} est marqué comme joué : votez pour l'homme du match et notez vos coéquipiers.`,
+          body: `Le match contre ${saved.opponent} est marqué comme joué : votez pour l'homme du match, le patron de la défense, et notez vos coéquipiers.`,
           url: `/matches/${saved.id}`,
         },
       );
