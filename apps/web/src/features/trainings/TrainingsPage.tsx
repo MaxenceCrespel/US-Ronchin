@@ -670,7 +670,10 @@ export function SessionCard({
     onSuccess: invalidateSessions,
   })
 
-  // Locked from 30 min before kickoff — the same moment teams get auto-generated.
+  // Attendance is locked from 30 min before kickoff — the same moment teams get
+  // auto-generated. Distinct from isPast (the "Terminé" badge below): that one only cares
+  // whether the session has actually started, not the earlier lock threshold.
+  const isPast = new Date(`${date}T${startTime}`).getTime() <= Date.now()
   const hasStarted = new Date(`${date}T${startTime}`).getTime() - 30 * 60_000 <= Date.now()
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
@@ -688,7 +691,7 @@ export function SessionCard({
     <Card
       className={cn(
         'border-club-blue/70 gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-        cancelled && 'opacity-60',
+        (cancelled || isPast) && 'opacity-60',
       )}
     >
       <CardHeader>
@@ -700,7 +703,11 @@ export function SessionCard({
             <span className="text-base font-semibold">Entraînement</span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
-            {cancelled && <Badge variant="destructive">Annulée</Badge>}
+            {cancelled ? (
+              <Badge variant="destructive">Annulée</Badge>
+            ) : (
+              isPast && <Badge variant="secondary">Terminé</Badge>
+            )}
             {isCoach && !editing && (
               <>
                 <Button
@@ -939,6 +946,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
       className={cn(
         'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
         MATCH_CATEGORY_BORDER[category],
+        (played || hasKickedOff) && 'opacity-60',
       )}
     >
       <CardHeader>
@@ -949,9 +957,10 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             </span>
             <span className="text-base font-semibold">vs {match.opponent}</span>
           </div>
-          <Badge className={inDialog ? 'mr-5' : undefined} variant="outline">
-            {MATCH_CATEGORY_LABELS[category]}
-          </Badge>
+          <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
+            {!played && hasKickedOff && <Badge variant="secondary">Terminé</Badge>}
+            <Badge variant="outline">{MATCH_CATEGORY_LABELS[category]}</Badge>
+          </div>
         </CardTitle>
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pl-11.5 text-sm">
           {match.kickOffTime && (
