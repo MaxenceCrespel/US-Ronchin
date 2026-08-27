@@ -83,7 +83,15 @@ export class TeamBalancingService {
       where: { trainingSessionId: sessionId },
       relations: { user: true, guests: true },
     });
-    const presentAttendances = allAttendances.filter((a) => a.status === AttendanceStatus.PRESENT);
+    // Prefers the coach's post-training "pointage réel" (actualStatus) over the pre-session
+    // declared status once it's been recorded — otherwise a coach correcting who actually
+    // showed up had no way to make "Régénérer" reflect it, and the training ranking (built
+    // from these same assignments) kept crediting/blaming whoever merely *declared*
+    // PRESENT. Before the pointage happens, actualStatus is null for everyone and this
+    // falls back to the declared status exactly as before — the normal pre-kickoff path.
+    const presentAttendances = allAttendances.filter(
+      (a) => (a.actualStatus ?? a.status) === AttendanceStatus.PRESENT,
+    );
     const guestSourceAttendances = allAttendances.filter((a) => a.guestCount > 0);
     if (presentAttendances.length === 0 && guestSourceAttendances.length === 0) {
       throw new BadRequestException('Aucun joueur présent pour générer des équipes');

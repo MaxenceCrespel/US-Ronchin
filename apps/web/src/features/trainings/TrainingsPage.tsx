@@ -688,6 +688,12 @@ function CoachValidationDialog({
           <DialogTitle>Pointage réel</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
+          {allPointed && (
+            <p className="text-muted-foreground rounded-md border border-dashed p-2 text-xs">
+              Pointage terminé — pense à cliquer sur <strong>Régénérer</strong> dans « Équipes »
+              pour que la composition finale et le classement reflètent qui était vraiment là.
+            </p>
+          )}
           {unpointedIds.length > 0 && (
             <Button
               type="button"
