@@ -3,6 +3,7 @@ import type {
   Attendance,
   AttendanceStatus,
   Training,
+  TrainingRankingEntry,
   TrainingSession,
   TrainingType,
 } from '@/lib/types'
@@ -47,9 +48,18 @@ export async function updateSession(
     endTime: string
     location: string
     cancelled: boolean
+    scoreTeam0: number
+    scoreTeam1: number
   }>,
 ): Promise<TrainingSession> {
   const { data } = await apiClient.patch<TrainingSession>(`/training-sessions/${id}`, input)
+  return data
+}
+
+/** Classement global des matchs d'entraînement (points cumulés, voir
+ * TeamBalancingService.getTrainingRanking) — trié par points décroissants. */
+export async function fetchTrainingRanking(): Promise<TrainingRankingEntry[]> {
+  const { data } = await apiClient.get<TrainingRankingEntry[]>('/training-ranking')
   return data
 }
 

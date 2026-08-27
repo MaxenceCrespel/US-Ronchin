@@ -61,6 +61,10 @@ export interface TrainingSession {
   endTime: string
   location: string
   cancelled: boolean
+  /** Score du match d'entraînement (équipe 0 vs équipe 1) — null tant que le coach ne l'a
+   * pas saisi, alimente le classement (voir TrainingRankingEntry / /training-ranking). */
+  scoreTeam0: number | null
+  scoreTeam1: number | null
 }
 
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'MAYBE'
@@ -372,4 +376,17 @@ export interface AwardCategory {
   myVoteUserId: string | null
   totalVotes: number
   results: AwardResultEntry[] | null
+}
+
+/** One row of the training-scrimmage ranking (GET /training-ranking) — points from
+ * TeamBalancingService.pointsForResult, tallied across every scored TrainingSession. */
+export interface TrainingRankingEntry {
+  userId: string
+  firstName: string
+  lastName: string
+  points: number
+  sessionsPlayed: number
+  wins: number
+  draws: number
+  losses: number
 }

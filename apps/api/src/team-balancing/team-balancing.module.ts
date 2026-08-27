@@ -6,7 +6,7 @@ import { Attendance } from '../attendances/entities/attendance.entity';
 import { StatsModule } from '../stats/stats.module';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { TeamBalancingService } from './team-balancing.service';
-import { TeamBalancingController } from './team-balancing.controller';
+import { TeamBalancingController, TrainingRankingController } from './team-balancing.controller';
 import { TeamBalancingScheduler } from './team-balancing.scheduler';
 
 @Module({
@@ -15,7 +15,7 @@ import { TeamBalancingScheduler } from './team-balancing.scheduler';
     StatsModule,
     PushNotificationsModule,
   ],
-  controllers: [TeamBalancingController],
+  controllers: [TeamBalancingController, TrainingRankingController],
   providers: [TeamBalancingService, TeamBalancingScheduler],
 })
 export class TeamBalancingModule {}

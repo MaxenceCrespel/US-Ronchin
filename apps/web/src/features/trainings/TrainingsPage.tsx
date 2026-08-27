@@ -63,6 +63,7 @@ import {
   deleteTraining,
   fetchAttendances,
   fetchSessions,
+  fetchTrainingRanking,
   fetchTrainings,
   setMyAttendance,
   updateSession,
@@ -420,9 +421,33 @@ function ManageTrainingsDialog() {
   )
 }
 
-function TeamsSection({ sessionId, isCoach }: { sessionId: string; isCoach: boolean }) {
+function TeamsSection({
+  sessionId,
+  isCoach,
+  scoreTeam0,
+  scoreTeam1,
+}: {
+  sessionId: string
+  isCoach: boolean
+  scoreTeam0: number | null
+  scoreTeam1: number | null
+}) {
   const queryClient = useQueryClient()
   const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
+  const [scoreInput0, setScoreInput0] = useState(scoreTeam0 !== null ? String(scoreTeam0) : '')
+  const [scoreInput1, setScoreInput1] = useState(scoreTeam1 !== null ? String(scoreTeam1) : '')
+
+  const scoreMutation = useMutation({
+    mutationFn: () =>
+      updateSession(sessionId, {
+        scoreTeam0: Number(scoreInput0),
+        scoreTeam1: Number(scoreInput1),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+    },
+  })
 
   const generateMutation = useMutation({
     mutationFn: () => generateTeams(sessionId, 2),
@@ -535,6 +560,47 @@ function TeamsSection({ sessionId, isCoach }: { sessionId: string; isCoach: bool
           ))}
         </div>
       )}
+      {teams.length > 0 && (
+        <div className="flex items-center gap-2 text-xs">
+          <Trophy className="text-muted-foreground size-3.5 shrink-0" />
+          {isCoach ? (
+            <>
+              <Input
+                type="number"
+                min={0}
+                value={scoreInput0}
+                onChange={(e) => setScoreInput0(e.target.value)}
+                className="h-7 w-14 px-2 text-center"
+                placeholder="—"
+                aria-label={`Score ${TEAM_LABELS[0]}`}
+              />
+              <span className="text-muted-foreground">–</span>
+              <Input
+                type="number"
+                min={0}
+                value={scoreInput1}
+                onChange={(e) => setScoreInput1(e.target.value)}
+                className="h-7 w-14 px-2 text-center"
+                placeholder="—"
+                aria-label={`Score ${TEAM_LABELS[1]}`}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                disabled={scoreInput0 === '' || scoreInput1 === '' || scoreMutation.isPending}
+                onClick={() => scoreMutation.mutate()}
+              >
+                {scoreMutation.isPending ? 'Enregistrement...' : 'Enregistrer le score'}
+              </Button>
+            </>
+          ) : scoreTeam0 !== null && scoreTeam1 !== null ? (
+            <span className="text-muted-foreground">
+              Score : {TEAM_LABELS[0]} {scoreTeam0} – {scoreTeam1} {TEAM_LABELS[1]}
+            </span>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }
@@ -645,6 +711,8 @@ export function SessionCard({
   endTime,
   location,
   cancelled,
+  scoreTeam0 = null,
+  scoreTeam1 = null,
   inDialog,
 }: {
   sessionId: string
@@ -653,6 +721,8 @@ export function SessionCard({
   endTime: string
   location: string
   cancelled: boolean
+  scoreTeam0?: number | null
+  scoreTeam1?: number | null
   inDialog?: boolean
 }) {
   const queryClient = useQueryClient()
@@ -964,7 +1034,14 @@ export function SessionCard({
         {!cancelled && isCoach && (
           <CoachValidationSection sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
         )}
-        {!cancelled && <TeamsSection sessionId={sessionId} isCoach={isCoach} />}
+        {!cancelled && (
+          <TeamsSection
+            sessionId={sessionId}
+            isCoach={isCoach}
+            scoreTeam0={scoreTeam0}
+            scoreTeam1={scoreTeam1}
+          />
+        )}
       </CardContent>
     </Card>
   )
@@ -1081,6 +1158,74 @@ function toDateKey(date: Date) {
   return format(date, 'yyyy-MM-dd')
 }
 
+/** Classement des matchs d'entraînement — points cumulés sur toutes les séances où un
+ * score a été saisi (voir TeamsSection). Repliée par défaut, tout le monde peut la voir. */
+function TrainingRankingCard() {
+  const [open, setOpen] = useState(false)
+  const rankingQuery = useQuery({
+    queryKey: ['training-ranking'],
+    queryFn: fetchTrainingRanking,
+    enabled: open,
+  })
+  const ranking = rankingQuery.data ?? []
+
+  return (
+    <Card className="rounded-2xl py-4 shadow-sm">
+      <CardContent className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-1.5 text-sm font-semibold"
+        >
+          <Trophy className="size-4 text-amber-500" />
+          Classement des matchs d'entraînement
+        </button>
+        {open &&
+          (rankingQuery.isLoading ? (
+            <FootballSpinner />
+          ) : ranking.length === 0 ? (
+            <p className="text-muted-foreground text-xs">
+              Aucun score de match d'entraînement enregistré pour l'instant.
+            </p>
+          ) : (
+            <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+              <table className="w-full min-w-[420px] text-sm">
+                <thead>
+                  <tr className="text-muted-foreground text-left text-xs">
+                    <th className="py-1 pr-2">#</th>
+                    <th className="py-1 pr-2">Joueur</th>
+                    <th className="py-1 pr-2 text-right">Pts</th>
+                    <th className="py-1 pr-2 text-right">J</th>
+                    <th className="py-1 pr-2 text-right">V</th>
+                    <th className="py-1 pr-2 text-right">N</th>
+                    <th className="py-1 text-right">D</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranking.map((entry, index) => (
+                    <tr key={entry.userId} className="border-t">
+                      <td className="text-muted-foreground py-1 pr-2">{index + 1}</td>
+                      <td className="py-1 pr-2 font-medium">
+                        {entry.firstName} {entry.lastName}
+                      </td>
+                      <td className="py-1 pr-2 text-right font-semibold">{entry.points}</td>
+                      <td className="text-muted-foreground py-1 pr-2 text-right">
+                        {entry.sessionsPlayed}
+                      </td>
+                      <td className="text-muted-foreground py-1 pr-2 text-right">{entry.wins}</td>
+                      <td className="text-muted-foreground py-1 pr-2 text-right">{entry.draws}</td>
+                      <td className="text-muted-foreground py-1 text-right">{entry.losses}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function TrainingsPage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
@@ -1159,6 +1304,8 @@ export function TrainingsPage() {
         <h1 className="text-xl font-semibold">Entraînements &amp; matchs</h1>
         {isCoach && <ManageTrainingsDialog />}
       </div>
+
+      <TrainingRankingCard />
 
       <Card className="min-w-0 rounded-2xl py-5 shadow-sm" data-tour="trainings-calendar">
         <CardContent className="flex min-w-0 flex-col gap-4">
@@ -1316,6 +1463,8 @@ export function TrainingsPage() {
                 endTime={session.endTime}
                 location={session.location}
                 cancelled={session.cancelled}
+                scoreTeam0={session.scoreTeam0}
+                scoreTeam1={session.scoreTeam1}
               />
             ))}
             {selectedMatches.map((match) => (
@@ -1345,6 +1494,8 @@ export function TrainingsPage() {
                 endTime={activeSession.endTime}
                 location={activeSession.location}
                 cancelled={activeSession.cancelled}
+                scoreTeam0={activeSession.scoreTeam0}
+                scoreTeam1={activeSession.scoreTeam1}
                 inDialog
               />
             )}

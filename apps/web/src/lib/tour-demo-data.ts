@@ -69,6 +69,8 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     endTime: '20:30:00',
     location: 'Stade Delory',
     cancelled: false,
+    scoreTeam0: null,
+    scoreTeam1: null,
   }
 
   const matches: Match[] = [

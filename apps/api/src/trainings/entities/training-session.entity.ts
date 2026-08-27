@@ -42,6 +42,15 @@ export class TrainingSession {
   @Column({ name: 'attendance_reminder_sent_at', type: 'timestamp', nullable: true })
   attendanceReminderSentAt: Date | null;
 
+  /** Intra-squad scrimmage score — team 0 vs team 1 (generateTeams always creates exactly
+   * two). Null until the coach enters it; feeds the training ranking (see
+   * TeamBalancingService.getTrainingRanking). */
+  @Column({ name: 'score_team0', type: 'int', nullable: true })
+  scoreTeam0: number | null;
+
+  @Column({ name: 'score_team1', type: 'int', nullable: true })
+  scoreTeam1: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

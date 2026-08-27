@@ -9,6 +9,17 @@ import { GenerateTeamsDto } from './dto/generate-teams.dto';
 import { MovePlayerDto } from './dto/move-player.dto';
 
 @UseGuards(JwtAuthGuard)
+@Controller('training-ranking')
+export class TrainingRankingController {
+  constructor(private readonly teamBalancingService: TeamBalancingService) {}
+
+  @Get()
+  getRanking() {
+    return this.teamBalancingService.getTrainingRanking();
+  }
+}
+
+@UseGuards(JwtAuthGuard)
 @Controller('training-sessions/:sessionId/teams')
 export class TeamBalancingController {
   constructor(private readonly teamBalancingService: TeamBalancingService) {}

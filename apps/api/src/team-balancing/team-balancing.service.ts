@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { TrainingTeamAssignment } from './entities/training-team-assignment.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
@@ -238,4 +238,76 @@ export class TeamBalancingService {
     }
     return sessionsNeedingTeams;
   }
+
+  /** Points for one team in a scrimmage: 3 for winning + the goal difference as a bonus
+   * (capped at 5, so a blowout doesn't swing the season on one session), 1 each on a draw,
+   * 0 for the losing team. */
+  private static pointsForResult(scoreTeam0: number, scoreTeam1: number): [number, number] {
+    if (scoreTeam0 === scoreTeam1) return [1, 1];
+    const bonus = Math.min(Math.abs(scoreTeam0 - scoreTeam1), 5);
+    const winnerPoints = 3 + bonus;
+    return scoreTeam0 > scoreTeam1 ? [winnerPoints, 0] : [0, winnerPoints];
+  }
+
+  /** Cumulative "classement" from every scrimmage score entered so far — only real
+   * accounts earn points (a guest has no profile to credit), and only sessions with both
+   * scores filled in count. */
+  async getTrainingRanking(): Promise<TrainingRankingEntry[]> {
+    const scoredSessions = await this.sessionsRepository
+      .createQueryBuilder('session')
+      .where('session.score_team0 IS NOT NULL AND session.score_team1 IS NOT NULL')
+      .getMany();
+    if (scoredSessions.length === 0) return [];
+
+    const pointsBySessionTeam = new Map<string, [number, number]>();
+    for (const session of scoredSessions) {
+      pointsBySessionTeam.set(
+        session.id,
+        TeamBalancingService.pointsForResult(session.scoreTeam0!, session.scoreTeam1!),
+      );
+    }
+
+    const assignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId: In(scoredSessions.map((s) => s.id)) },
+      relations: { user: true },
+    });
+
+    const entryByUserId = new Map<string, TrainingRankingEntry>();
+    for (const assignment of assignments) {
+      if (!assignment.userId || !assignment.user) continue; // guests earn nothing
+      const teamPoints = pointsBySessionTeam.get(assignment.trainingSessionId);
+      if (!teamPoints) continue;
+      const points = teamPoints[assignment.teamIndex] ?? 0;
+
+      const entry = entryByUserId.get(assignment.userId) ?? {
+        userId: assignment.userId,
+        firstName: assignment.user.firstName,
+        lastName: assignment.user.lastName,
+        points: 0,
+        sessionsPlayed: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+      };
+      entry.sessionsPlayed += 1;
+      entry.points += points;
+      if (points >= 3) entry.wins += 1;
+      else if (points === 1) entry.draws += 1;
+      else entry.losses += 1;
+      entryByUserId.set(assignment.userId, entry);
+    }
+
+    return [...entryByUserId.values()].sort((a, b) => b.points - a.points);
+  }
+}
+
+export interface TrainingRankingEntry {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  points: number;
+  sessionsPlayed: number;
+  wins: number;
+  draws: number;
+  losses: number;
 }
