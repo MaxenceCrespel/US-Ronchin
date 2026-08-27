@@ -18,3 +18,12 @@
 # (commit suivant) au lieu d'une valeur en dur. Cette clé morte n'ouvre
 # plus aucun accès mais reste détectable dans l'historique de 7d631c1.
 7d631c1d43e22117906d87558a13bff483dd461c:docker-compose.yml:generic-api-key:50
+
+# apps/api/src/users/users.service.ts, commit 6ec21e5 : constante
+# TEMP_PASSWORD_CHARSET, une chaîne dense de lettres/chiffres non-ambigus
+# pour générer un mot de passe temporaire — jamais un vrai secret, juste
+# une entropie élevée qui déclenche la règle generic-api-key. Refactorée
+# en commit ultérieur (buildTemporaryPasswordCharset(), construite depuis
+# des plages de caractères plutôt qu'un littéral dense), mais reste
+# présente dans l'historique de 6ec21e5.
+6ec21e552bafd96bebe02e9638d82efe75585bc5:apps/api/src/users/users.service.ts:generic-api-key:15
