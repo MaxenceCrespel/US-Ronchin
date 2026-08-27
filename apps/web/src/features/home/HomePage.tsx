@@ -101,10 +101,9 @@ function UpcomingSessionCard({
   }, [myAttendance?.guests])
 
   const presentCount = attendancesQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
-  const guestTotal =
-    attendancesQuery.data
-      ?.filter((a) => a.status === 'PRESENT')
-      .reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+  // Guests count regardless of the inviting player's own status — they can still show up
+  // even if whoever registered them ends up not coming themselves.
+  const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
 
   return (
     <Card className="border-club-blue/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
@@ -139,9 +138,9 @@ function UpcomingSessionCard({
             value={myAttendance?.status}
             disabled={mutation.isPending || hasStarted}
             onChange={(status) => {
-              const nextGuests = status === 'PRESENT' ? guests : []
-              setGuests(nextGuests)
-              mutation.mutate({ status, guests: nextGuests })
+              // Guests aren't wiped on a status change anymore — a friend can still come
+              // even if you end up Absent/Incertain yourself.
+              mutation.mutate({ status, guests })
             }}
           />
           {hasStarted && (
@@ -150,9 +149,11 @@ function UpcomingSessionCard({
             </p>
           )}
           {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
-          {myAttendance?.status === 'PRESENT' && (
+          {myAttendance?.status && (
             <div className="flex flex-col gap-1.5 text-xs">
-              <span className="text-muted-foreground">Tu viens avec quelqu'un ?</span>
+              <span className="text-muted-foreground">
+                Quelqu'un vient avec toi (ou à ta place) ?
+              </span>
               {guests.length > 0 && (
                 <ul className="flex flex-col gap-1">
                   {guests.map((g, i) => (
@@ -167,7 +168,7 @@ function UpcomingSessionCard({
                         onClick={() => {
                           const next = guests.filter((_, idx) => idx !== i)
                           setGuests(next)
-                          mutation.mutate({ status: 'PRESENT', guests: next })
+                          mutation.mutate({ status: myAttendance!.status!, guests: next })
                         }}
                         className="text-muted-foreground hover:text-foreground disabled:opacity-40"
                         aria-label="Retirer cet invité"
@@ -207,7 +208,7 @@ function UpcomingSessionCard({
                     setGuests(next)
                     setNewGuestFirstName('')
                     setNewGuestLastName('')
-                    mutation.mutate({ status: 'PRESENT', guests: next })
+                    mutation.mutate({ status: myAttendance!.status!, guests: next })
                   }}
                 >
                   Ajouter
@@ -215,7 +216,7 @@ function UpcomingSessionCard({
               </div>
             </div>
           )}
-          {presentCount > 0 && (
+          {(presentCount > 0 || guestTotal > 0) && (
             <p className="text-muted-foreground text-xs">
               <strong className="text-foreground">{presentCount + guestTotal}</strong> sur le terrain
               {guestTotal > 0 &&

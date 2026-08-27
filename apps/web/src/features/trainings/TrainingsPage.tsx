@@ -812,9 +812,10 @@ export function SessionCard({
               value={myAttendance?.status}
               disabled={mutation.isPending || hasStarted}
               onChange={(status) => {
-                const nextGuests = status === 'PRESENT' ? guests : []
-                setGuests(nextGuests)
-                mutation.mutate({ status, guests: nextGuests })
+                // Guests aren't wiped on a status change anymore — a friend can still come
+                // even if you end up Absent/Incertain yourself, so there's no reason to
+                // force them out just because your own answer changed.
+                mutation.mutate({ status, guests })
               }}
             />
             {hasStarted && (
@@ -825,9 +826,11 @@ export function SessionCard({
             {mutation.isError && (
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
-            {myAttendance?.status === 'PRESENT' && (
+            {myAttendance?.status && (
               <div className="flex flex-col gap-1.5 text-xs">
-                <span className="text-muted-foreground">Tu viens avec quelqu'un ?</span>
+                <span className="text-muted-foreground">
+                  Quelqu'un vient avec toi (ou à ta place) ?
+                </span>
                 {guests.length > 0 && (
                   <ul className="flex flex-col gap-1">
                     {guests.map((g, i) => (
@@ -842,7 +845,7 @@ export function SessionCard({
                           onClick={() => {
                             const next = guests.filter((_, idx) => idx !== i)
                             setGuests(next)
-                            mutation.mutate({ status: 'PRESENT', guests: next })
+                            mutation.mutate({ status: myAttendance!.status!, guests: next })
                           }}
                           className="text-muted-foreground hover:text-foreground disabled:opacity-40"
                           aria-label="Retirer cet invité"
@@ -882,7 +885,7 @@ export function SessionCard({
                       setGuests(next)
                       setNewGuestFirstName('')
                       setNewGuestLastName('')
-                      mutation.mutate({ status: 'PRESENT', guests: next })
+                      mutation.mutate({ status: myAttendance!.status!, guests: next })
                     }}
                   >
                     Ajouter
@@ -910,15 +913,20 @@ export function SessionCard({
         )}
         {(() => {
           const presentCount = attendancesQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
-          const guestTotal =
-            attendancesQuery.data
-              ?.filter((a) => a.status === 'PRESENT')
-              .reduce((sum, a) => sum + a.guestCount, 0) ?? 0
-          if (presentCount === 0 || guestTotal === 0) return null
+          // Guests count regardless of the inviting player's own status — they can still
+          // show up even if whoever registered them ends up not coming themselves.
+          const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+          if (presentCount === 0 && guestTotal === 0) return null
           return (
             <p className="text-muted-foreground text-xs">
-              {presentCount} joueur{presentCount > 1 ? 's' : ''} + {guestTotal} invité
-              {guestTotal > 1 ? 's' : ''} ={' '}
+              {presentCount} joueur{presentCount > 1 ? 's' : ''}
+              {guestTotal > 0 && (
+                <>
+                  {' '}
+                  + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+                </>
+              )}
+              {' = '}
               <strong className="text-foreground">{presentCount + guestTotal} sur le terrain</strong>
             </p>
           )

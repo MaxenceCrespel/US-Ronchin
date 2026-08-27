@@ -75,14 +75,21 @@ export class TeamBalancingService {
       throw new NotFoundException('Séance introuvable');
     }
 
-    const presentAttendances = await this.attendancesRepository.find({
-      where: { trainingSessionId: sessionId, status: AttendanceStatus.PRESENT },
+    // A guest can still show up even if whoever registered them ends up Absent/Incertain
+    // themselves — so guests are pulled from every attendance row for this session, not
+    // just the PRESENT ones. Real player assignment below still only ever uses
+    // presentAttendances.
+    const allAttendances = await this.attendancesRepository.find({
+      where: { trainingSessionId: sessionId },
       relations: { user: true, guests: true },
     });
-    if (presentAttendances.length === 0) {
+    const presentAttendances = allAttendances.filter((a) => a.status === AttendanceStatus.PRESENT);
+    const guestSourceAttendances = allAttendances.filter((a) => a.guestCount > 0);
+    if (presentAttendances.length === 0 && guestSourceAttendances.length === 0) {
       throw new BadRequestException('Aucun joueur présent pour générer des équipes');
     }
-    const totalHeadcount = presentAttendances.reduce((sum, a) => sum + 1 + a.guestCount, 0);
+    const totalHeadcount =
+      presentAttendances.length + guestSourceAttendances.reduce((sum, a) => sum + a.guestCount, 0);
 
     const playerStats = await this.statsService.getPlayerStats();
     const scoreByUserId = new Map(playerStats.map((p) => [p.userId, p.skillScore]));
@@ -153,7 +160,7 @@ export class TeamBalancingService {
 
     // Guests ("+1"/"+2") have no skill data — spread them to keep team headcounts even instead.
     const guestAssignments: { userId: null; guestLabel: string; teamIndex: number }[] = [];
-    for (const attendance of presentAttendances) {
+    for (const attendance of guestSourceAttendances) {
       for (let i = 0; i < attendance.guestCount; i++) {
         const guest = attendance.guests?.[i];
         const label = guest
