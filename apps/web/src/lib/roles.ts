@@ -5,3 +5,10 @@ import type { User } from './types'
 export function hasCoachAccess(user: User | null | undefined): boolean {
   return user?.role === 'COACH' || user?.role === 'SUPERADMIN'
 }
+
+/** Strictly SUPERADMIN — unlike hasCoachAccess, a plain COACH does NOT pass this. Use for
+ * the handful of things reserved for the admin specifically (who's got notifications on,
+ * viewing another player's badge grid), not the wider coach toolset. */
+export function hasAdminAccess(user: User | null | undefined): boolean {
+  return user?.role === 'SUPERADMIN'
+}

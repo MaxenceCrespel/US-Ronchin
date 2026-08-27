@@ -46,7 +46,7 @@ import {
 import { approveUser, createInvitation } from '@/features/auth/api'
 import { SUB_POSITION_ABBR } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
-import { hasCoachAccess } from '@/lib/roles'
+import { hasAdminAccess, hasCoachAccess } from '@/lib/roles'
 import type { User, UserRole } from '@/lib/types'
 import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -525,13 +525,14 @@ function InvitePlayerDialog() {
 export function PlayersPage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
+  const isAdmin = hasAdminAccess(user)
   const queryClient = useQueryClient()
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
   const levelsQuery = useAllAccountLevels()
   const subscribedQuery = useQuery({
     queryKey: ['push-subscribed-users'],
     queryFn: fetchSubscribedUserIds,
-    enabled: isCoach,
+    enabled: isAdmin,
   })
   const subscribedIds = new Set(subscribedQuery.data ?? [])
 
@@ -562,7 +563,7 @@ export function PlayersPage() {
                 <TableHead>Statut</TableHead>
                 <TableHead>Poste</TableHead>
                 <TableHead>N°</TableHead>
-                {isCoach && <TableHead>Notifs</TableHead>}
+                {isAdmin && <TableHead>Notifs</TableHead>}
                 {isCoach && <TableHead>Compte</TableHead>}
                 {isCoach && <TableHead></TableHead>}
               </TableRow>
@@ -609,7 +610,7 @@ export function PlayersPage() {
                       : '—'}
                   </TableCell>
                   <TableCell>{player.jerseyNumber ?? '—'}</TableCell>
-                  {isCoach && (
+                  {isAdmin && (
                     <TableCell>
                       {subscribedIds.has(player.id) ? (
                         <span
@@ -652,7 +653,7 @@ export function PlayersPage() {
                   {isCoach && (
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <PlayerBadgesDialog player={player} />
+                        {isAdmin && <PlayerBadgesDialog player={player} />}
                         <EditPlayerDialog player={player} />
                         {player.id !== user?.id && <DeletePlayerDialog player={player} />}
                       </div>
