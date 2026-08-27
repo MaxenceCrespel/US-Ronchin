@@ -36,7 +36,7 @@ const TIER_RING: Record<AccountTier, string> = {
 // Mirrors the backend's TIER_THRESHOLDS/RARITY_WEIGHT (badges.service.ts) — duplicated
 // here purely for display since the API only returns the current/next tier, not the
 // full ladder or the point value of each rarity.
-const TIER_ORDER: AccountTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'RUBY']
+export const TIER_ORDER: AccountTier[] = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND', 'RUBY']
 const TIER_MIN_SCORE: Record<AccountTier, number> = {
   BRONZE: 0,
   SILVER: 5,

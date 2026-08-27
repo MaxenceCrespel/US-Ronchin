@@ -32,9 +32,13 @@ import {
   AccountLevelRing,
   TIER_BADGE_CLASS,
   TIER_LABELS,
+  TIER_ORDER,
   useAccountLevel,
 } from '@/components/AccountLevelRing'
 import { FootballSpinner } from '@/components/FootballSpinner'
+import { useCelebration } from '@/lib/useCelebration'
+import { Confetti } from '@/components/Confetti'
+import type { AccountTier } from '@/lib/types'
 
 function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -181,6 +185,23 @@ export function ProfilePage() {
   const [birthDate, setBirthDate] = useState(user?.birthDate ?? '')
 
   const levelQuery = useAccountLevel(user?.id ?? '')
+  const { active: tierUpCelebration, trigger: triggerTierUpCelebration } = useCelebration()
+  const [tierJustReached, setTierJustReached] = useState<AccountTier | null>(null)
+  useEffect(() => {
+    const tier = levelQuery.data?.tier
+    if (!tier || !user) return
+    const storageKey = `last-seen-tier-${user.id}`
+    const lastSeen = localStorage.getItem(storageKey) as AccountTier | null
+    // Only celebrate a real climb — a first-ever visit (no stored tier yet) shouldn't pop
+    // confetti for "Bronze", and a revoked badge dropping the tier back down shouldn't
+    // either.
+    if (lastSeen && TIER_ORDER.indexOf(tier) > TIER_ORDER.indexOf(lastSeen)) {
+      setTierJustReached(tier)
+      triggerTierUpCelebration()
+    }
+    if (tier !== lastSeen) localStorage.setItem(storageKey, tier)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelQuery.data?.tier, user?.id])
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -206,6 +227,12 @@ export function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-6">
+    <Confetti active={tierUpCelebration} />
+    {tierJustReached && (
+      <div className="border-club-gold bg-club-gold/10 animate-pop-in mx-auto flex w-full max-w-xl items-center justify-center gap-2 rounded-lg border px-4 py-3 text-center text-sm font-medium">
+        🎉 Nouveau palier — te voilà {TIER_LABELS[tierJustReached]} !
+      </div>
+    )}
     <Card className="mx-auto w-full max-w-xl" data-tour="profile-form">
       <CardHeader>
         <div className="flex items-center gap-4">
