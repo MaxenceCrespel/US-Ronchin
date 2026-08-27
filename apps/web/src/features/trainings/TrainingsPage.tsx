@@ -12,8 +12,10 @@ import {
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
+  ArrowRightLeft,
   CalendarX2,
   Check,
+  CheckCheck,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -25,6 +27,7 @@ import {
   Shuffle,
   Trash2,
   Trophy,
+  UserMinus,
   X,
 } from 'lucide-react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
@@ -48,6 +51,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
@@ -482,14 +486,14 @@ function TeamsSection({
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
       <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
           Équipes {teams.length > 0 ? '' : "(générées 30 min avant le coup d'envoi)"}
         </p>
         {isCoach && (
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 gap-1 px-2 text-xs"
+            className="h-8 gap-1.5 px-2 text-xs"
             disabled={generateMutation.isPending}
             onClick={() => generateMutation.mutate()}
           >
@@ -508,22 +512,24 @@ function TeamsSection({
           {Array.from({ length: teamCount }).map((_, teamIndex) => (
             <div
               key={teamIndex}
-              className={cn('rounded-md border p-2', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+              className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
             >
-              <p className="mb-1 text-xs font-semibold">{TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}</p>
-              <ul className="flex flex-col gap-0.5">
+              <p className="mb-1.5 text-sm font-semibold">{TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}</p>
+              <ul className="flex flex-col gap-1">
                 {teams
                   .filter((t) => t.teamIndex === teamIndex)
                   .map((t) => (
-                    <li key={t.id} className="flex items-center justify-between text-xs">
-                      <span className={cn(!t.user && 'text-muted-foreground italic')}>
+                    <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
+                      <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
                         {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
                       </span>
                       {isCoach && (
-                        <span className="flex shrink-0 items-center gap-2">
+                        <span className="flex shrink-0 items-center gap-1">
                           <button
                             type="button"
-                            className="text-muted-foreground hover:text-foreground cursor-pointer underline decoration-dotted"
+                            title="Déplacer dans l'autre équipe"
+                            aria-label="Déplacer dans l'autre équipe"
+                            className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
                             onClick={() =>
                               moveMutation.mutate({
                                 assignmentId: t.id,
@@ -531,13 +537,15 @@ function TeamsSection({
                               })
                             }
                           >
-                            déplacer
+                            <ArrowRightLeft className="size-3.5" />
                           </button>
                           {t.user && (
                             <button
                               type="button"
+                              title="Ne vient finalement pas"
+                              aria-label="Ne vient finalement pas"
                               disabled={removeMutation.isPending}
-                              className="text-muted-foreground hover:text-destructive cursor-pointer underline decoration-dotted disabled:opacity-40"
+                              className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                               onClick={() => {
                                 if (
                                   confirm(
@@ -548,7 +556,7 @@ function TeamsSection({
                                 }
                               }}
                             >
-                              retirer
+                              <UserMinus className="size-3.5" />
                             </button>
                           )}
                         </span>
@@ -605,7 +613,10 @@ function TeamsSection({
   )
 }
 
-function CoachValidationSection({
+/** Post-training coach checklist, in its own dialog rather than a cramped inline panel —
+ * gives the list room to breathe (avatars, full names, bigger tap targets) and a "Tout
+ * présent" bulk action, since most sessions the whole declared list actually did show up. */
+function CoachValidationDialog({
   sessionId,
   attendances,
 }: {
@@ -615,15 +626,23 @@ function CoachValidationSection({
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
-  const playersQuery = useQuery({
-    queryKey: ['players'],
-    queryFn: fetchPlayers,
-    enabled: open,
-  })
+  // Not gated on `open` (unlike most on-demand dialog queries elsewhere in this file) —
+  // the trigger button needs the roster to show its "X/Y pointés" progress before the
+  // coach ever opens it. React Query dedupes this against any other ['players'] fetch
+  // already in flight for the page, so it's not an extra request per card in practice.
+  const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
 
   const validateMutation = useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: AttendanceStatus }) =>
       validateAttendance(sessionId, userId, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+    },
+  })
+
+  const bulkPresentMutation = useMutation({
+    mutationFn: (userIds: string[]) =>
+      Promise.all(userIds.map((userId) => validateAttendance(sessionId, userId, 'PRESENT'))),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
     },
@@ -636,71 +655,123 @@ function CoachValidationSection({
   const players =
     me && !rosterPlayers.some((p) => p.id === me.id) ? [me, ...rosterPlayers] : rosterPlayers
 
-  return (
-    <div className="flex flex-col gap-2 border-t pt-3">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium tracking-wide uppercase"
-      >
-        <ClipboardCheck className="size-3.5" />
-        Pointage réel
-      </button>
-      {open && (
-        <div className="flex flex-col gap-1.5">
-          {players.map((player) => {
-            const declared = attendances.find((a) => a.userId === player.id)
-            const actual = declared?.actualStatus ?? null
-            const mismatch =
-              declared?.status && actual && declared.status !== actual
+  const actualByUserId = new Map(
+    attendances.map((a) => [a.userId, a.actualStatus ?? null] as const),
+  )
+  const pointedCount = players.filter((p) => actualByUserId.get(p.id)).length
+  const allPointed = players.length > 0 && pointedCount === players.length
+  const unpointedIds = players.filter((p) => !actualByUserId.get(p.id)).map((p) => p.id)
 
-            return (
-              <div key={player.id} className="flex items-center justify-between gap-2 text-xs">
-                <span className="flex min-w-0 items-center gap-1 truncate">
-                  {mismatch && <span title="Déclaration différente du pointage">🤥</span>}
-                  {player.firstName} {player.lastName}
-                  {declared?.status && (
-                    <span className="text-muted-foreground shrink-0">
-                      ({ATTENDANCE_STATUS_LABELS[declared.status]})
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(
+            'h-8 justify-start gap-2 text-xs',
+            allPointed ? 'border-emerald-500/40 text-emerald-700' : '',
+          )}
+        >
+          <ClipboardCheck className="size-3.5" />
+          Pointage réel
+          {players.length > 0 && (
+            <Badge variant={allPointed ? 'default' : 'secondary'} className="ml-auto">
+              {pointedCount}/{players.length}
+            </Badge>
+          )}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Pointage réel</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          {unpointedIds.length > 0 && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="gap-1.5 self-start"
+              disabled={bulkPresentMutation.isPending}
+              onClick={() => bulkPresentMutation.mutate(unpointedIds)}
+            >
+              <CheckCheck className="size-3.5" />
+              {bulkPresentMutation.isPending
+                ? 'Enregistrement...'
+                : `Tout présent (${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''})`}
+            </Button>
+          )}
+          <div className="flex flex-col divide-y">
+            {players.map((player) => {
+              const declared = attendances.find((a) => a.userId === player.id)
+              const actual = declared?.actualStatus ?? null
+              const mismatch = declared?.status && actual && declared.status !== actual
+
+              return (
+                <div key={player.id} className="flex items-center justify-between gap-2 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <PlayerAvatar
+                      firstName={player.firstName}
+                      lastName={player.lastName}
+                      avatarUrl={player.avatarUrl}
+                      size="sm"
+                    />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-medium">
+                        {player.firstName} {player.lastName}
+                      </span>
+                      {declared?.status && (
+                        <span
+                          className={cn(
+                            'text-muted-foreground text-xs',
+                            mismatch && 'text-amber-600',
+                          )}
+                        >
+                          Déclaré {ATTENDANCE_STATUS_LABELS[declared.status].toLowerCase()}
+                          {mismatch && ' — à vérifier'}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    disabled={validateMutation.isPending}
-                    onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
-                    className={cn(
-                      'flex size-6 items-center justify-center rounded-full border transition-colors',
-                      actual === 'PRESENT'
-                        ? 'border-emerald-500 bg-emerald-500 text-white'
-                        : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
-                    )}
-                    aria-label="Marquer présent"
-                  >
-                    <Check className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={validateMutation.isPending}
-                    onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
-                    className={cn(
-                      'flex size-6 items-center justify-center rounded-full border transition-colors',
-                      actual === 'ABSENT'
-                        ? 'border-destructive bg-destructive text-white'
-                        : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
-                    )}
-                    aria-label="Marquer absent"
-                  >
-                    <X className="size-3.5" />
-                  </button>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={validateMutation.isPending || bulkPresentMutation.isPending}
+                      onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
+                      className={cn(
+                        'flex size-8 items-center justify-center rounded-full border transition-colors',
+                        actual === 'PRESENT'
+                          ? 'border-emerald-500 bg-emerald-500 text-white'
+                          : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
+                      )}
+                      aria-label="Marquer présent"
+                    >
+                      <Check className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={validateMutation.isPending || bulkPresentMutation.isPending}
+                      onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
+                      className={cn(
+                        'flex size-8 items-center justify-center rounded-full border transition-colors',
+                        actual === 'ABSENT'
+                          ? 'border-destructive bg-destructive text-white'
+                          : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
+                      )}
+                      aria-label="Marquer absent"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
+          </div>
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1032,7 +1103,15 @@ export function SessionCard({
           )
         })()}
         {!cancelled && isCoach && (
-          <CoachValidationSection sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
+          // Coach-only actions get their own tinted block, set apart from the self-service
+          // attendance controls above — previously the pointage trigger was a tiny
+          // collapsed text link buried at the bottom of an otherwise undifferentiated stack.
+          <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3">
+            <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+              Espace coach
+            </p>
+            <CoachValidationDialog sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
+          </div>
         )}
         {!cancelled && (
           <TeamsSection
