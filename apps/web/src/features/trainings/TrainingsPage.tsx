@@ -74,7 +74,7 @@ import {
   updateTraining,
   validateAttendance,
 } from './api'
-import { fetchTeams, generateTeams, moveTeamPlayer } from './teams-api'
+import { confirmFinalTeams, fetchTeams, generateTeams, moveTeamPlayer } from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
@@ -648,6 +648,19 @@ function CoachValidationDialog({
     },
   })
 
+  // Shares its cache with TeamsSection's identical query key — just here to know whether
+  // teams exist yet, so "Confirmer l'équipe finale" only shows once there's something to
+  // reconcile against.
+  const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
+
+  const confirmTeamsMutation = useMutation({
+    mutationFn: () => confirmFinalTeams(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+    },
+  })
+
   // A non-playing coach isn't a "roster player" and would otherwise never see themselves
   // here — but a coach who actually attended still needs to be able to point themselves.
   const rosterPlayers = (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
@@ -688,11 +701,29 @@ function CoachValidationDialog({
           <DialogTitle>Pointage réel</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          {allPointed && (
-            <p className="text-muted-foreground rounded-md border border-dashed p-2 text-xs">
-              Pointage terminé — pense à cliquer sur <strong>Régénérer</strong> dans « Équipes »
-              pour que la composition finale et le classement reflètent qui était vraiment là.
-            </p>
+          {allPointed && (teamsQuery.data?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+              <p className="text-muted-foreground text-xs">
+                Pointage terminé — confirme l'équipe finale pour retirer les absents de
+                dernière minute et ajouter ceux qui sont venus sans être prévus.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="gap-1.5 self-start"
+                disabled={confirmTeamsMutation.isPending}
+                onClick={() => confirmTeamsMutation.mutate()}
+              >
+                <CheckCheck className="size-3.5" />
+                {confirmTeamsMutation.isPending
+                  ? 'Confirmation...'
+                  : "Confirmer l'équipe finale"}
+              </Button>
+              {confirmTeamsMutation.isSuccess && (
+                <p className="text-xs text-emerald-600">Équipes mises à jour ✓</p>
+              )}
+            </div>
           )}
           {unpointedIds.length > 0 && (
             <Button

@@ -38,6 +38,17 @@ export class TeamBalancingController {
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 
+  // Post-training reconciliation against the coach's pointage réel — distinct from
+  // generate/regenerate above, which fully re-balances from scratch and is only right
+  // before kickoff. See TeamBalancingService.confirmFinalTeams for why.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Patch('confirm')
+  async confirm(@Param('sessionId') sessionId: string) {
+    const teams = await this.teamBalancingService.confirmFinalTeams(sessionId);
+    return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch()

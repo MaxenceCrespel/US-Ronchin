@@ -204,6 +204,79 @@ export class TeamBalancingService {
     return this.getTeams(sessionId);
   }
 
+  /** Post-training reconciliation, distinct from generateTeams: the pre-training
+   * "Générer"/"Régénérer" fully re-balances by skill from scratch, which is right before
+   * kickoff but wrong afterwards — the match was already played with whoever actually
+   * showed up, and a full reshuffle would scramble that real split. This only removes
+   * no-shows ("faux plan" — declared present, actually absent) and adds anyone who showed
+   * up without having been on the original list ("présent de dernière minute"), leaving
+   * everyone else's team untouched. Coach calls this from the pointage réel dialog once
+   * attendance is confirmed, so the final roster (and the ranking built from it) matches
+   * who was really there. */
+  async confirmFinalTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
+    const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new NotFoundException('Séance introuvable');
+    }
+
+    const existingAssignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId: sessionId },
+    });
+    if (existingAssignments.length === 0) {
+      throw new BadRequestException(
+        "Aucune équipe générée pour cette séance — génère-les d'abord.",
+      );
+    }
+    const teamCount = Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1;
+
+    const allAttendances = await this.attendancesRepository.find({
+      where: { trainingSessionId: sessionId },
+    });
+    const effectivePresentUserIds = new Set(
+      allAttendances
+        .filter((a) => (a.actualStatus ?? a.status) === AttendanceStatus.PRESENT)
+        .map((a) => a.userId),
+    );
+
+    // No-shows: real-player slots (never guest slots — a guest can still have shown up
+    // even if whoever invited them is marked absent for real) whose effective status
+    // isn't PRESENT any more.
+    const noShows = existingAssignments.filter(
+      (a) => a.userId && !effectivePresentUserIds.has(a.userId),
+    );
+    if (noShows.length > 0) {
+      await this.assignmentsRepository.delete(noShows.map((a) => a.id));
+    }
+
+    const remaining = existingAssignments.filter((a) => !noShows.includes(a));
+    const teamCounts = new Array(teamCount).fill(0);
+    for (const a of remaining) teamCounts[a.teamIndex]++;
+
+    // Last-minute arrivals: effectively present but not on any team yet — spread across
+    // teams by current headcount, same treatment as a guest, since there's no reliable
+    // skill-balance reason to prefer one team over another for someone added after kickoff.
+    const currentUserIds = new Set(remaining.filter((a) => a.userId).map((a) => a.userId));
+    const newcomerIds = [...effectivePresentUserIds].filter((id) => !currentUserIds.has(id));
+    if (newcomerIds.length > 0) {
+      const newAssignments = newcomerIds.map((userId) => {
+        let minTeam = 0;
+        for (let i = 1; i < teamCount; i++) {
+          if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
+        }
+        teamCounts[minTeam] += 1;
+        return this.assignmentsRepository.create({
+          trainingSessionId: sessionId,
+          userId,
+          guestLabel: null,
+          teamIndex: minTeam,
+        });
+      });
+      await this.assignmentsRepository.save(newAssignments);
+    }
+
+    return this.getTeams(sessionId);
+  }
+
   async moveAssignment(
     sessionId: string,
     assignmentId: string,
