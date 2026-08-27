@@ -1283,11 +1283,23 @@ export function TrainingsPage() {
   // Deep link from elsewhere (e.g. the home page's "Programme de la semaine") straight to
   // one training's detail dialog, instead of just landing on this page generically.
   const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkSessionId = searchParams.get('session')
+
+  // sessionsQuery only ever covers the currently displayed week — a target session from a
+  // different week (e.g. next week's) is never in sessionsQuery.data, so the effect below
+  // used to silently no-op forever. This unscoped lookup (only runs while a deep link is
+  // pending) finds the session regardless of week so its week can be jumped to first.
+  const deepLinkLookupQuery = useQuery({
+    queryKey: ['training-sessions', 'deep-link', deepLinkSessionId],
+    queryFn: () => fetchSessions(),
+    enabled: !!deepLinkSessionId,
+  })
+
   useEffect(() => {
-    const targetId = searchParams.get('session')
-    if (!targetId || !sessionsQuery.data) return
-    const target = sessionsQuery.data.find((s) => s.id === targetId)
+    if (!deepLinkSessionId || !deepLinkLookupQuery.data) return
+    const target = deepLinkLookupQuery.data.find((s) => s.id === deepLinkSessionId)
     if (!target) return
+    setWeekStart(startOfWeek(new Date(`${target.date}T00:00:00`), { weekStartsOn: 1 }))
     setSelectedDate(target.date)
     setActiveSessionId(target.id)
     setSearchParams((prev) => {
@@ -1296,7 +1308,7 @@ export function TrainingsPage() {
       return next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, sessionsQuery.data])
+  }, [deepLinkSessionId, deepLinkLookupQuery.data])
 
   return (
     <div className="flex flex-col gap-4">

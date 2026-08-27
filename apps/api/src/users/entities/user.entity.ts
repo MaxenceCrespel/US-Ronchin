@@ -110,6 +110,12 @@ export class User {
   @Column({ name: 'last_seen_at', type: 'timestamp', nullable: true })
   lastSeenAt: Date | null;
 
+  /** Set once the client detects it's running in standalone/installed mode (see
+   * InstallAppBanner.tsx, POST /activity/pwa-install) — never cleared, since there's no
+   * reliable client-side signal for an uninstall. Feeds the superadmin dashboard. */
+  @Column({ name: 'pwa_installed_at', type: 'timestamp', nullable: true })
+  pwaInstalledAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

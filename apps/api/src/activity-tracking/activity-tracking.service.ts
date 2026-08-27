@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from '../users/entities/user.entity';
+import { PushSubscription } from '../push-notifications/entities/push-subscription.entity';
 import { UserActivityDay } from './entities/user-activity-day.entity';
 
 export interface UserActivityKpi {
@@ -13,6 +14,8 @@ export interface UserActivityKpi {
   activeDaysLast7: number;
   activeDaysLast30: number;
   last7Days: boolean[];
+  pwaInstalled: boolean;
+  notificationsEnabled: boolean;
 }
 
 export interface AdminKpisResponse {
@@ -35,6 +38,8 @@ export class ActivityTrackingService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(UserActivityDay)
     private readonly activityDaysRepository: Repository<UserActivityDay>,
+    @InjectRepository(PushSubscription)
+    private readonly pushSubscriptionsRepository: Repository<PushSubscription>,
   ) {}
 
   /** Fire-and-forget from the global interceptor — never allowed to throw into the request path. */
@@ -52,15 +57,28 @@ export class ActivityTrackingService {
     ]);
   }
 
+  /** Client self-reports once it detects standalone/installed display mode (see
+   * InstallAppBanner.tsx) — a no-op once already recorded. */
+  async recordPwaInstall(userId: string): Promise<void> {
+    await this.usersRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({ pwaInstalledAt: () => 'COALESCE(pwa_installed_at, now())' })
+      .where('id = :userId', { userId })
+      .execute();
+  }
+
   async getKpis(): Promise<AdminKpisResponse> {
     const since = new Date(Date.now() - 29 * DAY_MS);
     const sinceIso = isoDate(since);
 
-    const [users, allDays] = await Promise.all([
+    const [users, allDays, subscriptions] = await Promise.all([
       this.usersRepository.find(),
       this.activityDaysRepository.find(),
+      this.pushSubscriptionsRepository.find(),
     ]);
     const recentDays = allDays.filter((r) => r.date >= sinceIso);
+    const subscribedUserIds = new Set(subscriptions.map((s) => s.userId));
 
     const daysByUser = new Map<string, Set<string>>();
     for (const row of recentDays) {
@@ -87,6 +105,8 @@ export class ActivityTrackingService {
         activeDaysLast7: [...activeDates].filter((d) => d >= last7Cutoff).length,
         activeDaysLast30: [...activeDates].filter((d) => d >= last30Cutoff).length,
         last7Days: last7Dates.map((d) => activeDates.has(d)),
+        pwaInstalled: user.pwaInstalledAt !== null,
+        notificationsEnabled: subscribedUserIds.has(user.id),
       };
     });
 

@@ -10,6 +10,8 @@ export interface UserActivityKpi {
   activeDaysLast7: number
   activeDaysLast30: number
   last7Days: boolean[]
+  pwaInstalled: boolean
+  notificationsEnabled: boolean
 }
 
 export interface AdminKpisResponse {

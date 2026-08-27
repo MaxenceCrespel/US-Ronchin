@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { Bell, BellOff, Smartphone } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -40,7 +41,7 @@ export function AdminKpisPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader>
             <CardDescription>Actifs cette semaine</CardDescription>
@@ -63,6 +64,24 @@ export function AdminKpisPage() {
             <CardTitle className="text-2xl">{data?.totalUsers ?? '—'}</CardTitle>
           </CardHeader>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Appli installée</CardDescription>
+            <CardTitle className="text-2xl">
+              {data ? `${data.players.filter((p) => p.pwaInstalled).length}/${data.totalUsers}` : '—'}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Notifications activées</CardDescription>
+            <CardTitle className="text-2xl">
+              {data
+                ? `${data.players.filter((p) => p.notificationsEnabled).length}/${data.totalUsers}`
+                : '—'}
+            </CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
@@ -80,6 +99,8 @@ export function AdminKpisPage() {
                 <TableHead>7 derniers jours</TableHead>
                 <TableHead>Jours actifs / 7</TableHead>
                 <TableHead>Jours actifs / 30</TableHead>
+                <TableHead>Appli</TableHead>
+                <TableHead>Notifs</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -104,6 +125,40 @@ export function AdminKpisPage() {
                   </TableCell>
                   <TableCell>{p.activeDaysLast7}/7</TableCell>
                   <TableCell>{p.activeDaysLast30}/30</TableCell>
+                  <TableCell>
+                    {p.pwaInstalled ? (
+                      <span
+                        className="inline-flex items-center gap-1 text-emerald-600"
+                        title="Appli installée"
+                      >
+                        <Smartphone className="size-3.5" />
+                      </span>
+                    ) : (
+                      <span
+                        className="text-muted-foreground inline-flex items-center gap-1"
+                        title="Appli non installée"
+                      >
+                        <Smartphone className="size-3.5 opacity-40" />
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {p.notificationsEnabled ? (
+                      <span
+                        className="inline-flex items-center gap-1 text-emerald-600"
+                        title="A activé les notifications"
+                      >
+                        <Bell className="size-3.5" />
+                      </span>
+                    ) : (
+                      <span
+                        className="text-muted-foreground inline-flex items-center gap-1"
+                        title="N'a pas activé les notifications"
+                      >
+                        <BellOff className="size-3.5" />
+                      </span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

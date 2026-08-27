@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, Share, SquarePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { apiClient } from '@/lib/api-client'
 import { isStandalone } from '@/lib/pwa'
 
 const DISMISSED_KEY = 'install-banner-dismissed'
@@ -39,7 +40,13 @@ export function InstallAppBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
-    if (isStandalone() || wasDismissed()) return
+    if (isStandalone()) {
+      // Fire-and-forget self-report for the superadmin dashboard — no-op server-side once
+      // already recorded, so it's fine to call this on every standalone launch.
+      apiClient.post('/activity/pwa-install').catch(() => {})
+      return
+    }
+    if (wasDismissed()) return
 
     if (isIos()) {
       setVisible(true)
