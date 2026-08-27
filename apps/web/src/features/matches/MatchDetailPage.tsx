@@ -1162,6 +1162,33 @@ export function MatchDetailPage() {
                   }))}
                 onSwap={() => {}}
               />
+              {(compositionQuery.data ?? []).some((e) => e.isStarter && !e.user) && isCoach && (
+                <div className="flex w-full flex-col gap-1.5 sm:w-40 sm:pt-2">
+                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                    Titulaires à lier
+                  </p>
+                  {/* PitchFormationEditor draws starters on the pitch itself with no per-slot
+                      link-account affordance — a guest starter (unlike a guest sub, listed
+                      below) had no way to be linked once a formation was saved. */}
+                  {(compositionQuery.data ?? [])
+                    .filter((entry) => entry.isStarter && !entry.user)
+                    .map((entry) => (
+                      <div key={entry.id} className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 text-sm">
+                          <PlayerAvatar
+                            avatarUrl={undefined}
+                            firstName={entry.guestFirstName ?? ''}
+                            lastName={entry.guestLastName ?? ''}
+                            shirtNumber={entry.shirtNumber}
+                            size="sm"
+                          />
+                          {entry.guestFirstName} {entry.guestLastName}
+                        </div>
+                        <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                      </div>
+                    ))}
+                </div>
+              )}
               {(compositionQuery.data ?? []).some((e) => !e.isStarter) && (
                 <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
                   <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
