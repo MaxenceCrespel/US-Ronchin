@@ -38,6 +38,23 @@ export class AttendancesController {
     );
   }
 
+  // Coach correcting a mistaken declaration ("said Present, isn't coming after all") —
+  // distinct from setMine (self-service, locked 30 min before kickoff) and from
+  // validate/actual (the post-hoc real-attendance record). This edits the same declared
+  // status that team generation reads from, specifically so the coach can fix it and then
+  // regenerate — bypasses the lock entirely since fixing it before regenerating is the
+  // whole point.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Put(':userId')
+  setForPlayer(
+    @Param('sessionId') sessionId: string,
+    @Param('userId') userId: string,
+    @Body() dto: SetAttendanceDto,
+  ) {
+    return this.attendancesService.setAttendance(sessionId, userId, dto.status, dto.guests, true);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Put(':userId/actual')

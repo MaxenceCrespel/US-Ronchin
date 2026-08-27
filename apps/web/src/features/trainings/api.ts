@@ -84,6 +84,23 @@ export async function setMyAttendance(
   return data
 }
 
+/** Coach-only: corrects a player's declared status (e.g. "said Present, isn't coming
+ * after all") — bypasses the presence lock entirely, since fixing this before hitting
+ * "Régénérer" is the whole point. Distinct from validateAttendance below, which records
+ * the post-hoc real-attendance for stats/badges rather than editing what team generation
+ * reads from. */
+export async function coachSetAttendance(
+  sessionId: string,
+  userId: string,
+  status: AttendanceStatus,
+): Promise<Attendance> {
+  const { data } = await apiClient.put<Attendance>(
+    `/training-sessions/${sessionId}/attendance/${userId}`,
+    { status },
+  )
+  return data
+}
+
 export async function validateAttendance(
   sessionId: string,
   userId: string,

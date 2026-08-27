@@ -33,25 +33,33 @@ export class AttendancesService {
     userId: string,
     status: AttendanceStatus,
     guests: GuestNameInput[] = [],
+    // Coach-only correction (see coachSetAttendance below) — a mistaken declaration ("said
+    // Present, isn't coming") needs fixing regardless of the lock, since the whole point is
+    // to fix it before regenerating teams. A player editing their own answer never sets this.
+    bypassLock = false,
   ): Promise<Attendance> {
     const session = await this.sessionsRepository.findOne({ where: { id: trainingSessionId } });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
     }
-    // Locked from 30 min before kickoff — the same moment the teams get auto-generated
-    // from declared presence, a late change at that point would desync the teams from
-    // who's actually shown up.
-    const lockAt =
-      new Date(`${session.date}T${session.startTime}`).getTime() - 30 * 60_000;
-    if (Date.now() >= lockAt) {
-      throw new BadRequestException(
-        "Les équipes ont été générées, tu ne peux plus modifier ta présence",
-      );
-    }
 
     let attendance = await this.attendancesRepository.findOne({
       where: { trainingSessionId, userId },
     });
+
+    // Locked from 30 min before kickoff — the same moment the teams get auto-generated
+    // from declared presence, a late status flip would desync the teams from who's
+    // actually shown up. A last-minute +1 doesn't have that problem the same way — it
+    // doesn't change who the coach thinks is coming, just adds a body — so it's still
+    // allowed past the lock as long as the status itself isn't changing; the coach can
+    // regenerate teams afterwards to fold the guest in.
+    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime() - 30 * 60_000;
+    const statusChanged = !attendance || attendance.status !== status;
+    if (!bypassLock && Date.now() >= lockAt && statusChanged) {
+      throw new BadRequestException(
+        "Les équipes ont été générées, tu ne peux plus modifier ta présence",
+      );
+    }
 
     if (!attendance) {
       attendance = this.attendancesRepository.create({

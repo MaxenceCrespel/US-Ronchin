@@ -57,6 +57,7 @@ import type { Attendance, AttendanceStatus, Match, TrainingType } from '@/lib/ty
 import { isRosterPlayer } from '@/lib/roster'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import {
+  coachSetAttendance,
   createTraining,
   deleteSession,
   deleteTraining,
@@ -434,6 +435,15 @@ function TeamsSection({ sessionId, isCoach }: { sessionId: string; isCoach: bool
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
   })
 
+  // Corrects a declared "Présent" that turned out wrong (said they'd come, didn't) so a
+  // follow-up "Régénérer" reflects it — bypasses the lock entirely, coach-only.
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) => coachSetAttendance(sessionId, userId, 'ABSENT'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+    },
+  })
+
   const teams = teamsQuery.data ?? []
   // Fixed at TEAM_LABELS.length (generateTeams always creates exactly 2 teams,
   // see the call above) rather than derived from which teamIndex values are
@@ -485,18 +495,38 @@ function TeamsSection({ sessionId, isCoach }: { sessionId: string; isCoach: bool
                         {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
                       </span>
                       {isCoach && (
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-foreground cursor-pointer underline decoration-dotted"
-                          onClick={() =>
-                            moveMutation.mutate({
-                              assignmentId: t.id,
-                              teamIndex: (teamIndex + 1) % teamCount,
-                            })
-                          }
-                        >
-                          déplacer
-                        </button>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground cursor-pointer underline decoration-dotted"
+                            onClick={() =>
+                              moveMutation.mutate({
+                                assignmentId: t.id,
+                                teamIndex: (teamIndex + 1) % teamCount,
+                              })
+                            }
+                          >
+                            déplacer
+                          </button>
+                          {t.user && (
+                            <button
+                              type="button"
+                              disabled={removeMutation.isPending}
+                              className="text-muted-foreground hover:text-destructive cursor-pointer underline decoration-dotted disabled:opacity-40"
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    `${t.user!.firstName} ne vient finalement pas — le marquer absent ?`,
+                                  )
+                                ) {
+                                  removeMutation.mutate(t.user!.id)
+                                }
+                              }}
+                            >
+                              retirer
+                            </button>
+                          )}
+                        </span>
                       )}
                     </li>
                   ))}
