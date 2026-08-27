@@ -12,3 +12,9 @@ export async function subscribePush(subscription: PushSubscriptionJSON): Promise
 export async function unsubscribePush(endpoint: string): Promise<void> {
   await apiClient.delete('/push/subscribe', { data: { endpoint } })
 }
+
+/** Coach-only — user ids with at least one active push subscription. */
+export async function fetchSubscribedUserIds(): Promise<string[]> {
+  const { data } = await apiClient.get<string[]>('/push/subscribed-users')
+  return data
+}

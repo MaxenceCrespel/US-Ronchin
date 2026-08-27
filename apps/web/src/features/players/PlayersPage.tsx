@@ -1,7 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { Award, Check, Copy, Link2, Pencil, QrCode, RefreshCw, Trash2, TriangleAlert } from 'lucide-react'
+import {
+  Award,
+  Bell,
+  BellOff,
+  Check,
+  Copy,
+  Link2,
+  Pencil,
+  QrCode,
+  RefreshCw,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +52,7 @@ import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from '
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
+import { fetchSubscribedUserIds } from '@/features/push/api'
 import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 
 function JoinLinkCard() {
@@ -515,6 +528,12 @@ export function PlayersPage() {
   const queryClient = useQueryClient()
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
   const levelsQuery = useAllAccountLevels()
+  const subscribedQuery = useQuery({
+    queryKey: ['push-subscribed-users'],
+    queryFn: fetchSubscribedUserIds,
+    enabled: isCoach,
+  })
+  const subscribedIds = new Set(subscribedQuery.data ?? [])
 
   const approveMutation = useMutation({
     mutationFn: (userId: string) => approveUser(userId),
@@ -543,6 +562,7 @@ export function PlayersPage() {
                 <TableHead>Statut</TableHead>
                 <TableHead>Poste</TableHead>
                 <TableHead>N°</TableHead>
+                {isCoach && <TableHead>Notifs</TableHead>}
                 {isCoach && <TableHead>Compte</TableHead>}
                 {isCoach && <TableHead></TableHead>}
               </TableRow>
@@ -589,6 +609,25 @@ export function PlayersPage() {
                       : '—'}
                   </TableCell>
                   <TableCell>{player.jerseyNumber ?? '—'}</TableCell>
+                  {isCoach && (
+                    <TableCell>
+                      {subscribedIds.has(player.id) ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-emerald-600"
+                          title="A activé les notifications"
+                        >
+                          <Bell className="size-3.5" />
+                        </span>
+                      ) : (
+                        <span
+                          className="text-muted-foreground inline-flex items-center gap-1"
+                          title="N'a pas activé les notifications"
+                        >
+                          <BellOff className="size-3.5" />
+                        </span>
+                      )}
+                    </TableCell>
+                  )}
                   {isCoach && (
                     <TableCell>
                       {player.status === 'PENDING' ? (

@@ -65,6 +65,17 @@ export class PushNotificationsService {
     await this.subscriptionsRepository.delete({ userId, endpoint });
   }
 
+  /** Distinct users with at least one active subscription — a player can have several
+   * (phone + laptop), only whether they have any matters here. Coach-facing "who's
+   * actually reachable" view. */
+  async getSubscribedUserIds(): Promise<string[]> {
+    const rows = await this.subscriptionsRepository
+      .createQueryBuilder('sub')
+      .select('DISTINCT sub.user_id', 'userId')
+      .getRawMany<{ userId: string }>();
+    return rows.map((r) => r.userId);
+  }
+
   async sendToUser(userId: string, payload: PushPayload): Promise<void> {
     const subscriptions = await this.subscriptionsRepository.find({
       where: { userId },
