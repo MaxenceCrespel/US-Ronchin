@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -14,13 +13,10 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
-import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
-import { cn } from '@/lib/utils'
+import { FOOT_LABELS } from '@/lib/labels'
+import { PositionPicker } from '@/components/PositionPicker'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
 import { updateProfile } from './api'
-
-// Matches the backend's @ArrayMaxSize(3) on UpdateProfileDto.positions — see ProfilePage.tsx.
-const MAX_POSITIONS = 3
 
 export function CompleteProfilePage() {
   const user = useAuthStore((s) => s.user)
@@ -68,38 +64,8 @@ export function CompleteProfilePage() {
               mutation.mutate()
             }}
           >
-            <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label>
-                Postes ({positions.length}/{MAX_POSITIONS})
-              </Label>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => {
-                  const checked = positions.includes(value as PlayerSubPosition)
-                  const disabled = !checked && positions.length >= MAX_POSITIONS
-                  return (
-                    <div key={value} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`position-${value}`}
-                        checked={checked}
-                        disabled={disabled}
-                        onCheckedChange={(next) =>
-                          setPositions((prev) =>
-                            next
-                              ? [...prev, value as PlayerSubPosition]
-                              : prev.filter((p) => p !== value),
-                          )
-                        }
-                      />
-                      <Label
-                        htmlFor={`position-${value}`}
-                        className={cn('text-sm font-normal', disabled && 'text-muted-foreground')}
-                      >
-                        {label}
-                      </Label>
-                    </div>
-                  )
-                })}
-              </div>
+            <div className="sm:col-span-2">
+              <PositionPicker value={positions} onChange={setPositions} />
             </div>
 
             <div className="flex flex-col gap-1.5">

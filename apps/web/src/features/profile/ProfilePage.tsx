@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -22,7 +21,8 @@ import { resizeImageFile } from '@/lib/image-resize'
 import { updateProfile, uploadAvatar, deleteAvatar } from './api'
 import { changePassword } from '@/features/auth/api'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
-import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
+import { FOOT_LABELS } from '@/lib/labels'
+import { PositionPicker } from '@/components/PositionPicker'
 import { fetchSettings, updateSettings } from '@/features/settings/api'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
@@ -39,11 +39,6 @@ import { FootballSpinner } from '@/components/FootballSpinner'
 import { useCelebration } from '@/lib/useCelebration'
 import { Confetti } from '@/components/Confetti'
 import type { AccountTier } from '@/lib/types'
-
-// Matches the backend's @ArrayMaxSize(3) on UpdateProfileDto.positions — a genuinely
-// versatile player covers 2-3 positions realistically; without a cap, a few players were
-// selecting every single one, which broke team-balancing's band-coverage safety net.
-const MAX_POSITIONS = 3
 
 function ChangePasswordCard() {
   const [currentPassword, setCurrentPassword] = useState('')
@@ -386,39 +381,7 @@ export function ProfilePage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label>
-              Postes ({positions.length}/{MAX_POSITIONS})
-            </Label>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-              {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => {
-                const checked = positions.includes(value as PlayerSubPosition)
-                const disabled = !checked && positions.length >= MAX_POSITIONS
-                return (
-                  <div key={value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`position-${value}`}
-                      checked={checked}
-                      disabled={disabled}
-                      onCheckedChange={(next) =>
-                        setPositions((prev) =>
-                          next
-                            ? [...prev, value as PlayerSubPosition]
-                            : prev.filter((p) => p !== value),
-                        )
-                      }
-                    />
-                    <Label
-                      htmlFor={`position-${value}`}
-                      className={cn('text-sm font-normal', disabled && 'text-muted-foreground')}
-                    >
-                      {label}
-                    </Label>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <PositionPicker value={positions} onChange={setPositions} />
         </CardContent>
       </Card>
 

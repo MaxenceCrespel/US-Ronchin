@@ -8,6 +8,7 @@ import { JoinWaitingPage } from '@/features/auth/JoinWaitingPage'
 import { HomePage } from '@/features/home/HomePage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { CompleteProfilePage } from '@/features/profile/CompleteProfilePage'
+import { FixPositionsPage } from '@/features/profile/FixPositionsPage'
 import { AdminKpisPage } from '@/features/admin/AdminKpisPage'
 import { TrainingsPage } from '@/features/trainings/TrainingsPage'
 import { PlayersPage } from '@/features/players/PlayersPage'
@@ -26,6 +27,7 @@ function App() {
 
       <Route element={<RequireAuth />}>
         <Route path="/complete-profile" element={<CompleteProfilePage />} />
+        <Route path="/fix-positions" element={<FixPositionsPage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/trainings" element={<TrainingsPage />} />
