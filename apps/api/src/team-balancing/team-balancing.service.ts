@@ -4,6 +4,7 @@ import { In, Repository } from 'typeorm';
 import { TrainingTeamAssignment } from './entities/training-team-assignment.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
+import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
@@ -47,6 +48,8 @@ export class TeamBalancingService {
     private readonly sessionsRepository: Repository<TrainingSession>,
     @InjectRepository(Attendance)
     private readonly attendancesRepository: Repository<Attendance>,
+    @InjectRepository(AttendanceGuest)
+    private readonly attendanceGuestsRepository: Repository<AttendanceGuest>,
     private readonly statsService: StatsService,
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
@@ -186,6 +189,7 @@ export class TeamBalancingService {
       userId: null;
       guestLabel: string;
       guestPosition: PlayerSubPosition | null;
+      attendanceGuestId: string | null;
       teamIndex: number;
     }[] = [];
     for (const attendance of guestSourceAttendances) {
@@ -218,6 +222,7 @@ export class TeamBalancingService {
           userId: null,
           guestLabel: label,
           guestPosition: guest?.position ?? null,
+          attendanceGuestId: guest?.id ?? null,
           teamIndex: minTeam,
         });
       }
@@ -308,6 +313,45 @@ export class TeamBalancingService {
         });
       });
       await this.assignmentsRepository.save(newAssignments);
+    }
+
+    return this.getTeams(sessionId);
+  }
+
+  /** Coach removes one specific guest from a team — e.g. they said they'd bring a +1 who
+   * ends up not coming. Deletes the team slot immediately (unlike a real player's "retirer",
+   * which only flips their status and waits for the next Régénérer/Confirmer) and cleans up
+   * the source AttendanceGuest so a later regeneration doesn't just recreate the slot. */
+  async removeGuestFromTeam(
+    sessionId: string,
+    assignmentId: string,
+  ): Promise<TrainingTeamAssignment[]> {
+    const assignment = await this.assignmentsRepository.findOne({
+      where: { id: assignmentId, trainingSessionId: sessionId },
+    });
+    if (!assignment) {
+      throw new NotFoundException('Affectation introuvable');
+    }
+    if (assignment.userId) {
+      throw new BadRequestException(
+        "Ce n'est pas un invité — utilise le pointage réel pour un joueur.",
+      );
+    }
+
+    await this.assignmentsRepository.delete(assignment.id);
+
+    if (assignment.attendanceGuestId) {
+      const guest = await this.attendanceGuestsRepository.findOne({
+        where: { id: assignment.attendanceGuestId },
+      });
+      if (guest) {
+        await this.attendanceGuestsRepository.delete(guest.id);
+        await this.attendancesRepository.decrement(
+          { id: guest.attendanceId },
+          'guestCount',
+          1,
+        );
+      }
     }
 
     return this.getTeams(sessionId);

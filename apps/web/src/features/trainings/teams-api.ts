@@ -29,6 +29,18 @@ export async function confirmFinalTeams(sessionId: string): Promise<TrainingTeam
   return data
 }
 
+/** Removes one guest slot immediately — unlike a real player, a guest has no status to flip
+ * and wait for the next Régénérer/Confirmer, so this takes effect right away. */
+export async function removeGuestFromTeam(
+  sessionId: string,
+  assignmentId: string,
+): Promise<TrainingTeamAssignment[]> {
+  const { data } = await apiClient.delete<TrainingTeamAssignment[]>(
+    `/training-sessions/${sessionId}/teams/${assignmentId}`,
+  )
+  return data
+}
+
 export async function moveTeamPlayer(
   sessionId: string,
   assignmentId: string,

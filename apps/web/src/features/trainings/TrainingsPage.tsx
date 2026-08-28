@@ -74,7 +74,7 @@ import {
   updateTraining,
   validateAttendance,
 } from './api'
-import { confirmFinalTeams, fetchTeams, generateTeams, moveTeamPlayer } from './teams-api'
+import { confirmFinalTeams, fetchTeams, generateTeams, moveTeamPlayer, removeGuestFromTeam } from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
@@ -474,6 +474,17 @@ function TeamsSection({
     },
   })
 
+  // Guests have no status to flip — this removes the slot (and its source AttendanceGuest)
+  // outright, so it takes effect immediately instead of waiting for the next
+  // Régénérer/Confirmer like the real-player "retirer" above.
+  const removeGuestMutation = useMutation({
+    mutationFn: (assignmentId: string) => removeGuestFromTeam(sessionId, assignmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+    },
+  })
+
   const teams = teamsQuery.data ?? []
   // Fixed at TEAM_LABELS.length (generateTeams always creates exactly 2 teams,
   // see the call above) rather than derived from which teamIndex values are
@@ -543,7 +554,7 @@ function TeamsSection({
                           >
                             <ArrowRightLeft className="size-3.5" />
                           </button>
-                          {t.user && (
+                          {t.user ? (
                             <button
                               type="button"
                               title="Ne vient finalement pas"
@@ -557,6 +568,21 @@ function TeamsSection({
                                   )
                                 ) {
                                   removeMutation.mutate(t.user!.id)
+                                }
+                              }}
+                            >
+                              <UserMinus className="size-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Retirer cet invité"
+                              aria-label="Retirer cet invité"
+                              disabled={removeGuestMutation.isPending}
+                              className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                              onClick={() => {
+                                if (confirm(`Retirer ${t.guestLabel} de l'équipe ?`)) {
+                                  removeGuestMutation.mutate(t.id)
                                 }
                               }}
                             >

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -46,6 +46,19 @@ export class TeamBalancingController {
   @Patch('confirm')
   async confirm(@Param('sessionId') sessionId: string) {
     const teams = await this.teamBalancingService.confirmFinalTeams(sessionId);
+    return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
+  }
+
+  // Removes one guest slot immediately (not a full regenerate) — e.g. a declared +1 who
+  // ends up not coming. Real players use the pointage réel + confirm flow instead.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Delete(':assignmentId')
+  async removeGuest(
+    @Param('sessionId') sessionId: string,
+    @Param('assignmentId') assignmentId: string,
+  ) {
+    const teams = await this.teamBalancingService.removeGuestFromTeam(sessionId, assignmentId);
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 
