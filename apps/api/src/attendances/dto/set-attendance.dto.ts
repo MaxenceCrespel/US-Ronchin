@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { AttendanceStatus } from '../entities/attendance.entity';
+import { PlayerSubPosition } from '../../users/entities/user.entity';
 
 export class AttendanceGuestDto {
   @IsString()
@@ -11,6 +12,10 @@ export class AttendanceGuestDto {
   @IsString()
   @MaxLength(100)
   lastName?: string;
+
+  @IsOptional()
+  @IsEnum(PlayerSubPosition)
+  position?: PlayerSubPosition;
 }
 
 export class SetAttendanceDto {

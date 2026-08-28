@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Attendance } from './attendance.entity';
+import { PlayerSubPosition } from '../../users/entities/user.entity';
 
 /** A named "+1" a player brings to training — replaces the old anonymous guestCount. */
 @Entity('attendance_guests')
@@ -25,4 +26,10 @@ export class AttendanceGuest {
 
   @Column({ name: 'last_name', type: 'varchar', length: 100, nullable: true })
   lastName: string | null;
+
+  /** Optional, whoever declares the guest sets it — makes the guest slot more informative
+   * (shown next to their name) and lets TeamBalancingService.generateTeams spread guests
+   * across teams by position band, not just headcount. */
+  @Column({ type: 'enum', enum: PlayerSubPosition, nullable: true })
+  position: PlayerSubPosition | null;
 }

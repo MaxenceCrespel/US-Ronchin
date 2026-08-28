@@ -73,6 +73,7 @@ export interface AttendanceGuest {
   id: string
   firstName: string
   lastName: string | null
+  position: PlayerSubPosition | null
 }
 
 export interface Attendance {
@@ -275,6 +276,7 @@ export interface TrainingTeamAssignment {
   userId: string | null
   user: User | null
   guestLabel: string | null
+  guestPosition: PlayerSubPosition | null
   teamIndex: number
 }
 

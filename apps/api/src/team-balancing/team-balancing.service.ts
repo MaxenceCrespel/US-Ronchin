@@ -166,22 +166,58 @@ export class TeamBalancingService {
       }
     }
 
-    // Guests ("+1"/"+2") have no skill data — spread them to keep team headcounts even instead.
-    const guestAssignments: { userId: null; guestLabel: string; teamIndex: number }[] = [];
+    // Guests ("+1"/"+2") have no skill score — spread by headcount as a default. But when a
+    // guest's position was specified, prefer whichever team is thinnest on that band (real
+    // players + guests already placed this pass) instead — a declared goalkeeper guest is
+    // more useful going to the team with no goalkeeper than to whichever has one fewer body.
+    const bandCoverageByTeam = new Map<PlayerPosition, number[]>();
+    for (const band of BANDS) {
+      const counts = new Array(effectiveTeamCount).fill(0);
+      for (const id of presentUserIds) {
+        if (bandsCovered(userById.get(id)!).has(band)) {
+          const a = assignments.find((x) => x.userId === id);
+          if (a) counts[a.teamIndex]++;
+        }
+      }
+      bandCoverageByTeam.set(band, counts);
+    }
+
+    const guestAssignments: {
+      userId: null;
+      guestLabel: string;
+      guestPosition: PlayerSubPosition | null;
+      teamIndex: number;
+    }[] = [];
     for (const attendance of guestSourceAttendances) {
       for (let i = 0; i < attendance.guestCount; i++) {
         const guest = attendance.guests?.[i];
         const label = guest
           ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
           : `Invité de ${attendance.user.firstName} #${i + 1}`;
+        const band = guest?.position ? BAND_BY_SUBPOSITION[guest.position] : null;
+
         let minTeam = 0;
-        for (let t = 1; t < effectiveTeamCount; t++) {
-          if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+        if (band) {
+          const coverage = bandCoverageByTeam.get(band)!;
+          for (let t = 1; t < effectiveTeamCount; t++) {
+            if (
+              coverage[t] < coverage[minTeam] ||
+              (coverage[t] === coverage[minTeam] && teamCounts[t] < teamCounts[minTeam])
+            ) {
+              minTeam = t;
+            }
+          }
+          coverage[minTeam] += 1;
+        } else {
+          for (let t = 1; t < effectiveTeamCount; t++) {
+            if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+          }
         }
         teamCounts[minTeam] += 1;
         guestAssignments.push({
           userId: null,
           guestLabel: label,
+          guestPosition: guest?.position ?? null,
           teamIndex: minTeam,
         });
       }

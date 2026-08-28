@@ -54,10 +54,10 @@ import { cn } from '@/lib/utils'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
-import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
+import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
 import { FootballSpinner } from '@/components/FootballSpinner'
-import type { Attendance, AttendanceStatus, Match, TrainingType } from '@/lib/types'
+import type { Attendance, AttendanceStatus, Match, PlayerSubPosition, TrainingType } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import {
@@ -81,6 +81,7 @@ import { fetchPlayers } from '@/features/players/api'
 interface GuestNameInput {
   firstName: string
   lastName?: string
+  position?: PlayerSubPosition
 }
 
 const TEAM_STYLES = ['border-club-blue/30 bg-accent', 'border-red-400/40 bg-red-50']
@@ -522,6 +523,9 @@ function TeamsSection({
                     <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
                       <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
                         {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
+                        {!t.user && t.guestPosition && (
+                          <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
+                        )}
                       </span>
                       {isCoach && (
                         <span className="flex shrink-0 items-center gap-1">
@@ -888,6 +892,7 @@ export function SessionCard({
   const [guests, setGuests] = useState<GuestNameInput[]>([])
   const [newGuestFirstName, setNewGuestFirstName] = useState('')
   const [newGuestLastName, setNewGuestLastName] = useState('')
+  const [newGuestPosition, setNewGuestPosition] = useState<PlayerSubPosition | ''>('')
   useEffect(() => {
     setGuests(
       myAttendance?.guests.map((g) => ({ firstName: g.firstName, lastName: g.lastName ?? undefined })) ??
@@ -1046,6 +1051,9 @@ export function SessionCard({
                         <span className="bg-muted/60 rounded-full px-2 py-1">
                           {g.firstName}
                           {g.lastName ? ` ${g.lastName}` : ''}
+                          {g.position && (
+                            <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[g.position]}</span>
+                          )}
                         </span>
                         <button
                           type="button"
@@ -1079,6 +1087,22 @@ export function SessionCard({
                     value={newGuestLastName}
                     onChange={(e) => setNewGuestLastName(e.target.value)}
                   />
+                  <Select
+                    value={newGuestPosition}
+                    onValueChange={(v) => setNewGuestPosition(v as PlayerSubPosition)}
+                    disabled={hasStarted}
+                  >
+                    <SelectTrigger className="h-7 w-32 text-xs">
+                      <SelectValue placeholder="Poste (optionnel)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     size="sm"
@@ -1088,11 +1112,16 @@ export function SessionCard({
                     onClick={() => {
                       const next = [
                         ...guests,
-                        { firstName: newGuestFirstName.trim(), lastName: newGuestLastName.trim() || undefined },
+                        {
+                          firstName: newGuestFirstName.trim(),
+                          lastName: newGuestLastName.trim() || undefined,
+                          position: newGuestPosition || undefined,
+                        },
                       ]
                       setGuests(next)
                       setNewGuestFirstName('')
                       setNewGuestLastName('')
+                      setNewGuestPosition('')
                       mutation.mutate({ status: myAttendance!.status!, guests: next })
                     }}
                   >

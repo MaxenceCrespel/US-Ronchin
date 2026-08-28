@@ -4,10 +4,12 @@ import { Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { PlayerSubPosition } from '../users/entities/user.entity';
 
 export interface GuestNameInput {
   firstName: string;
   lastName?: string;
+  position?: PlayerSubPosition;
 }
 
 @Injectable()
@@ -82,6 +84,7 @@ export class AttendancesService {
               attendanceId: attendance.id,
               firstName: g.firstName,
               lastName: g.lastName ?? null,
+              position: g.position ?? null,
             }),
           ),
         )
