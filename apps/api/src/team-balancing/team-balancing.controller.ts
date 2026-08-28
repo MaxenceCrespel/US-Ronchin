@@ -7,6 +7,7 @@ import { sanitizeUser } from '../common/utils/sanitize-user';
 import { TeamBalancingService } from './team-balancing.service';
 import { GenerateTeamsDto } from './dto/generate-teams.dto';
 import { MovePlayerDto } from './dto/move-player.dto';
+import { AddWalkInDto } from './dto/add-walk-in.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('training-ranking')
@@ -46,6 +47,16 @@ export class TeamBalancingController {
   @Patch('confirm')
   async confirm(@Param('sessionId') sessionId: string) {
     const teams = await this.teamBalancingService.confirmFinalTeams(sessionId);
+    return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
+  }
+
+  // Adds someone who showed up without being on the original list at all — no account, no
+  // one registered them as a guest. See TeamBalancingService.addWalkIn.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Post('walk-in')
+  async addWalkIn(@Param('sessionId') sessionId: string, @Body() dto: AddWalkInDto) {
+    const teams = await this.teamBalancingService.addWalkIn(sessionId, dto);
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 

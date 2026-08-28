@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api-client'
-import type { TrainingTeamAssignment } from '@/lib/types'
+import type { PlayerSubPosition, TrainingTeamAssignment } from '@/lib/types'
 
 export async function fetchTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
   const { data } = await apiClient.get<TrainingTeamAssignment[]>(
@@ -37,6 +37,20 @@ export async function removeGuestFromTeam(
 ): Promise<TrainingTeamAssignment[]> {
   const { data } = await apiClient.delete<TrainingTeamAssignment[]>(
     `/training-sessions/${sessionId}/teams/${assignmentId}`,
+  )
+  return data
+}
+
+/** Adds someone who showed up without being on the original list at all — no app account,
+ * nobody registered them as a guest either. Placed straight onto whichever team is
+ * thinnest, same as generateTeams/confirmFinalTeams's other guest/newcomer placement. */
+export async function addWalkIn(
+  sessionId: string,
+  input: { firstName: string; lastName?: string; position?: PlayerSubPosition },
+): Promise<TrainingTeamAssignment[]> {
+  const { data } = await apiClient.post<TrainingTeamAssignment[]>(
+    `/training-sessions/${sessionId}/teams/walk-in`,
+    input,
   )
   return data
 }

@@ -268,7 +268,13 @@ export class TeamBalancingService {
         "Aucune équipe générée pour cette séance — génère-les d'abord.",
       );
     }
-    const teamCount = Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1;
+    // An entirely empty team (e.g. only one real player generated, spread across the usual
+    // 2 teams) has no assignment rows at all, so it'd be invisible to a max(teamIndex)
+    // derivation — floor at DEFAULT_TEAM_COUNT so a newcomer can still land there.
+    const teamCount = Math.max(
+      DEFAULT_TEAM_COUNT,
+      Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1,
+    );
 
     const allAttendances = await this.attendancesRepository.find({
       where: { trainingSessionId: sessionId },
@@ -314,6 +320,58 @@ export class TeamBalancingService {
       });
       await this.assignmentsRepository.save(newAssignments);
     }
+
+    return this.getTeams(sessionId);
+  }
+
+  /** Coach adds someone who showed up without being on the original list at all — no app
+   * account (so they can't declare PRESENT themselves) and nobody registered them as a
+   * guest either. Added straight onto a team, not routed through Attendance/AttendanceGuest
+   * (which are inherently "a real player" / "a named +1 THIS PLAYER brings") — a walk-in
+   * belongs to no one in particular, just the session. Placed on whichever team has the
+   * fewest people, same treatment as a last-minute real-player arrival in confirmFinalTeams. */
+  async addWalkIn(
+    sessionId: string,
+    input: { firstName: string; lastName?: string; position?: PlayerSubPosition },
+  ): Promise<TrainingTeamAssignment[]> {
+    const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new NotFoundException('Séance introuvable');
+    }
+
+    const existingAssignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId: sessionId },
+    });
+    if (existingAssignments.length === 0) {
+      throw new BadRequestException(
+        "Aucune équipe générée pour cette séance — génère-les d'abord.",
+      );
+    }
+    // Same empty-team floor as confirmFinalTeams above — an entirely empty team has no
+    // assignment rows to derive its existence from.
+    const teamCount = Math.max(
+      DEFAULT_TEAM_COUNT,
+      Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1,
+    );
+    const teamCounts = new Array(teamCount).fill(0);
+    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
+
+    let minTeam = 0;
+    for (let i = 1; i < teamCount; i++) {
+      if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
+    }
+
+    const label = `${input.firstName}${input.lastName ? ` ${input.lastName}` : ''}`;
+    await this.assignmentsRepository.save(
+      this.assignmentsRepository.create({
+        trainingSessionId: sessionId,
+        userId: null,
+        guestLabel: label,
+        guestPosition: input.position ?? null,
+        attendanceGuestId: null,
+        teamIndex: minTeam,
+      }),
+    );
 
     return this.getTeams(sessionId);
   }

@@ -28,6 +28,7 @@ import {
   Trash2,
   Trophy,
   UserMinus,
+  UserPlus,
   X,
 } from 'lucide-react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
@@ -74,7 +75,14 @@ import {
   updateTraining,
   validateAttendance,
 } from './api'
-import { confirmFinalTeams, fetchTeams, generateTeams, moveTeamPlayer, removeGuestFromTeam } from './teams-api'
+import {
+  addWalkIn,
+  confirmFinalTeams,
+  fetchTeams,
+  generateTeams,
+  moveTeamPlayer,
+  removeGuestFromTeam,
+} from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
@@ -691,6 +699,28 @@ function CoachValidationDialog({
     },
   })
 
+  // Someone who showed up without being on the original list at all — no account (can't
+  // have declared PRESENT themselves) and nobody registered them as a guest either.
+  const [walkInOpen, setWalkInOpen] = useState(false)
+  const [walkInFirstName, setWalkInFirstName] = useState('')
+  const [walkInLastName, setWalkInLastName] = useState('')
+  const [walkInPosition, setWalkInPosition] = useState<PlayerSubPosition | ''>('')
+  const walkInMutation = useMutation({
+    mutationFn: () =>
+      addWalkIn(sessionId, {
+        firstName: walkInFirstName.trim(),
+        lastName: walkInLastName.trim() || undefined,
+        position: walkInPosition || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      setWalkInFirstName('')
+      setWalkInLastName('')
+      setWalkInPosition('')
+      setWalkInOpen(false)
+    },
+  })
+
   // A non-playing coach isn't a "roster player" and would otherwise never see themselves
   // here — but a coach who actually attended still needs to be able to point themselves.
   const rosterPlayers = (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
@@ -752,6 +782,79 @@ function CoachValidationDialog({
               </Button>
               {confirmTeamsMutation.isSuccess && (
                 <p className="text-xs text-emerald-600">Équipes mises à jour ✓</p>
+              )}
+            </div>
+          )}
+          {(teamsQuery.data?.length ?? 0) > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+              {!walkInOpen ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 self-start text-xs"
+                  onClick={() => setWalkInOpen(true)}
+                >
+                  <UserPlus className="size-3.5" />
+                  Ajouter quelqu'un qui n'était pas prévu
+                </Button>
+              ) : (
+                <>
+                  <p className="text-muted-foreground text-xs">
+                    Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
+                    directement à l'équipe la moins fournie.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Input
+                      placeholder="Prénom"
+                      className="h-7 w-24 text-xs"
+                      value={walkInFirstName}
+                      onChange={(e) => setWalkInFirstName(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Nom (optionnel)"
+                      className="h-7 w-28 text-xs"
+                      value={walkInLastName}
+                      onChange={(e) => setWalkInLastName(e.target.value)}
+                    />
+                    <Select
+                      value={walkInPosition}
+                      onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}
+                    >
+                      <SelectTrigger className="h-7 w-32 text-xs">
+                        <SelectValue placeholder="Poste (optionnel)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={walkInMutation.isPending || !walkInFirstName.trim()}
+                      onClick={() => walkInMutation.mutate()}
+                    >
+                      {walkInMutation.isPending ? 'Ajout...' : 'Ajouter'}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setWalkInOpen(false)}
+                    >
+                      Annuler
+                    </Button>
+                  </div>
+                  {walkInMutation.isError && (
+                    <p className="text-destructive text-xs">Échec — réessaie.</p>
+                  )}
+                </>
               )}
             </div>
           )}
