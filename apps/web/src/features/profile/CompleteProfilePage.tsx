@@ -15,8 +15,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 import { SUB_POSITION_LABELS, FOOT_LABELS } from '@/lib/labels'
+import { cn } from '@/lib/utils'
 import type { PlayerSubPosition, PreferredFoot } from '@/lib/types'
 import { updateProfile } from './api'
+
+// Matches the backend's @ArrayMaxSize(3) on UpdateProfileDto.positions — see ProfilePage.tsx.
+const MAX_POSITIONS = 3
 
 export function CompleteProfilePage() {
   const user = useAuthStore((s) => s.user)
@@ -65,26 +69,36 @@ export function CompleteProfilePage() {
             }}
           >
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label>Postes (plusieurs possibles)</Label>
+              <Label>
+                Postes ({positions.length}/{MAX_POSITIONS})
+              </Label>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
-                  <div key={value} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`position-${value}`}
-                      checked={positions.includes(value as PlayerSubPosition)}
-                      onCheckedChange={(checked) =>
-                        setPositions((prev) =>
-                          checked
-                            ? [...prev, value as PlayerSubPosition]
-                            : prev.filter((p) => p !== value),
-                        )
-                      }
-                    />
-                    <Label htmlFor={`position-${value}`} className="text-sm font-normal">
-                      {label}
-                    </Label>
-                  </div>
-                ))}
+                {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => {
+                  const checked = positions.includes(value as PlayerSubPosition)
+                  const disabled = !checked && positions.length >= MAX_POSITIONS
+                  return (
+                    <div key={value} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`position-${value}`}
+                        checked={checked}
+                        disabled={disabled}
+                        onCheckedChange={(next) =>
+                          setPositions((prev) =>
+                            next
+                              ? [...prev, value as PlayerSubPosition]
+                              : prev.filter((p) => p !== value),
+                          )
+                        }
+                      />
+                      <Label
+                        htmlFor={`position-${value}`}
+                        className={cn('text-sm font-normal', disabled && 'text-muted-foreground')}
+                      >
+                        {label}
+                      </Label>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
