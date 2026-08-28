@@ -415,6 +415,74 @@ export class TeamBalancingService {
     return this.getTeams(sessionId);
   }
 
+  /** Someone who trained as an unlinked guest before creating their own account (e.g. a
+   * teammate added them by name on Tuesday and Thursday; they only install the app Friday)
+   * — surfaces every past guest slot whose name matches, across every session, so the coach
+   * can retroactively credit them in one go instead of hunting session by session. Exact,
+   * case/accent-insensitive match only — deliberately not fuzzy, a wrong auto-link would
+   * misattribute someone else's training history. */
+  async findUnlinkedGuestMatches(
+    firstName: string,
+    lastName: string,
+  ): Promise<{ assignmentId: string; sessionId: string; sessionDate: string; guestLabel: string }[]> {
+    const normalize = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+    const target = normalize(`${firstName} ${lastName}`);
+
+    const candidates = await this.assignmentsRepository
+      .createQueryBuilder('assignment')
+      .innerJoinAndSelect('assignment.trainingSession', 'session')
+      .where('assignment.user_id IS NULL')
+      .andWhere('assignment.guest_label IS NOT NULL')
+      .orderBy('session.date', 'DESC')
+      .getMany();
+
+    return candidates
+      .filter((a) => normalize(a.guestLabel!) === target)
+      .map((a) => ({
+        assignmentId: a.id,
+        sessionId: a.trainingSessionId,
+        sessionDate: a.trainingSession.date,
+        guestLabel: a.guestLabel!,
+      }));
+  }
+
+  /** Links the chosen past guest slots to the given account — each becomes a real-player
+   * assignment, so it now counts for that player's training ranking/history. Silently skips
+   * a slot that no longer matches (already linked, deleted) or would collide with an
+   * existing real assignment for this user in that session, rather than failing the whole
+   * batch over one stale entry. */
+  async linkPastGuestTrainings(userId: string, assignmentIds: string[]): Promise<number> {
+    if (assignmentIds.length === 0) return 0;
+
+    const assignments = await this.assignmentsRepository.find({
+      where: { id: In(assignmentIds) },
+    });
+
+    let linkedCount = 0;
+    for (const assignment of assignments) {
+      if (assignment.userId || !assignment.guestLabel) continue;
+
+      const collision = await this.assignmentsRepository.findOne({
+        where: { trainingSessionId: assignment.trainingSessionId, userId },
+      });
+      if (collision) continue;
+
+      assignment.userId = userId;
+      assignment.guestLabel = null;
+      assignment.guestPosition = null;
+      assignment.attendanceGuestId = null;
+      await this.assignmentsRepository.save(assignment);
+      linkedCount += 1;
+    }
+
+    return linkedCount;
+  }
+
   async moveAssignment(
     sessionId: string,
     assignmentId: string,

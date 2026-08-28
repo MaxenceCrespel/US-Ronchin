@@ -55,6 +55,38 @@ export async function addWalkIn(
   return data
 }
 
+export interface UnlinkedGuestMatch {
+  assignmentId: string
+  sessionId: string
+  sessionDate: string
+  guestLabel: string
+}
+
+/** Past training guest slots whose name exactly matches — someone who trained as an
+ * unlinked guest before creating their own account. Coach-only. */
+export async function fetchUnlinkedGuestMatches(
+  firstName: string,
+  lastName: string,
+): Promise<UnlinkedGuestMatch[]> {
+  const { data } = await apiClient.get<UnlinkedGuestMatch[]>('/training-guest-matches', {
+    params: { firstName, lastName },
+  })
+  return data
+}
+
+/** Retroactively credits the chosen past guest slots to this account — each becomes a real
+ * assignment, counted in that player's training ranking/history from then on. */
+export async function linkPastGuestTrainings(
+  userId: string,
+  assignmentIds: string[],
+): Promise<{ linkedCount: number }> {
+  const { data } = await apiClient.post<{ linkedCount: number }>('/training-guest-matches/link', {
+    userId,
+    assignmentIds,
+  })
+  return data
+}
+
 export async function moveTeamPlayer(
   sessionId: string,
   assignmentId: string,

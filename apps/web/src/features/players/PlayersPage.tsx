@@ -5,6 +5,7 @@ import {
   Award,
   Check,
   Copy,
+  History,
   Link2,
   Pencil,
   QrCode,
@@ -51,6 +52,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
+import { fetchUnlinkedGuestMatches, linkPastGuestTrainings } from '@/features/trainings/teams-api'
 
 function JoinLinkCard() {
   const queryClient = useQueryClient()
@@ -344,6 +346,124 @@ function EditPlayerDialog({ player }: { player: User }) {
   )
 }
 
+/** Someone who trained as an unlinked guest before creating their own account (e.g. added
+ * by name to Tuesday and Thursday's teams, only installs the app Friday) — lets the coach
+ * retroactively credit those past sessions to the new account in one go, instead of hunting
+ * session by session. Matching is exact name only (see findUnlinkedGuestMatches), so this
+ * only ever surfaces genuine candidates for the coach to confirm, never auto-links. */
+function LinkPastTrainingsDialog({ player }: { player: User }) {
+  const queryClient = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const matchesQuery = useQuery({
+    queryKey: ['training-guest-matches', player.firstName, player.lastName],
+    queryFn: () => fetchUnlinkedGuestMatches(player.firstName, player.lastName),
+    enabled: open,
+  })
+
+  const linkMutation = useMutation({
+    mutationFn: () => linkPastGuestTrainings(player.id, [...selectedIds]),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-guest-matches'] })
+      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+      matchesQuery.refetch()
+      setSelectedIds(new Set())
+    },
+  })
+
+  const matches = matchesQuery.data ?? []
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setSelectedIds(new Set())
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-7"
+          title="Lier des entraînements passés"
+          aria-label="Lier des entraînements passés"
+        >
+          <History className="size-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Entraînements passés de {player.firstName} {player.lastName}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          {matchesQuery.isLoading ? (
+            <p className="text-muted-foreground text-sm">Recherche...</p>
+          ) : matches.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Aucun invité non lié ne correspond à ce nom.
+            </p>
+          ) : (
+            <>
+              <p className="text-muted-foreground text-sm">
+                {player.firstName} a été déclaré invité (sous ce même nom) à ces
+                entraînements-là, avant d'avoir son propre compte — sélectionne ceux à lui
+                attribuer.
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {matches.map((m) => (
+                  <li key={m.assignmentId} className="flex items-center gap-2">
+                    <Checkbox
+                      id={m.assignmentId}
+                      checked={selectedIds.has(m.assignmentId)}
+                      onCheckedChange={(checked) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev)
+                          if (checked) next.add(m.assignmentId)
+                          else next.delete(m.assignmentId)
+                          return next
+                        })
+                      }}
+                    />
+                    <Label htmlFor={m.assignmentId} className="font-normal">
+                      {new Date(`${m.sessionDate}T00:00:00`).toLocaleDateString('fr-FR', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                      })}
+                    </Label>
+                  </li>
+                ))}
+              </ul>
+              {linkMutation.isSuccess && (
+                <p className="text-xs text-emerald-600">
+                  {linkMutation.data.linkedCount} entraînement
+                  {linkMutation.data.linkedCount > 1 ? 's' : ''} lié
+                  {linkMutation.data.linkedCount > 1 ? 's' : ''} ✓
+                </p>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                className="self-start"
+                disabled={selectedIds.size === 0 || linkMutation.isPending}
+                onClick={() => linkMutation.mutate()}
+              >
+                {linkMutation.isPending
+                  ? 'Liaison...'
+                  : `Lier ${selectedIds.size || ''} entraînement${selectedIds.size > 1 ? 's' : ''}`}
+              </Button>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function DeletePlayerDialog({ player }: { player: User }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -625,6 +745,7 @@ export function PlayersPage() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {isAdmin && <PlayerBadgesDialog player={player} />}
+                        <LinkPastTrainingsDialog player={player} />
                         <EditPlayerDialog player={player} />
                         {player.id !== user?.id && <DeletePlayerDialog player={player} />}
                       </div>
