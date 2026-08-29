@@ -169,9 +169,11 @@ export async function fetchMatchAttendance(matchId: string): Promise<MatchAttend
 export async function setMyMatchAttendance(
   matchId: string,
   status: AttendanceStatus,
+  guests?: { firstName: string; lastName?: string }[],
 ): Promise<MatchAttendance> {
   const { data } = await apiClient.put<MatchAttendance>(`/matches/${matchId}/attendance`, {
     status,
+    guests,
   })
   return data
 }

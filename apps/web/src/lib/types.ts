@@ -76,6 +76,15 @@ export interface AttendanceGuest {
   position: PlayerSubPosition | null
 }
 
+/** A friendly-match "+1" — same idea as AttendanceGuest for trainings, but no position
+ * field: unlike training team-balancing, match composition is a manual coach step
+ * afterwards, not an automatic band-coverage pass. */
+export interface MatchAttendanceGuest {
+  id: string
+  firstName: string
+  lastName: string | null
+}
+
 export interface Attendance {
   id: string
   trainingSessionId: string
@@ -94,6 +103,8 @@ export interface MatchAttendance {
   userId: string
   user: User
   status: AttendanceStatus
+  guestCount: number
+  guests: MatchAttendanceGuest[]
   respondedAt: string
 }
 

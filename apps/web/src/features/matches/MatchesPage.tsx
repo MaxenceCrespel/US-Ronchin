@@ -33,7 +33,7 @@ import {
   MATCH_CATEGORY_FILL,
   MATCH_CATEGORY_LABELS,
 } from '@/lib/match-category'
-import { createMatch, fetchMatches, fetchMotm } from './api'
+import { createMatch, fetchMatchAttendance, fetchMatches, fetchMotm } from './api'
 import { fetchFffSyncLogs, runFffSync } from '@/features/settings/api'
 import { VoteProgress } from './VoteProgress'
 
@@ -116,6 +116,22 @@ export function MatchesPage() {
     })),
   })
   const motmByMatchId = new Map(playedMonthMatches.map((m, i) => [m.id, motmQueries[i]?.data]))
+
+  const upcomingMonthMatches = useMemo(
+    () => monthMatches.filter((m) => m.status !== 'PLAYED'),
+    [monthMatches],
+  )
+  // Same bounded-eager-fetch rationale as the MOTM lookups above — a handful of cards this
+  // month, cheap enough to show "X sur le terrain" without opening each match.
+  const attendanceQueries = useQueries({
+    queries: upcomingMonthMatches.map((m) => ({
+      queryKey: ['match-attendance', m.id],
+      queryFn: () => fetchMatchAttendance(m.id),
+    })),
+  })
+  const attendanceByMatchId = new Map(
+    upcomingMonthMatches.map((m, i) => [m.id, attendanceQueries[i]?.data]),
+  )
 
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -280,9 +296,33 @@ export function MatchesPage() {
                         {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
                       </p>
                     ) : (
-                      <p className="text-muted-foreground text-sm">
-                        {match.venue ?? 'Lieu à définir'}
-                      </p>
+                      <>
+                        <p className="text-muted-foreground text-sm">
+                          {match.venue ?? 'Lieu à définir'}
+                        </p>
+                        {(() => {
+                          const attendance = attendanceByMatchId.get(match.id)
+                          if (!attendance) return null
+                          const presentCount = attendance.filter((a) => a.status === 'PRESENT').length
+                          const guestTotal = attendance.reduce((sum, a) => sum + a.guestCount, 0)
+                          if (presentCount === 0 && guestTotal === 0) return null
+                          return (
+                            <p className="text-muted-foreground text-xs">
+                              {presentCount} joueur{presentCount > 1 ? 's' : ''}
+                              {guestTotal > 0 && (
+                                <>
+                                  {' '}
+                                  + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+                                </>
+                              )}
+                              {' = '}
+                              <strong className="text-foreground">
+                                {presentCount + guestTotal} sur le terrain
+                              </strong>
+                            </p>
+                          )
+                        })()}
+                      </>
                     )}
                     {(() => {
                       const motm = motmByMatchId.get(match.id)

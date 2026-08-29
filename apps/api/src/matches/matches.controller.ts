@@ -170,7 +170,7 @@ export class MatchesController {
     @Body() dto: SetAttendanceDto,
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
-    return this.matchesService.setMyAttendance(id, currentUser.id, dto.status);
+    return this.matchesService.setMyAttendance(id, currentUser.id, dto.status, dto.guests);
   }
 
   @Get(':id/ratings/summary')

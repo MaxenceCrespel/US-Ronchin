@@ -7,6 +7,7 @@ import { MatchEvent } from './entities/match-event.entity';
 import { PlayerRating } from './entities/player-rating.entity';
 import { MatchRatingSubmission } from './entities/match-rating-submission.entity';
 import { MatchAttendance } from './entities/match-attendance.entity';
+import { MatchAttendanceGuest } from './entities/match-attendance-guest.entity';
 import { MatchMotmVote } from './entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from './entities/match-defense-boss-vote.entity';
 import { AttendanceStatus } from '../attendances/entities/attendance.entity';
@@ -81,6 +82,8 @@ export class MatchesService {
     private readonly ratingSubmissionsRepository: Repository<MatchRatingSubmission>,
     @InjectRepository(MatchAttendance)
     private readonly attendancesRepository: Repository<MatchAttendance>,
+    @InjectRepository(MatchAttendanceGuest)
+    private readonly matchAttendanceGuestsRepository: Repository<MatchAttendanceGuest>,
     @InjectRepository(MatchMotmVote)
     private readonly motmVotesRepository: Repository<MatchMotmVote>,
     @InjectRepository(MatchDefenseBossVote)
@@ -347,7 +350,7 @@ export class MatchesService {
   getAttendance(matchId: string): Promise<MatchAttendance[]> {
     return this.attendancesRepository.find({
       where: { matchId },
-      relations: { user: true },
+      relations: { user: true, guests: true },
     });
   }
 
@@ -355,6 +358,7 @@ export class MatchesService {
     matchId: string,
     userId: string,
     status: AttendanceStatus,
+    guests: { firstName: string; lastName?: string }[] = [],
   ): Promise<MatchAttendance> {
     const match = await this.findById(matchId);
     const hasKickedOff =
@@ -364,14 +368,43 @@ export class MatchesService {
         'Le match a déjà commencé, tu ne peux plus modifier ta présence',
       );
     }
+    // A guest only makes sense for a friendly — an officially licensed match can't field
+    // someone informal. Rejected outright rather than silently dropped, so a stale UI state
+    // doesn't quietly lose someone's declared +1.
+    if (guests.length > 0 && match.source !== MatchSource.FRIENDLY) {
+      throw new BadRequestException(
+        "Impossible d'ajouter un invité — ce match n'est pas un match amical",
+      );
+    }
 
     let attendance = await this.attendancesRepository.findOne({ where: { matchId, userId } });
     if (!attendance) {
-      attendance = this.attendancesRepository.create({ matchId, userId, status });
+      attendance = this.attendancesRepository.create({
+        matchId,
+        userId,
+        status,
+        guestCount: guests.length,
+      });
     } else {
       attendance.status = status;
+      attendance.guestCount = guests.length;
     }
-    return this.attendancesRepository.save(attendance);
+    attendance = await this.attendancesRepository.save(attendance);
+
+    await this.matchAttendanceGuestsRepository.delete({ matchAttendanceId: attendance.id });
+    attendance.guests = guests.length
+      ? await this.matchAttendanceGuestsRepository.save(
+          guests.map((g) =>
+            this.matchAttendanceGuestsRepository.create({
+              matchAttendanceId: attendance!.id,
+              firstName: g.firstName,
+              lastName: g.lastName ?? null,
+            }),
+          ),
+        )
+      : [];
+
+    return attendance;
   }
 
   /** Live average per rated player — visible to anyone as soon as votes come in, no reveal gating. */

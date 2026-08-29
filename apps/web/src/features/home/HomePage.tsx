@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
-import type { AttendanceStatus } from '@/lib/types'
+import type { AttendanceStatus, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import {
@@ -237,13 +237,23 @@ function UpcomingSessionCard({
   )
 }
 
-function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, venue, todayKey }: {
+function UpcomingMatchCard({
+  matchId,
+  date,
+  kickOffTime,
+  opponent,
+  homeAway,
+  venue,
+  source,
+  todayKey,
+}: {
   matchId: string
   date: string
   kickOffTime: string | null
   opponent: string
   homeAway: 'HOME' | 'AWAY'
   venue: string | null
+  source: MatchSource
   todayKey: string
 }) {
   const queryClient = useQueryClient()
@@ -256,7 +266,8 @@ function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, ven
   })
 
   const mutation = useMutation({
-    mutationFn: (status: AttendanceStatus) => setMyMatchAttendance(matchId, status),
+    mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
+      setMyMatchAttendance(matchId, vars.status, vars.guests),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', matchId] }),
   })
 
@@ -264,6 +275,22 @@ function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, ven
   // the coach relies on declared presence to finalize the composition.
   const hasStarted = new Date(`${date}T${kickOffTime ?? '00:00'}`).getTime() - 30 * 60_000 <= Date.now()
   const myAttendance = attendanceQuery.data?.find((a) => a.userId === currentUser?.id)
+
+  // Guests only make sense for a friendly — an officially licensed match can't field an
+  // informal +1 (see MatchesService.setMyAttendance).
+  const isFriendly = source === 'FRIENDLY'
+  const [guests, setGuests] = useState<GuestNameInput[]>([])
+  const [newGuestFirstName, setNewGuestFirstName] = useState('')
+  const [newGuestLastName, setNewGuestLastName] = useState('')
+  useEffect(() => {
+    setGuests(
+      myAttendance?.guests.map((g) => ({ firstName: g.firstName, lastName: g.lastName ?? undefined })) ??
+        [],
+    )
+  }, [myAttendance?.guests])
+
+  const presentCount = attendanceQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+  const guestTotal = attendanceQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
 
   return (
     <Card className="border-club-gold/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
@@ -297,7 +324,7 @@ function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, ven
           <AttendanceToggle
             value={myAttendance?.status}
             disabled={mutation.isPending || hasStarted}
-            onChange={(status) => mutation.mutate(status)}
+            onChange={(status) => mutation.mutate({ status, guests })}
           />
           {hasStarted && (
             <p className="text-muted-foreground text-xs">
@@ -305,14 +332,95 @@ function UpcomingMatchCard({ matchId, date, kickOffTime, opponent, homeAway, ven
             </p>
           )}
           {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {isFriendly && myAttendance?.status && (
+            <div className="flex flex-col gap-1.5 text-xs">
+              <span className="text-muted-foreground">
+                Quelqu'un vient avec toi (ou à ta place) ?
+              </span>
+              {guests.length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {guests.map((g, i) => (
+                    <li key={i} className="flex items-center gap-1.5">
+                      <span className="bg-muted/60 rounded-full px-2 py-1">
+                        {g.firstName}
+                        {g.lastName ? ` ${g.lastName}` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={mutation.isPending || hasStarted}
+                        onClick={() => {
+                          const next = guests.filter((_, idx) => idx !== i)
+                          setGuests(next)
+                          mutation.mutate({ status: myAttendance!.status!, guests: next })
+                        }}
+                        className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                        aria-label="Retirer cet invité"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Input
+                  placeholder="Prénom"
+                  className="h-7 w-24 text-xs"
+                  disabled={hasStarted}
+                  value={newGuestFirstName}
+                  onChange={(e) => setNewGuestFirstName(e.target.value)}
+                />
+                <Input
+                  placeholder="Nom (optionnel)"
+                  className="h-7 w-28 text-xs"
+                  disabled={hasStarted}
+                  value={newGuestLastName}
+                  onChange={(e) => setNewGuestLastName(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={mutation.isPending || hasStarted || !newGuestFirstName.trim()}
+                  onClick={() => {
+                    const next = [
+                      ...guests,
+                      { firstName: newGuestFirstName.trim(), lastName: newGuestLastName.trim() || undefined },
+                    ]
+                    setGuests(next)
+                    setNewGuestFirstName('')
+                    setNewGuestLastName('')
+                    mutation.mutate({ status: myAttendance!.status!, guests: next })
+                  }}
+                >
+                  Ajouter
+                </Button>
+              </div>
+            </div>
+          )}
           {attendanceQuery.data && attendanceQuery.data.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {attendanceQuery.data.map((a) => (
                 <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                   {a.user.firstName} {a.user.lastName[0]}.
+                  {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                 </Badge>
               ))}
             </div>
+          )}
+          {(presentCount > 0 || guestTotal > 0) && (
+            <p className="text-muted-foreground text-xs">
+              {presentCount} joueur{presentCount > 1 ? 's' : ''}
+              {guestTotal > 0 && (
+                <>
+                  {' '}
+                  + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+                </>
+              )}
+              {' = '}
+              <strong className="text-foreground">{presentCount + guestTotal} sur le terrain</strong>
+            </p>
           )}
         </div>
 
@@ -572,6 +680,7 @@ export function HomePage() {
                     opponent={match.opponent}
                     homeAway={match.homeAway}
                     venue={match.venue}
+                    source={match.source}
                     todayKey={todayKey}
                   />
                 ))}

@@ -6,6 +6,7 @@ import { MatchEvent } from './entities/match-event.entity';
 import { PlayerRating } from './entities/player-rating.entity';
 import { MatchRatingSubmission } from './entities/match-rating-submission.entity';
 import { MatchAttendance } from './entities/match-attendance.entity';
+import { MatchAttendanceGuest } from './entities/match-attendance-guest.entity';
 import { MatchMotmVote } from './entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from './entities/match-defense-boss-vote.entity';
 import { MatchesService } from './matches.service';
@@ -21,6 +22,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
       PlayerRating,
       MatchRatingSubmission,
       MatchAttendance,
+      MatchAttendanceGuest,
       MatchMotmVote,
       MatchDefenseBossVote,
     ]),

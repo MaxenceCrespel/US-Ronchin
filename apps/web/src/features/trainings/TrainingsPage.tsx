@@ -1331,7 +1331,8 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
   })
 
   const mutation = useMutation({
-    mutationFn: (status: AttendanceStatus) => setMyMatchAttendance(match.id, status),
+    mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
+      setMyMatchAttendance(match.id, vars.status, vars.guests),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', match.id] }),
   })
 
@@ -1341,6 +1342,22 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
     new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
   const category = getMatchCategory(match)
   const dimmed = !played && hasKickedOff
+
+  // Guests only make sense for a friendly — an officially licensed match can't field an
+  // informal +1 (see MatchesService.setMyAttendance).
+  const isFriendly = match.source === 'FRIENDLY'
+  const [guests, setGuests] = useState<GuestNameInput[]>([])
+  const [newGuestFirstName, setNewGuestFirstName] = useState('')
+  const [newGuestLastName, setNewGuestLastName] = useState('')
+  useEffect(() => {
+    setGuests(
+      myAttendance?.guests.map((g) => ({ firstName: g.firstName, lastName: g.lastName ?? undefined })) ??
+        [],
+    )
+  }, [myAttendance?.guests])
+
+  const presentCount = attendanceQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+  const guestTotal = attendanceQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
 
   return (
     <Card
@@ -1397,7 +1414,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             <AttendanceToggle
               value={myAttendance?.status}
               disabled={mutation.isPending || hasKickedOff}
-              onChange={(status) => mutation.mutate(status)}
+              onChange={(status) => mutation.mutate({ status, guests })}
             />
             {hasKickedOff && (
               <p className="text-muted-foreground text-xs">
@@ -1407,6 +1424,73 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             {mutation.isError && (
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
+            {isFriendly && myAttendance?.status && (
+              <div className="flex flex-col gap-1.5 text-xs">
+                <span className="text-muted-foreground">
+                  Quelqu'un vient avec toi (ou à ta place) ?
+                </span>
+                {guests.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {guests.map((g, i) => (
+                      <li key={i} className="flex items-center gap-1.5">
+                        <span className="bg-muted/60 rounded-full px-2 py-1">
+                          {g.firstName}
+                          {g.lastName ? ` ${g.lastName}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={mutation.isPending || hasKickedOff}
+                          onClick={() => {
+                            const next = guests.filter((_, idx) => idx !== i)
+                            setGuests(next)
+                            mutation.mutate({ status: myAttendance!.status!, guests: next })
+                          }}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          aria-label="Retirer cet invité"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Input
+                    placeholder="Prénom"
+                    className="h-7 w-24 text-xs"
+                    disabled={hasKickedOff}
+                    value={newGuestFirstName}
+                    onChange={(e) => setNewGuestFirstName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Nom (optionnel)"
+                    className="h-7 w-28 text-xs"
+                    disabled={hasKickedOff}
+                    value={newGuestLastName}
+                    onChange={(e) => setNewGuestLastName(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={mutation.isPending || hasKickedOff || !newGuestFirstName.trim()}
+                    onClick={() => {
+                      const next = [
+                        ...guests,
+                        { firstName: newGuestFirstName.trim(), lastName: newGuestLastName.trim() || undefined },
+                      ]
+                      setGuests(next)
+                      setNewGuestFirstName('')
+                      setNewGuestLastName('')
+                      mutation.mutate({ status: myAttendance!.status!, guests: next })
+                    }}
+                  >
+                    Ajouter
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
         {attendanceQuery.data && attendanceQuery.data.length > 0 && (
@@ -1414,9 +1498,23 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             {attendanceQuery.data.map((a) => (
               <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                 {a.user.firstName} {a.user.lastName[0]}.
+                {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
               </Badge>
             ))}
           </div>
+        )}
+        {(presentCount > 0 || guestTotal > 0) && (
+          <p className="text-muted-foreground text-xs">
+            {presentCount} joueur{presentCount > 1 ? 's' : ''}
+            {guestTotal > 0 && (
+              <>
+                {' '}
+                + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+              </>
+            )}
+            {' = '}
+            <strong className="text-foreground">{presentCount + guestTotal} sur le terrain</strong>
+          </p>
         )}
       </CardContent>
       <CardFooter>
