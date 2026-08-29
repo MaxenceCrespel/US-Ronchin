@@ -116,6 +116,11 @@ export class User {
   @Column({ name: 'pwa_installed_at', type: 'timestamp', nullable: true })
   pwaInstalledAt: Date | null;
 
+  /** Incremented on every successful email/password login (AuthService.login) — a refresh
+   * doesn't count, only a fresh sign-in. Feeds the superadmin player-detail dialog. */
+  @Column({ name: 'login_count', type: 'int', default: 0 })
+  loginCount: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

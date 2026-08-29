@@ -96,6 +96,12 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email } });
   }
 
+  /** Fire-and-forget from AuthService.login — a fresh sign-in only, a token refresh doesn't
+   * count. Feeds the superadmin player-detail dialog. */
+  async incrementLoginCount(userId: string): Promise<void> {
+    await this.usersRepository.increment({ id: userId }, 'loginCount', 1);
+  }
+
   async createPendingUser(data: {
     email: string;
     firstName: string;

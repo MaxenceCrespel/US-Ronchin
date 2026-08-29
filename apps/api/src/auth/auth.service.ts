@@ -59,6 +59,8 @@ export class AuthService {
         'Ton compte est en attente de validation par le coach.',
       );
     }
+    // Fire-and-forget — never blocks or fails the login itself.
+    void this.usersService.incrementLoginCount(user.id);
     return this.signTokens({ id: user.id, email: user.email, role: user.role });
   }
 
