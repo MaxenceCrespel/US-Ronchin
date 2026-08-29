@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { cn } from '@/lib/utils'
+import { fetchPlayerStats } from '@/features/stats/api'
 import { fetchAdminKpis, type UserActivityKpi } from './api'
 
 const ROLE_LABELS: Record<UserActivityKpi['role'], string> = {
@@ -31,6 +32,13 @@ function MiniHeatmap({ days }: { days: boolean[] }) {
 export function AdminKpisPage() {
   const kpisQuery = useQuery({ queryKey: ['admin', 'kpis'], queryFn: fetchAdminKpis })
   const data = kpisQuery.data
+
+  // Same all-time skillScore TeamBalancingService.generateTeams uses to balance training
+  // teams (StatsService.getPlayerStats() with no season filter) — not shown anywhere else
+  // in the app (StatsPage only ever uses it to order the roster table, never renders the
+  // number), admin-only visibility here is deliberate.
+  const statsQuery = useQuery({ queryKey: ['stats', 'players', 'all-time'], queryFn: () => fetchPlayerStats() })
+  const skillScoreByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s.skillScore]) ?? [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -95,6 +103,7 @@ export function AdminKpisPage() {
               <TableRow>
                 <TableHead>Joueur</TableHead>
                 <TableHead>Rôle</TableHead>
+                <TableHead>Niveau</TableHead>
                 <TableHead>Dernière connexion</TableHead>
                 <TableHead>7 derniers jours</TableHead>
                 <TableHead>Jours actifs / 7</TableHead>
@@ -115,6 +124,9 @@ export function AdminKpisPage() {
                     </div>
                   </TableCell>
                   <TableCell>{ROLE_LABELS[p.role]}</TableCell>
+                  <TableCell className="font-medium">
+                    {skillScoreByUserId.get(p.userId) ?? '—'}
+                  </TableCell>
                   <TableCell>
                     {p.lastSeenAt
                       ? formatDistanceToNow(new Date(p.lastSeenAt), { locale: fr, addSuffix: true })
