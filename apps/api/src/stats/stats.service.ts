@@ -13,7 +13,6 @@ import { Attendance, AttendanceStatus } from '../attendances/entities/attendance
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
 
-const DEFAULT_RATING = 5; // midpoint of the 0-10 scale
 const RATING_WEIGHT = 70;
 const PERFORMANCE_WEIGHT = 30;
 
@@ -34,7 +33,10 @@ export interface PlayerStats {
   motmCount: number;
   patronDefenseCount: number;
   presenceStreak: number;
-  skillScore: number;
+  /** Null for a player never rated (no PlayerRating received yet) — genuinely unknown, not
+   * a computed score, so it's kept distinct from an actual 0-100 value rather than
+   * defaulting to a fabricated midpoint. See getPlayerStats() below. */
+  skillScore: number | null;
 }
 
 export interface DuoStats {
@@ -296,10 +298,16 @@ export class StatsService {
           ? userRatings.reduce((sum, r) => sum + r.rating, 0) / userRatings.length
           : null;
 
-      const involvementPerMatch = matchesPlayed > 0 ? (goals + assists) / matchesPlayed : 0;
-      const ratingComponent = ((averageRating ?? DEFAULT_RATING) / 10) * RATING_WEIGHT;
-      const performanceComponent = Math.min(involvementPerMatch, 1) * PERFORMANCE_WEIGHT;
-      const skillScore = Math.round(ratingComponent + performanceComponent);
+      // Never rated at all → genuinely no basis for a score, not "assume average" (a
+      // never-rated player used to show ~35/100 from the old DEFAULT_RATING fallback,
+      // indistinguishable from an actually middling player).
+      let skillScore: number | null = null;
+      if (averageRating !== null) {
+        const involvementPerMatch = matchesPlayed > 0 ? (goals + assists) / matchesPlayed : 0;
+        const ratingComponent = (averageRating / 10) * RATING_WEIGHT;
+        const performanceComponent = Math.min(involvementPerMatch, 1) * PERFORMANCE_WEIGHT;
+        skillScore = Math.round(ratingComponent + performanceComponent);
+      }
 
       return {
         userId: user.id,

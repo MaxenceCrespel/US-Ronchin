@@ -159,7 +159,7 @@ const ROSTER_SORT_VALUE: Record<RosterSortKey, (p: PlayerStats) => number | stri
   redCards: (p) => p.redCards,
   averageRating: (p) => p.averageRating ?? -1,
   trainingAttendanceRate: (p) => p.trainingAttendanceRate ?? -1,
-  skillScore: (p) => p.skillScore,
+  skillScore: (p) => p.skillScore ?? -1,
 }
 
 // Text sorts alphabetically first by default; every numeric stat sorts highest-first —

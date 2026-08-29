@@ -178,7 +178,7 @@ export interface PlayerStats {
   motmCount: number
   patronDefenseCount: number
   presenceStreak: number
-  skillScore: number
+  skillScore: number | null
 }
 
 export interface MonthlyChallengeEntry {
