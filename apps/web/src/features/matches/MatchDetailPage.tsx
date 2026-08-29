@@ -586,9 +586,26 @@ export function MatchDetailPage() {
   })
 
   const attendanceMutation = useMutation({
-    mutationFn: (status: AttendanceStatus) => setMyMatchAttendance(matchId, status),
+    mutationFn: (vars: { status: AttendanceStatus; guests: { firstName: string; lastName?: string }[] }) =>
+      setMyMatchAttendance(matchId, vars.status, vars.guests),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', matchId] }),
   })
+
+  // Guests only make sense for a friendly — an officially licensed match can't field an
+  // informal +1 (see MatchesService.setMyAttendance).
+  const isFriendlyMatch = matchQuery.data?.source === 'FRIENDLY'
+  const myMatchAttendance = attendanceQuery.data?.find((a) => a.userId === user?.id)
+  const [matchGuests, setMatchGuests] = useState<{ firstName: string; lastName?: string }[]>([])
+  const [newMatchGuestFirstName, setNewMatchGuestFirstName] = useState('')
+  const [newMatchGuestLastName, setNewMatchGuestLastName] = useState('')
+  useEffect(() => {
+    setMatchGuests(
+      myMatchAttendance?.guests.map((g) => ({
+        firstName: g.firstName,
+        lastName: g.lastName ?? undefined,
+      })) ?? [],
+    )
+  }, [myMatchAttendance?.guests])
 
   const ratingsSummaryQuery = useQuery({
     queryKey: ['ratings-summary', matchId],
@@ -887,21 +904,18 @@ export function MatchDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex gap-2">
-              {(['PRESENT', 'MAYBE', 'ABSENT'] as AttendanceStatus[]).map((status) => {
-                const myAttendance = attendanceQuery.data?.find((a) => a.userId === user?.id)
-                return (
-                  <Button
-                    key={status}
-                    size="sm"
-                    variant="outline"
-                    className={attendanceButtonClass(status, myAttendance?.status === status)}
-                    disabled={attendanceMutation.isPending || matchTimeHasPassed}
-                    onClick={() => attendanceMutation.mutate(status)}
-                  >
-                    {ATTENDANCE_STATUS_LABELS[status]}
-                  </Button>
-                )
-              })}
+              {(['PRESENT', 'MAYBE', 'ABSENT'] as AttendanceStatus[]).map((status) => (
+                <Button
+                  key={status}
+                  size="sm"
+                  variant="outline"
+                  className={attendanceButtonClass(status, myMatchAttendance?.status === status)}
+                  disabled={attendanceMutation.isPending || matchTimeHasPassed}
+                  onClick={() => attendanceMutation.mutate({ status, guests: matchGuests })}
+                >
+                  {ATTENDANCE_STATUS_LABELS[status]}
+                </Button>
+              ))}
             </div>
             {matchTimeHasPassed && (
               <p className="text-muted-foreground text-xs">
@@ -911,15 +925,108 @@ export function MatchDetailPage() {
             {attendanceMutation.isError && (
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
+            {isFriendlyMatch && myMatchAttendance?.status && (
+              <div className="flex flex-col gap-1.5 text-xs">
+                <span className="text-muted-foreground">
+                  Quelqu'un vient avec toi (ou à ta place) ?
+                </span>
+                {matchGuests.length > 0 && (
+                  <ul className="flex flex-col gap-1">
+                    {matchGuests.map((g, i) => (
+                      <li key={i} className="flex items-center gap-1.5">
+                        <span className="bg-muted/60 rounded-full px-2 py-1">
+                          {g.firstName}
+                          {g.lastName ? ` ${g.lastName}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={attendanceMutation.isPending || matchTimeHasPassed}
+                          onClick={() => {
+                            const next = matchGuests.filter((_, idx) => idx !== i)
+                            setMatchGuests(next)
+                            attendanceMutation.mutate({ status: myMatchAttendance!.status!, guests: next })
+                          }}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          aria-label="Retirer cet invité"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Input
+                    placeholder="Prénom"
+                    className="h-7 w-24 text-xs"
+                    disabled={matchTimeHasPassed}
+                    value={newMatchGuestFirstName}
+                    onChange={(e) => setNewMatchGuestFirstName(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Nom (optionnel)"
+                    className="h-7 w-28 text-xs"
+                    disabled={matchTimeHasPassed}
+                    value={newMatchGuestLastName}
+                    onChange={(e) => setNewMatchGuestLastName(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={
+                      attendanceMutation.isPending ||
+                      matchTimeHasPassed ||
+                      !newMatchGuestFirstName.trim()
+                    }
+                    onClick={() => {
+                      const next = [
+                        ...matchGuests,
+                        {
+                          firstName: newMatchGuestFirstName.trim(),
+                          lastName: newMatchGuestLastName.trim() || undefined,
+                        },
+                      ]
+                      setMatchGuests(next)
+                      setNewMatchGuestFirstName('')
+                      setNewMatchGuestLastName('')
+                      attendanceMutation.mutate({ status: myMatchAttendance!.status!, guests: next })
+                    }}
+                  >
+                    Ajouter
+                  </Button>
+                </div>
+              </div>
+            )}
             {attendanceQuery.data && attendanceQuery.data.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {attendanceQuery.data.map((a) => (
                   <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                     {a.user.firstName} {a.user.lastName[0]}.
+                    {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                   </Badge>
                 ))}
               </div>
             )}
+            {(() => {
+              const presentCount = attendanceQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+              const guestTotal = attendanceQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+              if (presentCount === 0 && guestTotal === 0) return null
+              return (
+                <p className="text-muted-foreground text-xs">
+                  {presentCount} joueur{presentCount > 1 ? 's' : ''}
+                  {guestTotal > 0 && (
+                    <>
+                      {' '}
+                      + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+                    </>
+                  )}
+                  {' = '}
+                  <strong className="text-foreground">{presentCount + guestTotal} sur le terrain</strong>
+                </p>
+              )
+            })()}
           </CardContent>
         </Card>
       )
