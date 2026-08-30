@@ -1549,7 +1549,9 @@ export function MatchDetailPage() {
             {motmQuery.data?.revealed ? (
               motmQuery.data.results && motmQuery.data.results.length > 0 ? (
                 <ul className="flex flex-col gap-2">
-                  {motmQuery.data.results.map((r, index) => (
+                  {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
+                      tie for 2nd/3rd place doesn't spill the list past 3 names. */}
+                  {motmQuery.data.results.slice(0, 3).map((r, index) => (
                     <li
                       key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
                       className="flex items-center justify-between text-sm"
@@ -1671,7 +1673,9 @@ export function MatchDetailPage() {
             {defenseBossQuery.data?.revealed ? (
               defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
                 <ul className="flex flex-col gap-2">
-                  {defenseBossQuery.data.results.map((r, index) => (
+                  {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
+                      tie for 2nd/3rd place doesn't spill the list past 3 names. */}
+                  {defenseBossQuery.data.results.slice(0, 3).map((r, index) => (
                     <li
                       key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
                       className="flex items-center justify-between text-sm"
