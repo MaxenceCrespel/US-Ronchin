@@ -276,12 +276,28 @@ export class MatchesService {
    * first-time visit (nothing rated yet) and a teammate added to the composition after the
    * rater already validated once (only that new teammate is pending). Matched the same way
    * as getRatingsSummary: by whichever field each rating row actually has set, so a guest
-   * linked to a real account after being rated doesn't spuriously reappear as "pending". */
+   * linked to a real account after being rated doesn't spuriously reappear as "pending".
+   *
+   * Once the match's MOTM vote is revealed, the whole post-match voting ritual is considered
+   * closed for good — same boundary voteMotm() itself already enforces ("Le vote homme du
+   * match est clos"). Past that point nothing is pending any more, even for a teammate the
+   * coach adds to the composition afterward for record-keeping — a closed match stays closed,
+   * it doesn't reopen the vote prompt for anyone.
+   *
+   * Deliberately keyed off motmRevealedNotifiedAt (set once, persisted, by the 15-minute
+   * reveal-notification cron) rather than a live isMotmRevealed() recompute: that function's
+   * "everyone voted" branch compares vote count against the composition's CURRENT
+   * totalPlayers, so adding a teammate to the composition after the fact would silently un-
+   * reveal an already-closed match and defeat the whole point of this guard. */
   async getPendingRatingTargets(matchId: string, raterId: string): Promise<string[]> {
-    const [composition, myRatings] = await Promise.all([
+    const [composition, myRatings, match] = await Promise.all([
       this.compositionsRepository.find({ where: { matchId } }),
       this.ratingsRepository.find({ where: { matchId, raterId } }),
+      this.findById(matchId),
     ]);
+    if (match.motmRevealedNotifiedAt !== null) {
+      return [];
+    }
     return composition
       .filter((entry) => entry.userId !== raterId)
       .filter(
