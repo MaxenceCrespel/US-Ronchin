@@ -1,16 +1,30 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Bell, BellOff, Smartphone } from 'lucide-react'
+import { Bell, BellOff, Smartphone, UserX, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { cn } from '@/lib/utils'
 import { fetchPlayerStats } from '@/features/stats/api'
 import type { PlayerStats } from '@/lib/types'
-import { fetchAdminKpis, type UserActivityKpi } from './api'
+import {
+  createSeparationRule,
+  deleteSeparationRule,
+  fetchAdminKpis,
+  fetchSeparationRulesForUser,
+  type UserActivityKpi,
+} from './api'
 
 const ROLE_LABELS: Record<UserActivityKpi['role'], string> = {
   PLAYER: 'Joueur',
@@ -52,12 +66,41 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 function PlayerDetailDialog({
   player,
   stats,
+  allPlayers,
   onClose,
 }: {
   player: UserActivityKpi
   stats: PlayerStats | undefined
+  allPlayers: UserActivityKpi[]
   onClose: () => void
 }) {
+  const queryClient = useQueryClient()
+  const [addingRule, setAddingRule] = useState(false)
+  const [pickedUserId, setPickedUserId] = useState('')
+
+  const rulesQuery = useQuery({
+    queryKey: ['separation-rules', player.userId],
+    queryFn: () => fetchSeparationRulesForUser(player.userId),
+  })
+
+  const createRuleMutation = useMutation({
+    mutationFn: (otherUserId: string) => createSeparationRule(player.userId, otherUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['separation-rules', player.userId] })
+      setAddingRule(false)
+      setPickedUserId('')
+    },
+  })
+
+  const deleteRuleMutation = useMutation({
+    mutationFn: (id: string) => deleteSeparationRule(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['separation-rules', player.userId] }),
+  })
+
+  const rules = rulesQuery.data ?? []
+  const excludedIds = new Set([player.userId, ...rules.map((r) => r.otherUserId)])
+  const candidates = allPlayers.filter((p) => !excludedIds.has(p.userId))
+
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
@@ -150,6 +193,87 @@ function PlayerDetailDialog({
               </div>
             </div>
           )}
+
+          <div className="flex flex-col gap-1.5">
+            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+              Jamais dans la même équipe (entraînements)
+            </p>
+            {rules.length > 0 && (
+              <ul className="flex flex-col gap-1">
+                {rules.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-1.5">
+                      <UserX className="text-muted-foreground size-3.5" />
+                      {r.otherUserFirstName} {r.otherUserLastName}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={deleteRuleMutation.isPending}
+                      onClick={() => deleteRuleMutation.mutate(r.id)}
+                      className="text-muted-foreground hover:text-destructive disabled:opacity-40"
+                      aria-label="Retirer cette règle"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {rules.length === 0 && !addingRule && (
+              <p className="text-muted-foreground text-sm">Aucune règle.</p>
+            )}
+            {addingRule ? (
+              <div className="flex items-center gap-1.5">
+                <Select value={pickedUserId} onValueChange={setPickedUserId}>
+                  <SelectTrigger className="h-8 flex-1 text-sm">
+                    <SelectValue placeholder="Choisir un joueur" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {candidates.map((c) => (
+                      <SelectItem key={c.userId} value={c.userId}>
+                        {c.firstName} {c.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8"
+                  disabled={!pickedUserId || createRuleMutation.isPending}
+                  onClick={() => createRuleMutation.mutate(pickedUserId)}
+                >
+                  OK
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8"
+                  onClick={() => {
+                    setAddingRule(false)
+                    setPickedUserId('')
+                  }}
+                >
+                  Annuler
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 self-start gap-1.5"
+                onClick={() => setAddingRule(true)}
+              >
+                <UserX className="size-3.5" />
+                Ajouter une règle
+              </Button>
+            )}
+            {createRuleMutation.isError && (
+              <p className="text-destructive text-xs">Échec — réessaie.</p>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -316,6 +440,7 @@ export function AdminKpisPage() {
         <PlayerDetailDialog
           player={selectedPlayer}
           stats={statsByUserId.get(selectedPlayer.userId)}
+          allPlayers={data?.players ?? []}
           onClose={() => setSelectedPlayer(null)}
         />
       )}

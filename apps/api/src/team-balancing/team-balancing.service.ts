@@ -8,6 +8,7 @@ import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
+import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
 
 const DEFAULT_TEAM_COUNT = 2;
 
@@ -50,6 +51,8 @@ export class TeamBalancingService {
     private readonly attendancesRepository: Repository<Attendance>,
     @InjectRepository(AttendanceGuest)
     private readonly attendanceGuestsRepository: Repository<AttendanceGuest>,
+    @InjectRepository(PlayerSeparationRule)
+    private readonly separationRulesRepository: Repository<PlayerSeparationRule>,
     private readonly statsService: StatsService,
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
@@ -169,6 +172,12 @@ export class TeamBalancingService {
       }
     }
 
+    // Admin-declared "never on the same team" pairs (see PlayerSeparationRulesService) —
+    // best-effort: if constraints overlap too much to all be satisfied with this many teams,
+    // whichever can't be resolved safely is left as-is rather than left half-fixed.
+    const separationRules = await this.separationRulesRepository.find();
+    this.resolveSeparationRules(assignments, separationRules, scoreByUserId, effectiveTeamCount);
+
     // Guests ("+1"/"+2") have no skill score — spread by headcount as a default. But when a
     // guest's position was specified, prefer whichever team is thinnest on that band (real
     // players + guests already placed this pass) instead — a declared goalkeeper guest is
@@ -243,6 +252,59 @@ export class TeamBalancingService {
     });
 
     return this.getTeams(sessionId);
+  }
+
+  /** Mutates assignments in place, swapping one member of a violating pair to another team
+   * whenever two admin-separated players land together — picks whichever legal swap partner
+   * has the closest skill score to minimize balance disruption, and never picks a partner
+   * who'd just recreate a different violation on the origin team. If no safe swap exists
+   * for a pair (constraints overlapping too tightly for the team count), that pair is left
+   * as-is — this never throws or blocks team generation. */
+  private resolveSeparationRules(
+    assignments: { userId: string; teamIndex: number }[],
+    rules: { userAId: string; userBId: string }[],
+    scoreByUserId: Map<string, number | null>,
+    teamCount: number,
+  ): void {
+    if (rules.length === 0 || teamCount < 2) return;
+    const assignmentByUserId = new Map(assignments.map((a) => [a.userId, a]));
+
+    for (const rule of rules) {
+      const a = assignmentByUserId.get(rule.userAId);
+      const b = assignmentByUserId.get(rule.userBId);
+      // One or both absent from this session, or already on different teams — nothing to do.
+      if (!a || !b || a.teamIndex !== b.teamIndex) continue;
+
+      let bestCandidate: { userId: string; teamIndex: number } | null = null;
+      let bestDiff = Infinity;
+      for (const candidate of assignments) {
+        if (candidate.teamIndex === a.teamIndex) continue;
+        // Don't pull in someone who'd immediately recreate a (different) violation with
+        // whoever stays behind on a's team.
+        const wouldViolate = rules.some((r) => {
+          if (r === rule) return false;
+          const partnerId =
+            r.userAId === candidate.userId ? r.userBId : r.userBId === candidate.userId ? r.userAId : null;
+          if (!partnerId || partnerId === b.userId) return false;
+          const partner = assignmentByUserId.get(partnerId);
+          return partner?.teamIndex === a.teamIndex;
+        });
+        if (wouldViolate) continue;
+
+        const diff = Math.abs((scoreByUserId.get(candidate.userId) ?? 0) - (scoreByUserId.get(b.userId) ?? 0));
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCandidate = candidate;
+        }
+      }
+
+      if (bestCandidate) {
+        const targetTeam = bestCandidate.teamIndex;
+        bestCandidate.teamIndex = b.teamIndex;
+        b.teamIndex = targetTeam;
+      }
+      // else: no safe swap this round — best-effort, move on rather than block generation.
+    }
   }
 
   /** Post-training reconciliation, distinct from generateTeams: the pre-training
