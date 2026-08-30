@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Crown, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -57,14 +58,21 @@ function RankBadge({ rank }: { rank: number }) {
   )
 }
 
-function Leaderboard({ title, players, valueKey, valueLabel }: {
+function Leaderboard({ title, players, valueKey, valueLabel, onSeeAll }: {
   title: string
   players: PlayerStats[]
   valueKey: 'goals' | 'assists'
   valueLabel: string
+  onSeeAll: () => void
 }) {
   return (
-    <Card>
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onSeeAll}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSeeAll()}
+      className="cursor-pointer transition-colors hover:bg-accent/40"
+    >
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
@@ -86,8 +94,53 @@ function Leaderboard({ title, players, valueKey, valueLabel }: {
             ))}
           </ul>
         )}
+        <p className="text-muted-foreground mt-3 text-xs">Voir le classement complet →</p>
       </CardContent>
     </Card>
+  )
+}
+
+/** Full ranking behind each "Statistiques de l'équipe" card — those only ever show the top
+ * 5 (TeamStats.topScorers/topAssists/mostDecisive are capped server-side), computed here
+ * client-side from the already-fetched, unlimited playerStats instead of a new endpoint. */
+function FullLeaderboardDialog({
+  title,
+  players,
+  getValue,
+  valueLabel,
+  onClose,
+}: {
+  title: string
+  players: PlayerStats[]
+  getValue: (p: PlayerStats) => number
+  valueLabel: string
+  onClose: () => void
+}) {
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {players.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Pas encore de données.</p>
+        ) : (
+          <ul className="flex flex-col gap-2.5">
+            {players.map((p, index) => (
+              <li key={p.userId} className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2.5">
+                  <RankBadge rank={index} />
+                  {p.firstName} {p.lastName}
+                </span>
+                <Badge variant="secondary">
+                  {getValue(p)} {valueLabel}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -349,6 +402,26 @@ export function StatsPage() {
 
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)
 
+  const [openLeaderboard, setOpenLeaderboard] = useState<'goals' | 'assists' | 'decisive' | null>(
+    null,
+  )
+  const fullTopScorers = useMemo(
+    () => [...(playerStatsQuery.data ?? [])].filter((p) => p.goals > 0).sort((a, b) => b.goals - a.goals),
+    [playerStatsQuery.data],
+  )
+  const fullTopAssists = useMemo(
+    () =>
+      [...(playerStatsQuery.data ?? [])].filter((p) => p.assists > 0).sort((a, b) => b.assists - a.assists),
+    [playerStatsQuery.data],
+  )
+  const fullMostDecisive = useMemo(
+    () =>
+      [...(playerStatsQuery.data ?? [])]
+        .filter((p) => p.goals + p.assists > 0)
+        .sort((a, b) => b.goals + b.assists - (a.goals + a.assists)),
+    [playerStatsQuery.data],
+  )
+
   return (
     <div className="flex flex-col gap-6" data-tour="stats-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -392,14 +465,22 @@ export function StatsPage() {
             players={teamStatsQuery.data?.topScorers ?? []}
             valueKey="goals"
             valueLabel="buts"
+            onSeeAll={() => setOpenLeaderboard('goals')}
           />
           <Leaderboard
             title="Meilleurs passeurs"
             players={teamStatsQuery.data?.topAssists ?? []}
             valueKey="assists"
             valueLabel="passes"
+            onSeeAll={() => setOpenLeaderboard('assists')}
           />
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setOpenLeaderboard('decisive')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpenLeaderboard('decisive')}
+            className="cursor-pointer transition-colors hover:bg-accent/40"
+          >
             <CardHeader>
               <CardTitle className="text-base">Joueurs les plus décisifs</CardTitle>
             </CardHeader>
@@ -419,10 +500,39 @@ export function StatsPage() {
                   ))}
                 </ul>
               )}
+              <p className="text-muted-foreground mt-3 text-xs">Voir le classement complet →</p>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {openLeaderboard === 'goals' && (
+        <FullLeaderboardDialog
+          title="Classement complet — Meilleurs buteurs"
+          players={fullTopScorers}
+          getValue={(p) => p.goals}
+          valueLabel="buts"
+          onClose={() => setOpenLeaderboard(null)}
+        />
+      )}
+      {openLeaderboard === 'assists' && (
+        <FullLeaderboardDialog
+          title="Classement complet — Meilleurs passeurs"
+          players={fullTopAssists}
+          getValue={(p) => p.assists}
+          valueLabel="passes"
+          onClose={() => setOpenLeaderboard(null)}
+        />
+      )}
+      {openLeaderboard === 'decisive' && (
+        <FullLeaderboardDialog
+          title="Classement complet — Joueurs les plus décisifs"
+          players={fullMostDecisive}
+          getValue={(p) => p.goals + p.assists}
+          valueLabel="pts"
+          onClose={() => setOpenLeaderboard(null)}
+        />
+      )}
 
       <Card>
         <CardHeader>
