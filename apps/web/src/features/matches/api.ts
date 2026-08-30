@@ -145,11 +145,18 @@ export async function ratePlayer(
   return data
 }
 
-export async function fetchRatingsSubmitted(matchId: string): Promise<boolean> {
-  const { data } = await apiClient.get<{ submitted: boolean }>(
+export interface RatingsSubmissionState {
+  submitted: boolean
+  /** Composition entry ids (besides the rater) not yet rated by them — covers a first-time
+   * visit as well as a teammate added to the composition after they already validated once. */
+  pendingCompositionIds: string[]
+}
+
+export async function fetchRatingsSubmitted(matchId: string): Promise<RatingsSubmissionState> {
+  const { data } = await apiClient.get<RatingsSubmissionState>(
     `/matches/${matchId}/ratings/submitted`,
   )
-  return data.submitted
+  return data
 }
 
 export async function submitRatings(

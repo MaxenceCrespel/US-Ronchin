@@ -137,7 +137,13 @@ export class MatchesController {
     @Param('id') id: string,
     @CurrentUser() currentUser: AuthenticatedUser,
   ) {
-    return { submitted: await this.matchesService.hasSubmittedRatings(id, currentUser.id) };
+    // pendingCompositionIds covers not just "never submitted" but also "a teammate was added
+    // to the composition since I last validated" — see MatchesService.getPendingRatingTargets.
+    const pendingCompositionIds = await this.matchesService.getPendingRatingTargets(
+      id,
+      currentUser.id,
+    );
+    return { submitted: pendingCompositionIds.length === 0, pendingCompositionIds };
   }
 
   @Post(':id/ratings')

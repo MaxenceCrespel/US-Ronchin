@@ -528,7 +528,7 @@ export function HomePage() {
         const defenseBossRevealed = defenseBossQueries[i]?.data?.revealed ?? false
         const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
 
-        const needsRatings = !(ratingsSubmittedQueries[i]?.data ?? false)
+        const needsRatings = !(ratingsSubmittedQueries[i]?.data?.submitted ?? false)
 
         return needsMotmVote || needsDefenseBossVote || needsRatings
       })

@@ -272,6 +272,27 @@ export class MatchesService {
     return count > 0;
   }
 
+  /** Composition entries (besides the rater) not yet rated BY this rater — covers both a
+   * first-time visit (nothing rated yet) and a teammate added to the composition after the
+   * rater already validated once (only that new teammate is pending). Matched the same way
+   * as getRatingsSummary: by whichever field each rating row actually has set, so a guest
+   * linked to a real account after being rated doesn't spuriously reappear as "pending". */
+  async getPendingRatingTargets(matchId: string, raterId: string): Promise<string[]> {
+    const [composition, myRatings] = await Promise.all([
+      this.compositionsRepository.find({ where: { matchId } }),
+      this.ratingsRepository.find({ where: { matchId, raterId } }),
+    ]);
+    return composition
+      .filter((entry) => entry.userId !== raterId)
+      .filter(
+        (entry) =>
+          !myRatings.some(
+            (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
+          ),
+      )
+      .map((entry) => entry.id);
+  }
+
   async rate(matchId: string, raterId: string, dto: RatePlayerDto): Promise<PlayerRating> {
     if (dto.ratedUserId === raterId) {
       throw new BadRequestException('Tu ne peux pas te noter toi-même');
@@ -304,16 +325,16 @@ export class MatchesService {
     return this.ratingsRepository.save(rating);
   }
 
-  /** Rates every teammate at once and locks them — the only way ratings become final. */
+  /** Rates every currently-pending teammate at once and locks them in — a rating once saved
+   * can never be changed. Callable more than once per match: if the coach adds a new teammate
+   * to the composition after this rater already validated, only that new teammate is pending
+   * next time around (see getPendingRatingTargets) — everyone already rated is untouched and
+   * can't be re-submitted. */
   async submitRatings(
     matchId: string,
     raterId: string,
     dto: SubmitRatingsDto,
   ): Promise<PlayerRating[]> {
-    if (await this.hasSubmittedRatings(matchId, raterId)) {
-      throw new BadRequestException('Tes notes sont déjà validées et ne peuvent plus être modifiées');
-    }
-
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     // A guest (no account yet) can be rated — the coach adds real people who happen not to
     // have created an account, they still played and deserve a note like anyone else — but
@@ -324,17 +345,25 @@ export class MatchesService {
     const composedGuestIds = new Set(
       composition.filter((entry) => !entry.userId).map((entry) => entry.id),
     );
-    // Each teammate to rate, identified consistently with dto.ratings entries: a real
-    // account by userId, a guest by their composition row id.
-    const teammateTargets = composition
-      .filter((entry) => entry.userId !== raterId)
-      .map((entry) => entry.userId ?? entry.id);
 
     if (!composedUserIds.has(raterId)) {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent noter');
     }
+
+    const pendingCompositionIds = new Set(await this.getPendingRatingTargets(matchId, raterId));
+    if (pendingCompositionIds.size === 0) {
+      throw new BadRequestException('Tes notes sont déjà à jour pour ce match');
+    }
+    // Each pending teammate, identified consistently with dto.ratings entries: a real
+    // account by userId, a guest by their composition row id.
+    const pendingTargets = new Set(
+      composition
+        .filter((entry) => pendingCompositionIds.has(entry.id))
+        .map((entry) => entry.userId ?? entry.id),
+    );
+
     const ratedTargets = new Set(dto.ratings.map((r) => r.ratedUserId ?? r.ratedGuestId));
-    const missing = teammateTargets.filter((id) => !ratedTargets.has(id));
+    const missing = [...pendingTargets].filter((id) => !ratedTargets.has(id));
     if (missing.length > 0) {
       throw new BadRequestException('Il manque des notes pour valider — note tous tes coéquipiers');
     }
@@ -357,6 +386,11 @@ export class MatchesService {
           'Seuls les joueurs ayant participé au match peuvent être notés',
         );
       }
+      // Exactly one of ratedUserId/ratedGuestId is guaranteed set by the check just above.
+      const target = (entry.ratedUserId ?? entry.ratedGuestId)!;
+      if (!pendingTargets.has(target)) {
+        throw new BadRequestException('Ce joueur a déjà été noté et ne peut plus être modifié');
+      }
     }
 
     const entities = dto.ratings.map((entry) =>
@@ -369,9 +403,11 @@ export class MatchesService {
       }),
     );
     await this.ratingsRepository.save(entities);
-    await this.ratingSubmissionsRepository.save(
-      this.ratingSubmissionsRepository.create({ matchId, raterId }),
-    );
+    if (!(await this.hasSubmittedRatings(matchId, raterId))) {
+      await this.ratingSubmissionsRepository.save(
+        this.ratingSubmissionsRepository.create({ matchId, raterId }),
+      );
+    }
     return this.getMyRatings(matchId, raterId);
   }
 

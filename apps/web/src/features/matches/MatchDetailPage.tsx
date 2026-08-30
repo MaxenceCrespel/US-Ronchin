@@ -744,7 +744,11 @@ export function MatchDetailPage() {
   const votingApplies = resultConfirmed && iPlayed && hasComposition
   const hasVotedMotm = motmQuery.data?.myVoteCompositionId != null
   const motmRevealed = motmQuery.data?.revealed ?? false
-  const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
+  // "submitted" means no pending targets remain — it naturally flips back to false (reopening
+  // the vote step) if the coach adds a new teammate to the composition after this rater
+  // already validated once (see MatchesService.getPendingRatingTargets).
+  const ratingsSubmitted = ratingsSubmittedQuery.data?.submitted ?? false
+  const pendingRatingIds = new Set(ratingsSubmittedQuery.data?.pendingCompositionIds ?? [])
   // Two independent gates: the MOTM vote is only forced while its window is still open
   // (motmRevealed — everyone voted, or the 24h window elapsed — means voting is closed,
   // forcing it would just soft-lock anyone who missed the window). Ratings have no such
@@ -1773,7 +1777,9 @@ export function MatchDetailPage() {
   // Guests (no account yet) can be rated like anyone else — they still played — just not
   // as the rater, since that requires being logged in as someone. Keyed by the composition
   // entry's own id throughout (stable for both a real player and a guest), not userId.
-  const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => entry.userId !== user?.id)
+  // Only the still-pending ones (see pendingRatingIds) — everyone already rated is locked and
+  // excluded here, whether that's from an initial submission or an earlier incremental one.
+  const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => pendingRatingIds.has(entry.id))
   const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.id] != null)
 
   const ratingsCard = resultConfirmed && hasComposition && (
@@ -1792,6 +1798,10 @@ export function MatchDetailPage() {
           <CardContent className="flex flex-col gap-4">
             {compositionQuery.data?.map((entry) => {
               const isSelf = entry.userId === user?.id
+              // A teammate added to the composition after this rater already validated once
+              // stays pending on its own — everyone else rated earlier is locked, regardless
+              // of the overall ratingsSubmitted flag (see getPendingRatingTargets).
+              const isPending = pendingRatingIds.has(entry.id)
               const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
               // Match by whichever field is set on each rating row, not by the entry's
               // *current* link state — a rating cast before a guest gets linked to a real
@@ -1833,32 +1843,30 @@ export function MatchDetailPage() {
                     <span className="text-muted-foreground text-xs">
                       Seuls les joueurs ayant participé peuvent noter
                     </span>
-                  ) : ratingsSubmitted ? (
-                    isSelf ? (
-                      <span className="text-muted-foreground text-xs">
-                        {summary?.average != null
-                          ? `Moyenne : ${summary.average.toFixed(1)}/10`
-                          : 'Pas encore de note'}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2 text-xs">
-                        <Badge variant="secondary">Ta note : {myRating?.rating}/10</Badge>
-                        <span className="text-muted-foreground">
-                          {summary?.average != null
-                            ? `Moyenne : ${summary.average.toFixed(1)}/10 (${summary.count})`
-                            : ''}
-                        </span>
-                      </span>
-                    )
                   ) : isSelf ? (
-                    <span className="text-muted-foreground text-xs">Tu ne peux pas te noter toi-même</span>
-                  ) : (
+                    <span className="text-muted-foreground text-xs">
+                      {ratingsSubmitted && summary?.average != null
+                        ? `Moyenne : ${summary.average.toFixed(1)}/10`
+                        : ratingsSubmitted
+                          ? 'Pas encore de note'
+                          : 'Tu ne peux pas te noter toi-même'}
+                    </span>
+                  ) : isPending ? (
                     <RatingDraftPicker
                       value={ratingDrafts[entry.id]}
                       onChange={(value) =>
                         setRatingDrafts((prev) => ({ ...prev, [entry.id]: value }))
                       }
                     />
+                  ) : (
+                    <span className="flex items-center gap-2 text-xs">
+                      <Badge variant="secondary">Ta note : {myRating?.rating}/10</Badge>
+                      <span className="text-muted-foreground">
+                        {summary?.average != null
+                          ? `Moyenne : ${summary.average.toFixed(1)}/10 (${summary.count})`
+                          : ''}
+                      </span>
+                    </span>
                   )}
                 </div>
               )
