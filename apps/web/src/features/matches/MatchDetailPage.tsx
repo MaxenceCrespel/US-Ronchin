@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
@@ -1877,25 +1878,40 @@ export function MatchDetailPage() {
             })}
 
             {iPlayed && !ratingsSubmitted && (
-              <div className="flex items-center justify-between gap-2 border-t pt-4">
-                <p className="text-muted-foreground text-xs">
-                  Une fois validées, tes notes sont définitives et ne pourront plus être modifiées.
-                </p>
-                <Button
-                  size="sm"
-                  disabled={!allDraftsFilled || submitRatingsMutation.isPending}
-                  onClick={() =>
-                    submitRatingsMutation.mutate(
-                      teammatesToRate.map((entry) => ({
-                        ratedUserId: entry.userId ?? undefined,
-                        ratedGuestId: entry.userId ? undefined : entry.id,
-                        rating: ratingDrafts[entry.id]!,
-                      })),
-                    )
-                  }
-                >
-                  Valider mes notes
-                </Button>
+              <div className="flex flex-col gap-2 border-t pt-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-muted-foreground text-xs">
+                    Une fois validées, tes notes sont définitives et ne pourront plus être modifiées.
+                  </p>
+                  <Button
+                    size="sm"
+                    disabled={!allDraftsFilled || submitRatingsMutation.isPending}
+                    onClick={() =>
+                      submitRatingsMutation.mutate(
+                        teammatesToRate.map((entry) => ({
+                          ratedUserId: entry.userId ?? undefined,
+                          ratedGuestId: entry.userId ? undefined : entry.id,
+                          rating: ratingDrafts[entry.id]!,
+                        })),
+                      )
+                    }
+                  >
+                    {submitRatingsMutation.isPending ? 'Validation...' : 'Valider mes notes'}
+                  </Button>
+                </div>
+                {/* Previously silent on failure — a submission that errored (network hiccup,
+                    stale composition) looked exactly like a frozen page, with nothing telling
+                    the player their notes hadn't actually been sent. */}
+                {submitRatingsMutation.isError && (
+                  <p className="text-destructive text-xs">
+                    {isAxiosError(submitRatingsMutation.error) &&
+                    submitRatingsMutation.error.response?.data &&
+                    typeof submitRatingsMutation.error.response.data === 'object' &&
+                    'message' in submitRatingsMutation.error.response.data
+                      ? String(submitRatingsMutation.error.response.data.message)
+                      : 'Échec de la validation des notes. Réessaie.'}
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
