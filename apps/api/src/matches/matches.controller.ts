@@ -123,7 +123,7 @@ export class MatchesController {
     return ratings.map((r) => ({
       ...r,
       rater: sanitizeUser(r.rater),
-      ratedUser: sanitizeUser(r.ratedUser),
+      ratedUser: r.ratedUser ? sanitizeUser(r.ratedUser) : null,
     }));
   }
 

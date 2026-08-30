@@ -56,17 +56,10 @@ import { VoteProgress } from './VoteProgress'
 import type {
   AttendanceStatus,
   GoalType,
-  MatchComposition,
   MatchEventType,
   MatchHomeAway,
-  User,
 } from '@/lib/types'
 
-/** A composition entry that's a real registered player — MOTM/Defense Boss voting and
- * ratings only ever operate on these, guests (no account yet) are excluded upstream. */
-type ComposedPlayer = MatchComposition & { userId: string; user: User }
-const isComposedPlayer = (entry: MatchComposition): entry is ComposedPlayer =>
-  !!entry.userId && !!entry.user
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchPlayers } from '@/features/players/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
@@ -633,7 +626,7 @@ export function MatchDetailPage() {
   const [ratingDrafts, setRatingDrafts] = useState<Record<string, number>>({})
 
   const submitRatingsMutation = useMutation({
-    mutationFn: (ratings: { ratedUserId: string; rating: number }[]) =>
+    mutationFn: (ratings: { ratedUserId?: string; ratedGuestId?: string; rating: number }[]) =>
       submitRatings(matchId, ratings),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-ratings', matchId] })
@@ -1777,10 +1770,11 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const teammatesToRate = (compositionQuery.data ?? [])
-    .filter(isComposedPlayer)
-    .filter((entry) => entry.userId !== user?.id)
-  const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.userId] != null)
+  // Guests (no account yet) can be rated like anyone else — they still played — just not
+  // as the rater, since that requires being logged in as someone. Keyed by the composition
+  // entry's own id throughout (stable for both a real player and a guest), not userId.
+  const teammatesToRate = (compositionQuery.data ?? []).filter((entry) => entry.userId !== user?.id)
+  const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.id] != null)
 
   const ratingsCard = resultConfirmed && hasComposition && (
         <Card>
@@ -1798,8 +1792,10 @@ export function MatchDetailPage() {
           <CardContent className="flex flex-col gap-4">
             {compositionQuery.data?.map((entry) => {
               const isSelf = entry.userId === user?.id
-              const summary = ratingsSummaryQuery.data?.find((s) => s.userId === entry.userId)
-              const myRating = myRatingsQuery.data?.find((r) => r.ratedUserId === entry.userId)
+              const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
+              const myRating = myRatingsQuery.data?.find((r) =>
+                entry.userId ? r.ratedUserId === entry.userId : r.ratedGuestId === entry.id,
+              )
 
               return (
                 <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
@@ -1830,9 +1826,7 @@ export function MatchDetailPage() {
                       : `${entry.guestFirstName} ${entry.guestLastName}`}
                   </span>
 
-                  {!entry.user ? (
-                    <span className="text-muted-foreground text-xs">Pas encore de compte</span>
-                  ) : !iPlayed ? (
+                  {!iPlayed ? (
                     <span className="text-muted-foreground text-xs">
                       Seuls les joueurs ayant participé peuvent noter
                     </span>
@@ -1857,9 +1851,9 @@ export function MatchDetailPage() {
                     <span className="text-muted-foreground text-xs">Tu ne peux pas te noter toi-même</span>
                   ) : (
                     <RatingDraftPicker
-                      value={ratingDrafts[entry.userId!]}
+                      value={ratingDrafts[entry.id]}
                       onChange={(value) =>
-                        setRatingDrafts((prev) => ({ ...prev, [entry.userId!]: value }))
+                        setRatingDrafts((prev) => ({ ...prev, [entry.id]: value }))
                       }
                     />
                   )}
@@ -1878,8 +1872,9 @@ export function MatchDetailPage() {
                   onClick={() =>
                     submitRatingsMutation.mutate(
                       teammatesToRate.map((entry) => ({
-                        ratedUserId: entry.userId,
-                        rating: ratingDrafts[entry.userId]!,
+                        ratedUserId: entry.userId ?? undefined,
+                        ratedGuestId: entry.userId ? undefined : entry.id,
+                        rating: ratingDrafts[entry.id]!,
                       })),
                     )
                   }

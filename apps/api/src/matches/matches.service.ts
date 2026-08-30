@@ -22,7 +22,10 @@ import { isMotmRevealed, firstVoteAt, MOTM_REVEAL_DELAY_MS } from './motm-utils'
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 export interface RatingSummaryEntry {
-  userId: string;
+  /** Null when the rated player is still a guest (no account linked yet). */
+  userId: string | null;
+  /** Stable key regardless of userId/guest status — the composition entry's own id. */
+  compositionId: string;
   firstName: string;
   lastName: string;
   average: number | null;
@@ -312,27 +315,44 @@ export class MatchesService {
     }
 
     const composition = await this.compositionsRepository.find({ where: { matchId } });
-    // Guests (no account yet) can't be rated or rate teammates — excluded from both sides.
+    // A guest (no account yet) can be rated — the coach adds real people who happen not to
+    // have created an account, they still played and deserve a note like anyone else — but
+    // can't rate teammates themselves, since rating requires being logged in as someone.
     const composedUserIds = new Set(
       composition.map((entry) => entry.userId).filter((id): id is string => !!id),
     );
-    const teammateIds = composition
-      .map((entry) => entry.userId)
-      .filter((userId): userId is string => !!userId && userId !== raterId);
+    const composedGuestIds = new Set(
+      composition.filter((entry) => !entry.userId).map((entry) => entry.id),
+    );
+    // Each teammate to rate, identified consistently with dto.ratings entries: a real
+    // account by userId, a guest by their composition row id.
+    const teammateTargets = composition
+      .filter((entry) => entry.userId !== raterId)
+      .map((entry) => entry.userId ?? entry.id);
 
     if (!composedUserIds.has(raterId)) {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent noter');
     }
-    const ratedIds = new Set(dto.ratings.map((r) => r.ratedUserId));
-    const missing = teammateIds.filter((id) => !ratedIds.has(id));
+    const ratedTargets = new Set(dto.ratings.map((r) => r.ratedUserId ?? r.ratedGuestId));
+    const missing = teammateTargets.filter((id) => !ratedTargets.has(id));
     if (missing.length > 0) {
       throw new BadRequestException('Il manque des notes pour valider — note tous tes coéquipiers');
     }
     for (const entry of dto.ratings) {
+      if ((entry.ratedUserId == null) === (entry.ratedGuestId == null)) {
+        throw new BadRequestException(
+          'Chaque note doit cibler exactement un joueur ou un invité',
+        );
+      }
       if (entry.ratedUserId === raterId) {
         throw new BadRequestException('Tu ne peux pas te noter toi-même');
       }
-      if (!composedUserIds.has(entry.ratedUserId)) {
+      if (entry.ratedUserId && !composedUserIds.has(entry.ratedUserId)) {
+        throw new BadRequestException(
+          'Seuls les joueurs ayant participé au match peuvent être notés',
+        );
+      }
+      if (entry.ratedGuestId && !composedGuestIds.has(entry.ratedGuestId)) {
         throw new BadRequestException(
           'Seuls les joueurs ayant participé au match peuvent être notés',
         );
@@ -343,7 +363,8 @@ export class MatchesService {
       this.ratingsRepository.create({
         matchId,
         raterId,
-        ratedUserId: entry.ratedUserId,
+        ratedUserId: entry.ratedUserId ?? null,
+        ratedGuestId: entry.ratedGuestId ?? null,
         rating: entry.rating,
       }),
     );
@@ -421,20 +442,19 @@ export class MatchesService {
       this.ratingsRepository.find({ where: { matchId } }),
     ]);
 
-    return composition
-      .filter((entry): entry is typeof entry & { userId: string; user: NonNullable<typeof entry.user> } =>
-        !!entry.userId && !!entry.user,
-      )
-      .map((entry) => {
-      const entryRatings = ratings.filter((r) => r.ratedUserId === entry.userId);
+    return composition.map((entry) => {
+      const entryRatings = entry.userId
+        ? ratings.filter((r) => r.ratedUserId === entry.userId)
+        : ratings.filter((r) => r.ratedGuestId === entry.id);
       const average =
         entryRatings.length > 0
           ? entryRatings.reduce((sum, r) => sum + r.rating, 0) / entryRatings.length
           : null;
       return {
         userId: entry.userId,
-        firstName: entry.user.firstName,
-        lastName: entry.user.lastName,
+        compositionId: entry.id,
+        firstName: entry.user?.firstName ?? entry.guestFirstName ?? '',
+        lastName: entry.user?.lastName ?? entry.guestLastName ?? '',
         average,
         count: entryRatings.length,
       };

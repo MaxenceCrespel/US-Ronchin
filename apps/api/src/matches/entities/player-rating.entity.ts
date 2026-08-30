@@ -2,16 +2,15 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Match } from './match.entity';
 import { User } from '../../users/entities/user.entity';
+import { MatchComposition } from './match-composition.entity';
 
 @Entity('player_ratings')
-@Index(['matchId', 'raterId', 'ratedUserId'], { unique: true })
 export class PlayerRating {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -30,12 +29,25 @@ export class PlayerRating {
   @JoinColumn({ name: 'rater_id' })
   rater: User;
 
-  @Column({ name: 'rated_user_id' })
-  ratedUserId: string;
+  /** Set when the rated player is a real account. Exactly one of ratedUserId/ratedGuestId
+   * is set — enforced in MatchesService.submitRatings, same split as MatchMotmVote's
+   * votedForId/votedForGuestId. */
+  @Column({ name: 'rated_user_id', nullable: true })
+  ratedUserId: string | null;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'rated_user_id' })
-  ratedUser: User;
+  ratedUser: User | null;
+
+  /** Set instead of ratedUserId for a guest (no account yet) — same pattern as
+   * MatchMotmVote.votedForGuestId: the note stays attached to the composition entry and
+   * keeps making sense once the coach links it to a real account later. */
+  @Column({ name: 'rated_guest_id', nullable: true })
+  ratedGuestId: string | null;
+
+  @ManyToOne(() => MatchComposition, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'rated_guest_id' })
+  ratedGuestComposition: MatchComposition | null;
 
   // Half-point steps (0, 0.5, 1, ..., 10) — `real` rather than `numeric` so node-postgres
   // returns a plain JS number, no string-to-number transformer needed. `default: 0` is

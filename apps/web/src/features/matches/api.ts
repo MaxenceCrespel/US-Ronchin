@@ -154,7 +154,7 @@ export async function fetchRatingsSubmitted(matchId: string): Promise<boolean> {
 
 export async function submitRatings(
   matchId: string,
-  ratings: { ratedUserId: string; rating: number }[],
+  ratings: { ratedUserId?: string; ratedGuestId?: string; rating: number }[],
 ): Promise<PlayerRating[]> {
   const { data } = await apiClient.post<PlayerRating[]>(`/matches/${matchId}/ratings/submit`, {
     ratings,

@@ -241,12 +241,16 @@ export interface PlayerRating {
   id: string
   matchId: string
   raterId: string
-  ratedUserId: string
+  ratedUserId: string | null
+  ratedGuestId: string | null
   rating: number
 }
 
 export interface RatingSummaryEntry {
-  userId: string
+  /** Null when the rated player is still a guest (no account linked yet). */
+  userId: string | null
+  /** Stable key regardless of userId/guest status — the composition entry's own id. */
+  compositionId: string
   firstName: string
   lastName: string
   average: number | null
