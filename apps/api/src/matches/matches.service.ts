@@ -443,9 +443,15 @@ export class MatchesService {
     ]);
 
     return composition.map((entry) => {
-      const entryRatings = entry.userId
-        ? ratings.filter((r) => r.ratedUserId === entry.userId)
-        : ratings.filter((r) => r.ratedGuestId === entry.id);
+      // Match by whichever field is actually set on each rating row, not by the
+      // composition entry's *current* link state — a rating cast before the coach links a
+      // guest to a real account is stored with ratedGuestId, and stays that way forever
+      // (rating rows aren't rewritten on link). Checking only ratedUserId once entry.userId
+      // is set would silently drop every rating given before the link. Same principle as
+      // MOTM's voteTarget, which already gets this right.
+      const entryRatings = ratings.filter(
+        (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
+      );
       const average =
         entryRatings.length > 0
           ? entryRatings.reduce((sum, r) => sum + r.rating, 0) / entryRatings.length

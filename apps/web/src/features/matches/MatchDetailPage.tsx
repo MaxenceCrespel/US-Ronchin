@@ -1793,8 +1793,11 @@ export function MatchDetailPage() {
             {compositionQuery.data?.map((entry) => {
               const isSelf = entry.userId === user?.id
               const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
-              const myRating = myRatingsQuery.data?.find((r) =>
-                entry.userId ? r.ratedUserId === entry.userId : r.ratedGuestId === entry.id,
+              // Match by whichever field is set on each rating row, not by the entry's
+              // *current* link state — a rating cast before a guest gets linked to a real
+              // account is stored with ratedGuestId forever (see getRatingsSummary).
+              const myRating = myRatingsQuery.data?.find(
+                (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
               )
 
               return (
@@ -2011,8 +2014,13 @@ export function MatchDetailPage() {
             <TableBody>
               {compositionQuery.data?.map((entry) => {
                 const isSelf = entry.userId === user?.id
-                const summary = ratingsSummaryQuery.data?.find((s) => s.userId === entry.userId)
-                const myRating = myRatingsQuery.data?.find((r) => r.ratedUserId === entry.userId)
+                const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
+                // Match by whichever field is set on each rating row, not by the entry's
+                // *current* link state — a rating cast before a guest gets linked to a real
+                // account is stored with ratedGuestId forever (see getRatingsSummary).
+                const myRating = myRatingsQuery.data?.find(
+                  (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
+                )
                 const guestStatsKey = entry.guestFirstName
                   ? `name:${entry.guestFirstName} ${entry.guestLastName}`
                   : null
