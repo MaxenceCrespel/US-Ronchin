@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../users/entities/user.entity';
-import { Match } from '../matches/entities/match.entity';
+import { PlayerPosition, User } from '../users/entities/user.entity';
+import { Match, MatchStatus } from '../matches/entities/match.entity';
 import { MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -13,8 +13,21 @@ import { Attendance, AttendanceStatus } from '../attendances/entities/attendance
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
 
-const RATING_WEIGHT = 70;
-const PERFORMANCE_WEIGHT = 30;
+// skillScore weights — see getPlayerStats() below for the full breakdown. Sum of the
+// positive components is 95 (60 + 25 + 5 + 5), leaving headroom before the discipline
+// penalty (capped at -10) so a spotless record can still round up to 100 while a heavily
+// carded one has real room to drop.
+const RATING_WEIGHT = 60;
+const PERFORMANCE_WEIGHT = 25;
+const ASSIDUITY_WEIGHT = 5;
+const DISTINCTIONS_CAP = 5; // one point per MOTM/patron de la défense, capped here
+const DISCIPLINE_CAP = 10; // max deduction, however many cards
+const YELLOW_CARD_PENALTY = 2;
+const RED_CARD_PENALTY = 5;
+const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half as much
+const RATING_CONFIDENCE_PRIOR_WEIGHT = 3; // pseudo-count pulling a thin sample toward neutral
+const RATING_NEUTRAL = 5; // midpoint of the 0-10 scale, the confidence prior's target
+const DAY_MS = 86_400_000;
 
 export interface PlayerStats {
   userId: string;
@@ -33,6 +46,12 @@ export interface PlayerStats {
   motmCount: number;
   patronDefenseCount: number;
   presenceStreak: number;
+  /** Matches started at GOALKEEPER or DEFENDER (MatchComposition.position — auto-derived
+   * from where they actually lined up that match, not their profile's declared position) —
+   * only counted when the match is PLAYED with a known final score. */
+  defensiveMatchesStarted: number;
+  cleanSheets: number;
+  goalsConceded: number;
   /** Null for a player never rated (no PlayerRating received yet) — genuinely unknown, not
    * a computed score, so it's kept distinct from an actual 0-100 value rather than
    * defaulting to a fabricated midpoint. See getPlayerStats() below. */
@@ -238,7 +257,10 @@ export class StatsService {
         this.compositionsRepository.find(),
         this.ratingsRepository.find(),
         this.attendancesRepository.find(),
-        bounds ? this.matchesRepository.find() : Promise.resolve([]),
+        // Unconditional (unlike the other three getPlayerStats-adjacent methods below,
+        // which only need match dates for season filtering) — skillScore's clean-sheet
+        // component needs the actual final score, all-time, regardless of season.
+        this.matchesRepository.find(),
         this.sessionsRepository.find(),
         this.getMotmCounts(bounds),
         this.getPatronDefenseCounts(bounds),
@@ -246,6 +268,7 @@ export class StatsService {
       ]);
 
     const today = new Date().toISOString().slice(0, 10);
+    const matchById = new Map(matches.map((m) => [m.id, m]));
     const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
     const sessionDateById = new Map(sessions.map((s) => [s.id, s.date]));
     const matchInSeason = (matchId: string) =>
@@ -291,6 +314,8 @@ export class StatsService {
           AttendanceStatus.PRESENT,
       ).length;
       const trainingsResponded = pastSessions.length;
+      const trainingAttendanceRate =
+        trainingsResponded > 0 ? trainingsPresent / trainingsResponded : null;
 
       const userRatings = ratings.filter((r) => r.ratedUserId === user.id);
       const averageRating =
@@ -298,15 +323,88 @@ export class StatsService {
           ? userRatings.reduce((sum, r) => sum + r.rating, 0) / userRatings.length
           : null;
 
+      // Started as goalkeeper or defender, in a match with a known final score — clean
+      // sheet / goals conceded speak to defensive performance far better than goals+assists
+      // ever could for these positions. MatchComposition.position reflects where they
+      // actually lined up that specific match (auto-derived from the pitch), not their
+      // profile's generic declared positions.
+      let defensiveMatchesStarted = 0;
+      let cleanSheets = 0;
+      let goalsConceded = 0;
+      for (const c of compositions) {
+        if (
+          c.userId !== user.id ||
+          !c.isStarter ||
+          (c.position !== PlayerPosition.GOALKEEPER && c.position !== PlayerPosition.DEFENDER)
+        ) {
+          continue;
+        }
+        const match = matchById.get(c.matchId);
+        if (!match || match.status !== MatchStatus.PLAYED) continue;
+        const conceded = match.homeAway === 'HOME' ? match.scoreAway : match.scoreHome;
+        if (conceded === null) continue;
+        defensiveMatchesStarted += 1;
+        goalsConceded += conceded;
+        if (conceded === 0) cleanSheets += 1;
+      }
+
+      const motmCount = motmCounts.get(user.id) ?? 0;
+      const patronDefenseCount = patronDefenseCounts.get(user.id) ?? 0;
+
       // Never rated at all → genuinely no basis for a score, not "assume average" (a
       // never-rated player used to show ~35/100 from the old DEFAULT_RATING fallback,
       // indistinguishable from an actually middling player).
       let skillScore: number | null = null;
       if (averageRating !== null) {
-        const involvementPerMatch = matchesPlayed > 0 ? (goals + assists) / matchesPlayed : 0;
-        const ratingComponent = (averageRating / 10) * RATING_WEIGHT;
-        const performanceComponent = Math.min(involvementPerMatch, 1) * PERFORMANCE_WEIGHT;
-        skillScore = Math.round(ratingComponent + performanceComponent);
+        // Recency-weighted, confidence-damped rating: a match 6 months ago counts half as
+        // much as one today, and a thin sample (few ratings) gets pulled toward a neutral
+        // 5/10 rather than trusted outright — 1 lucky 10/10 shouldn't swing the score alone.
+        let weightedSum = 0;
+        let weightSum = 0;
+        for (const r of userRatings) {
+          const matchDate = matchDateById.get(r.matchId);
+          const daysAgo = matchDate ? (Date.now() - new Date(matchDate).getTime()) / DAY_MS : 0;
+          const weight = Math.pow(0.5, Math.max(daysAgo, 0) / RATING_RECENCY_HALF_LIFE_DAYS);
+          weightedSum += r.rating * weight;
+          weightSum += weight;
+        }
+        const dampedRating =
+          (weightedSum + RATING_NEUTRAL * RATING_CONFIDENCE_PRIOR_WEIGHT) /
+          (weightSum + RATING_CONFIDENCE_PRIOR_WEIGHT);
+        const ratingComponent = (dampedRating / 10) * RATING_WEIGHT;
+
+        // Goalkeepers/defenders are judged on clean-sheet rate instead of goals+assists,
+        // which structurally favours attackers — but only once there's an actual defensive
+        // track record to judge; otherwise fall back to the standard involvement measure.
+        let performanceComponent: number;
+        if (defensiveMatchesStarted > 0) {
+          performanceComponent = (cleanSheets / defensiveMatchesStarted) * PERFORMANCE_WEIGHT;
+        } else {
+          const involvementPerMatch = matchesPlayed > 0 ? (goals + assists) / matchesPlayed : 0;
+          performanceComponent = Math.min(involvementPerMatch, 1) * PERFORMANCE_WEIGHT;
+        }
+
+        const disciplinePenalty = Math.min(
+          (yellowCards * YELLOW_CARD_PENALTY + redCards * RED_CARD_PENALTY) /
+            Math.max(matchesPlayed, 1),
+          DISCIPLINE_CAP,
+        );
+        const assiduityBonus = (trainingAttendanceRate ?? 0) * ASSIDUITY_WEIGHT;
+        const distinctionsBonus = Math.min(motmCount + patronDefenseCount, DISTINCTIONS_CAP);
+
+        skillScore = Math.round(
+          Math.max(
+            0,
+            Math.min(
+              100,
+              ratingComponent +
+                performanceComponent -
+                disciplinePenalty +
+                assiduityBonus +
+                distinctionsBonus,
+            ),
+          ),
+        );
       }
 
       return {
@@ -320,13 +418,15 @@ export class StatsService {
         redCards,
         trainingsPresent,
         trainingsResponded,
-        trainingAttendanceRate:
-          trainingsResponded > 0 ? trainingsPresent / trainingsResponded : null,
+        trainingAttendanceRate,
         averageRating,
         ratingsCount: userRatings.length,
-        motmCount: motmCounts.get(user.id) ?? 0,
-        patronDefenseCount: patronDefenseCounts.get(user.id) ?? 0,
+        motmCount,
+        patronDefenseCount,
         presenceStreak: presenceStreaks.get(user.id) ?? 0,
+        defensiveMatchesStarted,
+        cleanSheets,
+        goalsConceded,
         skillScore,
       };
     });

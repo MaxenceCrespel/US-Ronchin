@@ -178,6 +178,9 @@ export interface PlayerStats {
   motmCount: number
   patronDefenseCount: number
   presenceStreak: number
+  defensiveMatchesStarted: number
+  cleanSheets: number
+  goalsConceded: number
   skillScore: number | null
 }
 

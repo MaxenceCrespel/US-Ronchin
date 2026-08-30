@@ -129,6 +129,15 @@ function PlayerDetailDialog({
                 <DetailRow label="Cartons jaunes / rouges" value={`${stats.yellowCards} / ${stats.redCards}`} />
                 <DetailRow label="Homme du match" value={stats.motmCount} />
                 <DetailRow label="Patron de la défense" value={stats.patronDefenseCount} />
+                {stats.defensiveMatchesStarted > 0 && (
+                  <>
+                    <DetailRow
+                      label="Clean sheets (déf./gardien)"
+                      value={`${stats.cleanSheets}/${stats.defensiveMatchesStarted}`}
+                    />
+                    <DetailRow label="Buts encaissés (déf./gardien)" value={stats.goalsConceded} />
+                  </>
+                )}
                 <DetailRow
                   label="Assiduité entraînements"
                   value={
