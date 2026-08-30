@@ -37,6 +37,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
+import { MatchResultBadge } from '@/components/MatchResultBadge'
 import {
   Dialog,
   DialogContent,
@@ -1406,8 +1407,9 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {played ? (
-          <p className="animate-pop-in text-2xl font-semibold">
+          <p className="animate-pop-in flex items-center gap-2 text-2xl font-semibold">
             {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
+            <MatchResultBadge match={match} />
           </p>
         ) : (
           <>

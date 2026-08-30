@@ -65,6 +65,7 @@ import { isRosterPlayer } from '@/lib/roster'
 import { fetchPlayers } from '@/features/players/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
+import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import {
   addEvent,
@@ -1941,8 +1942,9 @@ export function MatchDetailPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <p className="text-3xl font-bold">
+        <p className="flex items-center gap-3 text-3xl font-bold">
           {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
+          <MatchResultBadge match={match} />
         </p>
 
         {motmWinners.length > 0 ? (

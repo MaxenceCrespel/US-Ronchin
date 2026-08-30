@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
@@ -823,8 +824,9 @@ export function HomePage() {
                     <CardDescription className="capitalize">{formatDate(match.date)}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-semibold">
+                    <p className="flex items-center gap-2 text-2xl font-semibold">
                       {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
+                      <MatchResultBadge match={match} />
                     </p>
                   </CardContent>
                 </Card>

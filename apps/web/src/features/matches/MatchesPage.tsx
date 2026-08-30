@@ -36,6 +36,7 @@ import {
 import { createMatch, fetchMatchAttendance, fetchMatches, fetchMotm } from './api'
 import { fetchFffSyncLogs, runFffSync } from '@/features/settings/api'
 import { VoteProgress } from './VoteProgress'
+import { MatchResultBadge } from '@/components/MatchResultBadge'
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', {
@@ -292,8 +293,9 @@ export function MatchesPage() {
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">
                     {match.status === 'PLAYED' ? (
-                      <p className="animate-pop-in text-2xl font-semibold">
+                      <p className="animate-pop-in flex items-center gap-2 text-2xl font-semibold">
                         {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
+                        <MatchResultBadge match={match} />
                       </p>
                     ) : (
                       <>
