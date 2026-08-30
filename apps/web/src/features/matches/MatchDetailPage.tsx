@@ -2144,7 +2144,10 @@ export function MatchDetailPage() {
           className="self-start"
           onClick={() => {
             setConfigOpen((v) => !v)
-            setConfigStep('presence')
+            // Resume where it's actually useful instead of forcing a walk back through
+            // steps already done — composition already saved almost always means "I came
+            // back to finish the events step", not "let me redo who was present".
+            setConfigStep(hasComposition ? 'events' : 'presence')
           }}
         >
           {configOpen ? 'Fermer la configuration' : 'Configurer le match'}
@@ -2181,6 +2184,18 @@ export function MatchDetailPage() {
             </TabsContent>
           </Tabs>
         </div>
+      ) : isCoach && hasComposition ? (
+        // Composition already saved but "Terminer" hasn't been clicked yet (setup still
+        // mid-way, e.g. events not entered) — coach-only, since votes aren't open and
+        // players shouldn't see a partial composition with no scorers/cards yet. Without
+        // this the composition seemed to vanish entirely between saving it and finishing
+        // the wizard, as if it had to be redone from scratch (it's still all there —
+        // "Configurer le match" resumes with everything pre-filled).
+        <>
+          {scoreCard}
+          {presenceCard}
+          {compositionSummaryView}
+        </>
       ) : (
         // Match not played yet: only the score card and "who's available" attendance —
         // the composition is the coach's internal prep and shouldn't leak to players
