@@ -59,8 +59,10 @@ export class AuthService {
         'Ton compte est en attente de validation par le coach.',
       );
     }
-    // Fire-and-forget — never blocks or fails the login itself.
-    void this.usersService.incrementLoginCount(user.id);
+    // loginCount isn't bumped here — a still-valid refresh token silently renews the
+    // session forever without ever hitting this endpoint again, which badly undercounts
+    // anyone who rarely logs out. It's tracked passively instead, the same way activeDays
+    // already is — see ActivityTrackingService.recordActivity's session-gap detection.
     return this.signTokens({ id: user.id, email: user.email, role: user.role });
   }
 

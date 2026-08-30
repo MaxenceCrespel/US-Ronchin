@@ -116,8 +116,10 @@ export class User {
   @Column({ name: 'pwa_installed_at', type: 'timestamp', nullable: true })
   pwaInstalledAt: Date | null;
 
-  /** Incremented on every successful email/password login (AuthService.login) — a refresh
-   * doesn't count, only a fresh sign-in. Feeds the superadmin player-detail dialog. */
+  /** Incremented passively (ActivityTrackingService.recordActivity) whenever a request
+   * arrives more than SESSION_GAP_MS after they were last seen — not tied to an actual
+   * login event, since a still-valid refresh token silently renews a session forever
+   * without one. Feeds the superadmin player-detail dialog. */
   @Column({ name: 'login_count', type: 'int', default: 0 })
   loginCount: number;
 

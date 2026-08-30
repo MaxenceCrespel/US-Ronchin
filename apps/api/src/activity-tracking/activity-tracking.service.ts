@@ -32,6 +32,13 @@ export interface AdminKpisResponse {
 }
 
 const DAY_MS = 86_400_000;
+// A gap longer than this since their last request counts as coming back for a new
+// "connexion" — chosen to tell "genuinely came back later" apart from "kept a tab open
+// across a short break", without requiring an actual re-login (a still-valid refresh token
+// silently renews the session forever otherwise, so a raw login-event count would badly
+// undercount anyone who rarely logs out — see AuthService.login, which no longer
+// increments this directly).
+const SESSION_GAP_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -48,11 +55,27 @@ export class ActivityTrackingService {
     private readonly pushSubscriptionsRepository: Repository<PushSubscription>,
   ) {}
 
-  /** Fire-and-forget from the global interceptor — never allowed to throw into the request path. */
+  /** Fire-and-forget from the global interceptor — never allowed to throw into the request
+   * path. Detects a "new connexion" the same passive way activeDays already works: no
+   * explicit login required, just a real gap since they were last seen. */
   async recordActivity(userId: string): Promise<void> {
-    const today = isoDate(new Date());
+    const now = new Date();
+    const today = isoDate(now);
+
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    const isNewSession =
+      !user?.lastSeenAt || now.getTime() - user.lastSeenAt.getTime() > SESSION_GAP_MS;
+
     await Promise.all([
-      this.usersRepository.update({ id: userId }, { lastSeenAt: new Date() }),
+      this.usersRepository
+        .createQueryBuilder()
+        .update(User)
+        .set({
+          lastSeenAt: now,
+          ...(isNewSession ? { loginCount: () => '"login_count" + 1' } : {}),
+        })
+        .where('id = :userId', { userId })
+        .execute(),
       this.activityDaysRepository
         .createQueryBuilder()
         .insert()
