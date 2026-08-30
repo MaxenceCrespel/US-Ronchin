@@ -6,7 +6,12 @@ import { GoalType, MatchEvent, MatchEventType } from '../matches/entities/match-
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
-import { isMotmRevealed, computeMotmWinners, resolveWinnerUserIds } from '../matches/motm-utils';
+import {
+  isMotmRevealed,
+  computeMotmWinners,
+  resolveWinnerUserIds,
+  groupCompositionByUserIdPerMatch,
+} from '../matches/motm-utils';
 import { Match } from '../matches/entities/match.entity';
 import { MatchAttendance } from '../matches/entities/match-attendance.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -504,14 +509,18 @@ export class BadgesService {
       }
       // computeMotmWinners returns MatchComposition ids, not User ids — resolve them back.
       const compositionByIdForMyMatches = new Map(compositionsForMyMatches.map((c) => [c.id, c]));
+      const compositionByUserIdByMatchForMyMatches = groupCompositionByUserIdPerMatch(
+        compositionsForMyMatches,
+      );
       const hasIncompris = playedMatches.some((m) => {
         if (resultOf(m) !== 'L') return false;
         const matchVotes = votesByMatch.get(m.id) ?? [];
         const totalPlayers = playersByMatch.get(m.id) ?? 0;
         if (!isMotmRevealed(matchVotes, totalPlayers)) return false;
         // A tie counts too — being one of several joint MOTM winners still qualifies.
+        const compositionByUserId = compositionByUserIdByMatchForMyMatches.get(m.id) ?? new Map();
         const winnerUserIds = resolveWinnerUserIds(
-          computeMotmWinners(matchVotes),
+          computeMotmWinners(matchVotes, compositionByUserId),
           compositionByIdForMyMatches,
         );
         return winnerUserIds.includes(userId);

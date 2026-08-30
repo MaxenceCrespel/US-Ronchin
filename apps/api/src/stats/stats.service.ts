@@ -8,7 +8,12 @@ import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
-import { isMotmRevealed, computeMotmWinners, resolveWinnerUserIds } from '../matches/motm-utils';
+import {
+  isMotmRevealed,
+  computeMotmWinners,
+  resolveWinnerUserIds,
+  groupCompositionByUserIdPerMatch,
+} from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
@@ -189,12 +194,17 @@ export class StatsService {
 
     // A guest's win only counts toward a real account once the coach links them.
     const compositionById = new Map(compositions.map((c) => [c.id, c]));
+    const compositionByUserIdByMatch = groupCompositionByUserIdPerMatch(compositions);
     const counts = new Map<string, number>();
     for (const [matchId, matchVotes] of votesByMatch) {
       const totalPlayers = playersByMatch.get(matchId) ?? 0;
       if (!isMotmRevealed(matchVotes, totalPlayers)) continue;
       // A tie awards everyone tied for the top spot, not just one arbitrarily picked.
-      const winnerIds = resolveWinnerUserIds(computeMotmWinners(matchVotes), compositionById);
+      const compositionByUserId = compositionByUserIdByMatch.get(matchId) ?? new Map();
+      const winnerIds = resolveWinnerUserIds(
+        computeMotmWinners(matchVotes, compositionByUserId),
+        compositionById,
+      );
       for (const winnerId of winnerIds) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
     }
     return counts;
@@ -227,12 +237,17 @@ export class StatsService {
 
     // A guest's win only counts toward a real account once the coach links them.
     const compositionById = new Map(compositions.map((c) => [c.id, c]));
+    const compositionByUserIdByMatch = groupCompositionByUserIdPerMatch(compositions);
     const counts = new Map<string, number>();
     for (const [matchId, matchVotes] of votesByMatch) {
       const totalPlayers = playersByMatch.get(matchId) ?? 0;
       if (!isMotmRevealed(matchVotes, totalPlayers)) continue;
       // A tie awards everyone tied for the top spot, not just one arbitrarily picked.
-      const winnerIds = resolveWinnerUserIds(computeMotmWinners(matchVotes), compositionById);
+      const compositionByUserId = compositionByUserIdByMatch.get(matchId) ?? new Map();
+      const winnerIds = resolveWinnerUserIds(
+        computeMotmWinners(matchVotes, compositionByUserId),
+        compositionById,
+      );
       for (const winnerId of winnerIds) counts.set(winnerId, (counts.get(winnerId) ?? 0) + 1);
     }
     return counts;
