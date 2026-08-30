@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X } from 'lucide-react'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,9 +17,11 @@ import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/tra
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import {
   fetchComposition,
+  fetchDefenseBoss,
   fetchMatches,
   fetchMatchAttendance,
   fetchMotm,
+  fetchRatingsSubmitted,
   setMyMatchAttendance,
 } from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
@@ -491,16 +493,110 @@ export function HomePage() {
         }))
       : [],
   })
+  // Same two gates the match detail page itself uses (needsDefenseBossVote, needsRatings) —
+  // without these, someone who'd already voted MOTM but still owed ratings (or a
+  // patron-de-la-défense vote) never showed up here at all.
+  const defenseBossQueries = useQueries({
+    queries: !isCoach
+      ? recentPlayedMatches.map((m) => ({
+          queryKey: ['defense-boss', m.id],
+          queryFn: () => fetchDefenseBoss(m.id),
+        }))
+      : [],
+  })
+  const ratingsSubmittedQueries = useQueries({
+    queries: !isCoach
+      ? recentPlayedMatches.map((m) => ({
+          queryKey: ['ratings-submitted', m.id],
+          queryFn: () => fetchRatingsSubmitted(m.id),
+        }))
+      : [],
+  })
   const matchesNeedingVote = isCoach
     ? []
     : recentPlayedMatches.filter((_m, i) => {
         const composition = compositionQueries[i]?.data
-        const hasVoted = motmQueries[i]?.data?.myVoteCompositionId != null
-        const revealed = motmQueries[i]?.data?.revealed ?? false
         const iPlayed = composition?.some((c) => c.userId === user?.id) ?? false
-        // Once revealed (everyone voted, or the 24h window elapsed), voting is closed —
-        // nothing left to do here even if this player never voted.
-        return iPlayed && !!composition?.length && !hasVoted && !revealed
+        if (!iPlayed || !composition?.length) return false
+
+        const hasVotedMotm = motmQueries[i]?.data?.myVoteCompositionId != null
+        const motmRevealed = motmQueries[i]?.data?.revealed ?? false
+        const needsMotmVote = !hasVotedMotm && !motmRevealed
+
+        const defenseBossApplies = defenseBossQueries[i]?.data?.hasEligibleTargets ?? true
+        const hasVotedDefenseBoss = defenseBossQueries[i]?.data?.myVoteCompositionId != null
+        const defenseBossRevealed = defenseBossQueries[i]?.data?.revealed ?? false
+        const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
+
+        const needsRatings = !(ratingsSubmittedQueries[i]?.data ?? false)
+
+        return needsMotmVote || needsDefenseBossVote || needsRatings
+      })
+
+  // Only ever the next 3 of each kind, and never anything already past — a cancelled
+  // session isn't something to prepare for anymore, so it doesn't take up a slot either.
+  const upcomingSessions = useMemo(() => {
+    const now = Date.now()
+    return (sessionsQuery.data ?? [])
+      .filter((s) => !s.cancelled && new Date(`${s.date}T${s.startTime}`).getTime() >= now)
+      .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+      .slice(0, 3)
+  }, [sessionsQuery.data])
+
+  const upcomingMatches = useMemo(() => {
+    const now = Date.now()
+    return (matchesQuery.data ?? [])
+      .filter(
+        (m) => m.status === 'SCHEDULED' && new Date(`${m.date}T${m.kickOffTime ?? '00:00'}`).getTime() >= now,
+      )
+      .sort((a, b) => (a.date === b.date ? (a.kickOffTime ?? '').localeCompare(b.kickOffTime ?? '') : a.date.localeCompare(b.date)))
+      .slice(0, 3)
+  }, [matchesQuery.data])
+
+  const recentResults = useMemo(
+    () =>
+      (matchesQuery.data ?? [])
+        .filter((m) => m.status === 'PLAYED')
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 3),
+    [matchesQuery.data],
+  )
+
+  const topScorer = teamStatsQuery.data?.topScorers[0]
+  const mostDecisive = teamStatsQuery.data?.mostDecisive[0]
+
+  // Bounded to the same "next 3" already shown on the page below — a player who hasn't
+  // answered further out than that isn't nagged for something not even visible yet.
+  const upcomingSessionAttendanceQueries = useQueries({
+    queries: !isCoach
+      ? upcomingSessions.map((s) => ({
+          queryKey: ['attendances', s.id],
+          queryFn: () => fetchAttendances(s.id),
+        }))
+      : [],
+  })
+  const trainingsNeedingResponse = isCoach
+    ? []
+    : upcomingSessions.filter((_s, i) => {
+        const attendances = upcomingSessionAttendanceQueries[i]?.data
+        if (!attendances) return false
+        return !attendances.some((a) => a.userId === user?.id && a.status)
+      })
+
+  const upcomingMatchAttendanceQueries = useQueries({
+    queries: !isCoach
+      ? upcomingMatches.map((m) => ({
+          queryKey: ['match-attendance', m.id],
+          queryFn: () => fetchMatchAttendance(m.id),
+        }))
+      : [],
+  })
+  const matchesNeedingResponse = isCoach
+    ? []
+    : upcomingMatches.filter((_m, i) => {
+        const attendances = upcomingMatchAttendanceQueries[i]?.data
+        if (!attendances) return false
+        return !attendances.some((a) => a.userId === user?.id && a.status)
       })
 
   interface ActionItem {
@@ -539,44 +635,26 @@ export function HomePage() {
             ]
           : []),
       ]
-    : matchesNeedingVote.map((m) => ({
-        id: m.id,
-        icon: Vote,
-        label: `Vote & notes à faire — vs ${m.opponent} (${formatDate(m.date)})`,
-        to: `/matches/${m.id}`,
-      }))
-
-  // Only ever the next 3 of each kind, and never anything already past — a cancelled
-  // session isn't something to prepare for anymore, so it doesn't take up a slot either.
-  const upcomingSessions = useMemo(() => {
-    const now = Date.now()
-    return (sessionsQuery.data ?? [])
-      .filter((s) => !s.cancelled && new Date(`${s.date}T${s.startTime}`).getTime() >= now)
-      .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
-      .slice(0, 3)
-  }, [sessionsQuery.data])
-
-  const upcomingMatches = useMemo(() => {
-    const now = Date.now()
-    return (matchesQuery.data ?? [])
-      .filter(
-        (m) => m.status === 'SCHEDULED' && new Date(`${m.date}T${m.kickOffTime ?? '00:00'}`).getTime() >= now,
-      )
-      .sort((a, b) => (a.date === b.date ? (a.kickOffTime ?? '').localeCompare(b.kickOffTime ?? '') : a.date.localeCompare(b.date)))
-      .slice(0, 3)
-  }, [matchesQuery.data])
-
-  const recentResults = useMemo(
-    () =>
-      (matchesQuery.data ?? [])
-        .filter((m) => m.status === 'PLAYED')
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 3),
-    [matchesQuery.data],
-  )
-
-  const topScorer = teamStatsQuery.data?.topScorers[0]
-  const mostDecisive = teamStatsQuery.data?.mostDecisive[0]
+    : [
+        ...trainingsNeedingResponse.map((s) => ({
+          id: s.id,
+          icon: ClipboardCheck,
+          label: `Répondre au sondage — entraînement du ${formatDate(s.date)}`,
+          to: `/trainings?session=${s.id}`,
+        })),
+        ...matchesNeedingResponse.map((m) => ({
+          id: m.id,
+          icon: ClipboardCheck,
+          label: `Répondre au sondage — vs ${m.opponent} (${formatDate(m.date)})`,
+          to: `/matches/${m.id}`,
+        })),
+        ...matchesNeedingVote.map((m) => ({
+          id: m.id,
+          icon: Vote,
+          label: `Vote & notes à faire — vs ${m.opponent} (${formatDate(m.date)})`,
+          to: `/matches/${m.id}`,
+        })),
+      ]
 
   return (
     <div className="flex flex-col gap-6" data-tour="home-page">
