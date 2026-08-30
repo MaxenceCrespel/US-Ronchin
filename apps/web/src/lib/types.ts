@@ -125,6 +125,10 @@ export interface Match {
   scoreHome: number | null
   scoreAway: number | null
   status: MatchStatus
+  /** Set once the coach clicks "Terminer" at the end of the composition/events setup
+   * wizard — voting (MOTM, patron de la défense, notes) only unlocks once this is set,
+   * not just when status flips to PLAYED (that happens earlier, at score entry alone). */
+  resultConfirmedAt: string | null
   createdBy: string
 }
 

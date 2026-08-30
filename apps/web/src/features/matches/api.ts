@@ -53,6 +53,7 @@ export interface UpdateMatchInput {
   scoreHome?: number
   scoreAway?: number
   status?: MatchStatus
+  resultConfirmed?: boolean
 }
 
 export async function updateMatch(id: string, input: UpdateMatchInput): Promise<Match> {

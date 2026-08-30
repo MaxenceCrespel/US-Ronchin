@@ -114,11 +114,18 @@ export class MatchesService {
 
   async update(id: string, dto: UpdateMatchDto): Promise<Match> {
     const match = await this.findById(id);
-    const wasPlayed = match.status === MatchStatus.PLAYED;
-    Object.assign(match, dto);
+    const wasConfirmed = match.resultConfirmedAt !== null;
+    const { resultConfirmed, ...rest } = dto;
+    Object.assign(match, rest);
+    if (resultConfirmed) {
+      match.resultConfirmedAt = new Date();
+    }
     const saved = await this.matchesRepository.save(match);
 
-    if (!wasPlayed && saved.status === MatchStatus.PLAYED) {
+    // Fires once the coach has actually finished the whole setup (composition AND events),
+    // not as soon as status flips to PLAYED — that happens as early as the score-entry step,
+    // well before scorers/cards even exist, which used to open voting prematurely.
+    if (!wasConfirmed && saved.resultConfirmedAt !== null) {
       const composition = await this.getComposition(saved.id);
       await this.pushNotificationsService.sendToUsers(
         composition.map((c) => c.userId).filter((id): id is string => !!id),
@@ -435,10 +442,18 @@ export class MatchesService {
   }
 
   async getMotm(matchId: string, currentUserId: string): Promise<MotmResponse> {
-    const [composition, votes] = await Promise.all([
+    const [match, composition, votes] = await Promise.all([
+      this.findById(matchId),
       this.compositionsRepository.find({ where: { matchId }, relations: { user: true } }),
       this.motmVotesRepository.find({ where: { matchId } }),
     ]);
+
+    // Not open yet — the coach hasn't finished the composition/events setup, so voting
+    // shouldn't appear available (or its progress gauge show up) anywhere in the app, even
+    // though the composition itself may already exist from an earlier wizard step.
+    if (match.resultConfirmedAt === null) {
+      return { myVoteCompositionId: null, revealed: false, totalVotes: 0, totalPlayers: 0, votingClosesAt: null, results: null };
+    }
 
     // Guests (no account yet) can't vote — excluded from the eligible-voter count that
     // gates when results get revealed.
@@ -520,10 +535,24 @@ export class MatchesService {
   }
 
   async getDefenseBoss(matchId: string, currentUserId: string): Promise<DefenseBossResponse> {
-    const [composition, votes] = await Promise.all([
+    const [match, composition, votes] = await Promise.all([
+      this.findById(matchId),
       this.compositionsRepository.find({ where: { matchId }, relations: { user: true } }),
       this.defenseBossVotesRepository.find({ where: { matchId } }),
     ]);
+
+    // Not open yet — see getMotm above for why.
+    if (match.resultConfirmedAt === null) {
+      return {
+        myVoteCompositionId: null,
+        revealed: false,
+        totalVotes: 0,
+        totalPlayers: 0,
+        votingClosesAt: null,
+        hasEligibleTargets: true,
+        results: null,
+      };
+    }
 
     // Guests (no account yet) can't vote — excluded from the eligible-voter count that
     // gates when results get revealed.

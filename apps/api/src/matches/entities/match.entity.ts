@@ -62,6 +62,14 @@ export class Match {
   @Column({ type: 'enum', enum: MatchStatus, default: MatchStatus.SCHEDULED })
   status: MatchStatus;
 
+  /** Set once the coach clicks "Terminer" at the end of the full composition/events setup
+   * wizard — unlocks voting (MOTM, patron de la défense, notes). Deliberately distinct from
+   * status PLAYED: that flips as soon as just the score is saved, an earlier, separate step
+   * — voting used to open right after composition alone, before the coach had even reached
+   * the events step to enter scorers/cards. */
+  @Column({ name: 'result_confirmed_at', type: 'timestamptz', nullable: true })
+  resultConfirmedAt: Date | null;
+
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy: string | null;
 

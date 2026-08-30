@@ -364,6 +364,17 @@ export function MatchDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match', matchId] }),
   })
 
+  // "Terminer" at the end of the setup wizard — distinct from scoreMutation above (which
+  // only flips status to PLAYED, an earlier step). This is what actually unlocks voting,
+  // once composition AND events have both had their turn.
+  const confirmResultMutation = useMutation({
+    mutationFn: () => updateMatch(matchId, { resultConfirmed: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['match', matchId] })
+      setConfigOpen(false)
+    },
+  })
+
   const [selectedPlayers, setSelectedPlayers] = useState<Record<string, { played: boolean; starter: boolean }>>(
     {},
   )
@@ -732,8 +743,12 @@ export function MatchDetailPage() {
   // to them automatically once their entry is linked to a real account (see LinkGuestButton).
   const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
+  // Requires resultConfirmedAt, not just status PLAYED — status flips as early as the
+  // score-entry step, well before the coach has been through composition AND events. Voting
+  // used to unlock the moment composition alone was saved, before scorers/cards even existed.
+  const resultConfirmed = match.resultConfirmedAt !== null
   // Voting/rating is mandatory for anyone who played, coach included — no role exception.
-  const votingApplies = match.status === 'PLAYED' && iPlayed && hasComposition
+  const votingApplies = resultConfirmed && iPlayed && hasComposition
   const hasVotedMotm = motmQuery.data?.myVoteCompositionId != null
   const motmRevealed = motmQuery.data?.revealed ?? false
   const ratingsSubmitted = ratingsSubmittedQuery.data ?? false
@@ -750,7 +765,7 @@ export function MatchDetailPage() {
   const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
   const needsRatings = !ratingsSubmitted
   const showVoteModal = votingApplies && (needsMotmVote || needsDefenseBossVote || needsRatings)
-  const votesTabApplies = match.status === 'PLAYED' && hasComposition
+  const votesTabApplies = resultConfirmed && hasComposition
 
   const scoreCard = (
     <Card>
@@ -1499,8 +1514,12 @@ export function MatchDetailPage() {
               <Button variant="outline" onClick={() => setConfigStep('formation')}>
                 Précédent
               </Button>
-              <Button variant="outline" onClick={() => setConfigOpen(false)}>
-                Terminer
+              <Button
+                variant="outline"
+                disabled={confirmResultMutation.isPending}
+                onClick={() => confirmResultMutation.mutate()}
+              >
+                {confirmResultMutation.isPending ? 'Enregistrement...' : 'Terminer'}
               </Button>
             </div>
           )}
@@ -1509,7 +1528,7 @@ export function MatchDetailPage() {
     )
   }
 
-  const motmCard = match.status === 'PLAYED' && hasComposition && (
+  const motmCard = resultConfirmed && hasComposition && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1631,7 +1650,7 @@ export function MatchDetailPage() {
       )
 
   const defenders = teammates.filter((entry) => entry.position === 'DEFENDER')
-  const defenseBossCard = match.status === 'PLAYED' && hasComposition && defenseBossApplies && (
+  const defenseBossCard = resultConfirmed && hasComposition && defenseBossApplies && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1763,7 +1782,7 @@ export function MatchDetailPage() {
     .filter((entry) => entry.userId !== user?.id)
   const allDraftsFilled = teammatesToRate.every((entry) => ratingDrafts[entry.userId] != null)
 
-  const ratingsCard = match.status === 'PLAYED' && hasComposition && (
+  const ratingsCard = resultConfirmed && hasComposition && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
