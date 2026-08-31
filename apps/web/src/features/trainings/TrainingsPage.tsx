@@ -21,6 +21,7 @@ import {
   ClipboardCheck,
   Clock,
   Dumbbell,
+  History,
   MapPin,
   Pencil,
   Settings2,
@@ -59,7 +60,14 @@ import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
 import { FootballSpinner } from '@/components/FootballSpinner'
-import type { Attendance, AttendanceStatus, Match, PlayerSubPosition, TrainingType } from '@/lib/types'
+import type {
+  Attendance,
+  AttendanceStatus,
+  AttendanceStatusChangeEntry,
+  Match,
+  PlayerSubPosition,
+  TrainingType,
+} from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import {
@@ -67,6 +75,7 @@ import {
   createTraining,
   deleteSession,
   deleteTraining,
+  fetchAttendanceHistory,
   fetchAttendances,
   fetchSessions,
   fetchTrainingRanking,
@@ -687,6 +696,72 @@ function TeamsSection({
         </div>
       )}
     </div>
+  )
+}
+
+/** Chronological trail of every declared-status change for a session — see
+ * AttendanceStatusChange. Exists to settle "I never touched it" disputes (e.g. a player
+ * ending up on the waitlist despite believing their status never changed) with actual
+ * evidence instead of guessing from the current state alone. */
+function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
+  const [open, setOpen] = useState(false)
+  const historyQuery = useQuery({
+    queryKey: ['attendance-history', sessionId],
+    queryFn: () => fetchAttendanceHistory(sessionId),
+    enabled: open,
+  })
+
+  function describe(entry: AttendanceStatusChangeEntry): string {
+    const from = entry.previousStatus ? ATTENDANCE_STATUS_LABELS[entry.previousStatus] : 'Aucune réponse'
+    const to = ATTENDANCE_STATUS_LABELS[entry.newStatus]
+    const isSelf = entry.changedBy === entry.userId
+    const actor = isSelf ? null : `${entry.changer.firstName} ${entry.changer.lastName[0]}.`
+    let confirmNote = ''
+    if (entry.previousConfirmed !== entry.newConfirmed) {
+      confirmNote = entry.newConfirmed ? ' — passé de liste d\'attente à confirmé' : ' — mis en liste d\'attente'
+    }
+    if (from === to && !isSelf) {
+      // The auto-promotion case: status doesn't change, only confirmed does.
+      return `Promu de la liste d'attente${confirmNote.replace(' — ', ', ')}`
+    }
+    return `${from} → ${to}${confirmNote}${actor ? ` (par ${actor}, coach)` : ''}`
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <History className="size-3.5" />
+          Historique
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="flex max-h-[80vh] flex-col overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Historique des réponses</DialogTitle>
+        </DialogHeader>
+        {historyQuery.isLoading ? (
+          <p className="text-muted-foreground text-sm">Chargement...</p>
+        ) : !historyQuery.data || historyQuery.data.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Aucun changement enregistré.</p>
+        ) : (
+          <ul className="flex flex-col gap-2.5 text-sm">
+            {historyQuery.data.map((entry) => (
+              <li key={entry.id} className="flex items-start gap-2.5">
+                <span className="text-muted-foreground w-12 shrink-0 text-xs">
+                  {format(new Date(entry.createdAt), 'HH:mm')}
+                </span>
+                <span>
+                  <strong className="font-medium">
+                    {entry.user.firstName} {entry.user.lastName}
+                  </strong>{' '}
+                  <span className="text-muted-foreground">{describe(entry)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1359,7 +1434,10 @@ export function SessionCard({
             <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
               Espace coach
             </p>
-            <CoachValidationDialog sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
+            <div className="flex flex-wrap gap-2">
+              <CoachValidationDialog sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
+              <AttendanceHistoryDialog sessionId={sessionId} />
+            </div>
           </div>
         )}
         {!cancelled && (

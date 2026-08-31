@@ -51,8 +51,30 @@ export class AttendancesController {
     @Param('sessionId') sessionId: string,
     @Param('userId') userId: string,
     @Body() dto: SetAttendanceDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
   ) {
-    return this.attendancesService.setAttendance(sessionId, userId, dto.status, dto.guests, true);
+    return this.attendancesService.setAttendance(
+      sessionId,
+      userId,
+      dto.status,
+      dto.guests,
+      true,
+      currentUser.id,
+    );
+  }
+
+  // Coach-only trail of every declared-status change for this session — see
+  // AttendanceStatusChange, added to settle "I never touched it" disputes.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Get('history')
+  async findHistory(@Param('sessionId') sessionId: string) {
+    const changes = await this.attendancesService.findStatusHistory(sessionId);
+    return changes.map((c) => ({
+      ...c,
+      user: sanitizeUser(c.user),
+      changer: sanitizeUser(c.changer),
+    }));
   }
 
   @UseGuards(RolesGuard)

@@ -104,6 +104,20 @@ export interface Attendance {
   confirmed: boolean
 }
 
+/** One row of AttendanceStatusChange's append-only trail — see the API entity doc. */
+export interface AttendanceStatusChangeEntry {
+  id: string
+  userId: string
+  user: User
+  changedBy: string
+  changer: User
+  previousStatus: AttendanceStatus | null
+  newStatus: AttendanceStatus
+  previousConfirmed: boolean
+  newConfirmed: boolean
+  createdAt: string
+}
+
 export interface MatchAttendance {
   id: string
   matchId: string

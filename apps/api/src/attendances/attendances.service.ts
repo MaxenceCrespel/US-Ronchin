@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
+import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { PlayerSubPosition } from '../users/entities/user.entity';
 import { pickNextWaitlisted } from './attendance-cap';
@@ -20,6 +21,8 @@ export class AttendancesService {
     private readonly attendancesRepository: Repository<Attendance>,
     @InjectRepository(AttendanceGuest)
     private readonly attendanceGuestsRepository: Repository<AttendanceGuest>,
+    @InjectRepository(AttendanceStatusChange)
+    private readonly statusChangesRepository: Repository<AttendanceStatusChange>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
   ) {}
@@ -28,6 +31,16 @@ export class AttendancesService {
     return this.attendancesRepository.find({
       where: { trainingSessionId },
       relations: { user: true, guests: true },
+    });
+  }
+
+  /** Chronological trail of every declared-status change for a session — see
+   * AttendanceStatusChange. Coach-only, for clearing up a "I never touched it" dispute. */
+  findStatusHistory(trainingSessionId: string): Promise<AttendanceStatusChange[]> {
+    return this.statusChangesRepository.find({
+      where: { trainingSessionId },
+      relations: { user: true, changer: true },
+      order: { createdAt: 'ASC' },
     });
   }
 
@@ -40,6 +53,10 @@ export class AttendancesService {
     // Present, isn't coming") needs fixing regardless of the lock, since the whole point is
     // to fix it before regenerating teams. A player editing their own answer never sets this.
     bypassLock = false,
+    // Who actually performed this change — the player themselves by default, or the coach's
+    // id when called via setForPlayer. Logged on the history row (see AttendanceStatusChange)
+    // so a disputed change can be traced back to who really made it.
+    changedBy: string = userId,
   ): Promise<Attendance> {
     const session = await this.sessionsRepository.findOne({
       where: { id: trainingSessionId },
@@ -68,8 +85,11 @@ export class AttendancesService {
     }
 
     // Captured before this row is mutated — used below to detect a PRESENT→(something else)
-    // transition that frees up a confirmed slot for someone else on the waitlist.
-    const wasConfirmedPresent = attendance?.status === AttendanceStatus.PRESENT && attendance.confirmed;
+    // transition that frees up a confirmed slot for someone else on the waitlist, and to log
+    // what actually changed (see AttendanceStatusChange).
+    const previousStatus = attendance?.status ?? null;
+    const previousConfirmed = attendance?.confirmed ?? true;
+    const wasConfirmedPresent = previousStatus === AttendanceStatus.PRESENT && previousConfirmed;
 
     if (!attendance) {
       attendance = this.attendancesRepository.create({
@@ -100,6 +120,18 @@ export class AttendancesService {
     }
 
     attendance = await this.attendancesRepository.save(attendance);
+
+    await this.statusChangesRepository.save(
+      this.statusChangesRepository.create({
+        trainingSessionId,
+        userId,
+        changedBy,
+        previousStatus,
+        newStatus: attendance.status!,
+        previousConfirmed,
+        newConfirmed: attendance.confirmed,
+      }),
+    );
 
     if (wasConfirmedPresent && status !== AttendanceStatus.PRESENT) {
       await this.promoteNextWaitlisted(trainingSessionId);
@@ -134,6 +166,19 @@ export class AttendancesService {
     if (!next) return;
     next.confirmed = true;
     await this.attendancesRepository.save(next);
+    // Nobody "did" this — it's a side effect of someone else leaving — so changedBy is the
+    // promoted player themselves, not whoever triggered it (that's a separate history row).
+    await this.statusChangesRepository.save(
+      this.statusChangesRepository.create({
+        trainingSessionId,
+        userId: next.userId,
+        changedBy: next.userId,
+        previousStatus: AttendanceStatus.PRESENT,
+        newStatus: AttendanceStatus.PRESENT,
+        previousConfirmed: false,
+        newConfirmed: true,
+      }),
+    );
   }
 
   /** Coach-only: records what actually happened, independently of what the player declared.

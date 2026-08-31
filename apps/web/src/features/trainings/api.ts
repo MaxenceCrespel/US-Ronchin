@@ -2,6 +2,7 @@ import { apiClient } from '@/lib/api-client'
 import type {
   Attendance,
   AttendanceStatus,
+  AttendanceStatusChangeEntry,
   Training,
   TrainingRankingEntry,
   TrainingSession,
@@ -79,6 +80,17 @@ export async function updateTraining(
 export async function fetchAttendances(sessionId: string): Promise<Attendance[]> {
   const { data } = await apiClient.get<Attendance[]>(
     `/training-sessions/${sessionId}/attendance`,
+  )
+  return data
+}
+
+/** Coach-only trail of every declared-status change for a session — see
+ * AttendanceStatusChangeEntry. */
+export async function fetchAttendanceHistory(
+  sessionId: string,
+): Promise<AttendanceStatusChangeEntry[]> {
+  const { data } = await apiClient.get<AttendanceStatusChangeEntry[]>(
+    `/training-sessions/${sessionId}/attendance/history`,
   )
   return data
 }
