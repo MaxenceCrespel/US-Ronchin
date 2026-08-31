@@ -95,8 +95,13 @@ export class TeamBalancingService {
     // from these same assignments) kept crediting/blaming whoever merely *declared*
     // PRESENT. Before the pointage happens, actualStatus is null for everyone and this
     // falls back to the declared status exactly as before — the normal pre-kickoff path.
-    const presentAttendances = allAttendances.filter(
-      (a) => (a.actualStatus ?? a.status) === AttendanceStatus.PRESENT,
+    // Once a real pointage exists, the coach's call is authoritative and isn't second-
+    // guessed by the training's max-present cap (a.confirmed) — that cap only governs the
+    // self-service poll, pre-pointage.
+    const presentAttendances = allAttendances.filter((a) =>
+      a.actualStatus != null
+        ? a.actualStatus === AttendanceStatus.PRESENT
+        : a.status === AttendanceStatus.PRESENT && a.confirmed,
     );
     const guestSourceAttendances = allAttendances.filter((a) => a.guestCount > 0);
     if (presentAttendances.length === 0 && guestSourceAttendances.length === 0) {

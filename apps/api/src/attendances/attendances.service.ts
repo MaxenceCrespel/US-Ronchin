@@ -5,6 +5,7 @@ import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { PlayerSubPosition } from '../users/entities/user.entity';
+import { pickNextWaitlisted } from './attendance-cap';
 
 export interface GuestNameInput {
   firstName: string;
@@ -40,7 +41,10 @@ export class AttendancesService {
     // to fix it before regenerating teams. A player editing their own answer never sets this.
     bypassLock = false,
   ): Promise<Attendance> {
-    const session = await this.sessionsRepository.findOne({ where: { id: trainingSessionId } });
+    const session = await this.sessionsRepository.findOne({
+      where: { id: trainingSessionId },
+      relations: { training: true },
+    });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
     }
@@ -63,18 +67,43 @@ export class AttendancesService {
       );
     }
 
+    // Captured before this row is mutated — used below to detect a PRESENT→(something else)
+    // transition that frees up a confirmed slot for someone else on the waitlist.
+    const wasConfirmedPresent = attendance?.status === AttendanceStatus.PRESENT && attendance.confirmed;
+
     if (!attendance) {
       attendance = this.attendancesRepository.create({
         trainingSessionId,
         userId,
         status,
         guestCount: guests.length,
+        respondedAt: new Date(),
       });
     } else {
       attendance.status = status;
       attendance.guestCount = guests.length;
+      attendance.respondedAt = new Date();
     }
+
+    // Whether THIS response gets a confirmed slot or lands on the waitlist. A slot, once
+    // granted, sticks with whoever holds it — re-declaring PRESENT (e.g. just to add a
+    // guest) never re-evaluates someone who already has one. Cap enforcement never blocks
+    // the write itself, only this flag — see the entity doc.
+    const cap = session.training?.maxPresentPlayers ?? null;
+    if (status !== AttendanceStatus.PRESENT) {
+      attendance.confirmed = true;
+    } else if (!wasConfirmedPresent) {
+      const confirmedCount = await this.attendancesRepository.count({
+        where: { trainingSessionId, status: AttendanceStatus.PRESENT, confirmed: true },
+      });
+      attendance.confirmed = cap == null || confirmedCount < cap;
+    }
+
     attendance = await this.attendancesRepository.save(attendance);
+
+    if (wasConfirmedPresent && status !== AttendanceStatus.PRESENT) {
+      await this.promoteNextWaitlisted(trainingSessionId);
+    }
 
     await this.attendanceGuestsRepository.delete({ attendanceId: attendance.id });
     attendance.guests = guests.length
@@ -93,6 +122,20 @@ export class AttendancesService {
     return attendance;
   }
 
+  /** A confirmed PRESENT slot just freed up — hands it to whoever's next in line (licensed
+   * players first, then longest-waiting) among those still on the waitlist for this
+   * session, if anyone is. See pickNextWaitlisted. */
+  private async promoteNextWaitlisted(trainingSessionId: string): Promise<void> {
+    const waitlisted = await this.attendancesRepository.find({
+      where: { trainingSessionId, status: AttendanceStatus.PRESENT, confirmed: false },
+      relations: { user: true },
+    });
+    const next = pickNextWaitlisted(waitlisted);
+    if (!next) return;
+    next.confirmed = true;
+    await this.attendancesRepository.save(next);
+  }
+
   /** Coach-only: records what actually happened, independently of what the player declared.
    * Creates the row if the player never responded at all. */
   async validateAttendance(
@@ -105,11 +148,16 @@ export class AttendancesService {
     });
 
     if (!attendance) {
+      // The player never responded to the poll at all — this row exists purely to record
+      // what the coach observed, so respondedAt (a "when did the PLAYER declare a status"
+      // timestamp) is set to now only because the column can't be null, not because this
+      // counts as their own response.
       attendance = this.attendancesRepository.create({
         trainingSessionId,
         userId,
         status: null,
         actualStatus,
+        respondedAt: new Date(),
       });
     } else {
       attendance.actualStatus = actualStatus;

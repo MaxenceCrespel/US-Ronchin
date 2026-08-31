@@ -41,4 +41,10 @@ export class CreateTrainingDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  /** Caps confirmed PRESENT responses (e.g. 16 for a locked 8v8) — omit/null for no cap. */
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  maxPresentPlayers?: number | null;
 }

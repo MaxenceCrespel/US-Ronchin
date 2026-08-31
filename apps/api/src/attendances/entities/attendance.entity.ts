@@ -6,7 +6,6 @@ import {
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 import { TrainingSession } from '../../trainings/entities/training-session.entity';
 import { User } from '../../users/entities/user.entity';
@@ -54,9 +53,23 @@ export class Attendance {
   @Column({ name: 'guest_count', type: 'int', default: 0 })
   guestCount: number;
 
+  /** False only when status is PRESENT and the training's maxPresentPlayers cap was already
+   * full at the moment this player declared present — they're on the waitlist. Always true
+   * for a non-PRESENT status or when the training has no cap. Persisted (not recomputed on
+   * every read) so a slot, once granted, sticks with whoever holds it — see
+   * AttendancesService.setAttendance/promoteNextWaitlisted for how it's kept in sync. */
+  @Column({ default: true })
+  confirmed: boolean;
+
   @OneToMany(() => AttendanceGuest, (guest) => guest.attendance)
   guests: AttendanceGuest[];
 
-  @UpdateDateColumn({ name: 'responded_at' })
+  // Deliberately app-managed rather than @UpdateDateColumn: that auto-touches on ANY save,
+  // including the coach's later validateAttendance() (actualStatus) — which isn't the
+  // player's own response at all. Set explicitly in AttendancesService.setAttendance only,
+  // so this stays a true "when did they last declare a status" timestamp — used to break
+  // ties on the waitlist (see rankAndCapPresent) when several players share the same
+  // license-priority tier.
+  @Column({ name: 'responded_at', type: 'timestamp' })
   respondedAt: Date;
 }

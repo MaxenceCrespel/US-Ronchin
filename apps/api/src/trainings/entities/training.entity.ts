@@ -43,6 +43,13 @@ export class Training {
   @Column({ name: 'end_date', type: 'date', nullable: true })
   endDate: string | null;
 
+  /** Caps how many PRESENT responses count as confirmed for a session of this training
+   * (e.g. 16 for a locked 8v8) — null means no cap. Licensed players are ranked ahead of
+   * non-licensed ones when the cap is reached; anyone beyond it is waitlisted rather than
+   * turned away outright (see AttendancesService.rankAndCapPresent). */
+  @Column({ name: 'max_present_players', type: 'int', nullable: true })
+  maxPresentPlayers: number | null;
+
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy: string | null;
 

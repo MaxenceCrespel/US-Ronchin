@@ -29,6 +29,7 @@ export interface CreateTrainingInput {
   endTime: string
   startDate: string
   endDate?: string
+  maxPresentPlayers?: number | null
 }
 
 export async function createTraining(input: CreateTrainingInput): Promise<Training> {

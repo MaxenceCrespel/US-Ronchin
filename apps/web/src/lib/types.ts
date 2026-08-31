@@ -51,6 +51,9 @@ export interface Training {
   startDate: string
   endDate: string | null
   createdBy: string
+  /** Caps how many PRESENT responses count as confirmed for a session (e.g. 16 for a locked
+   * 8v8) — licensed players prioritized, the rest waitlisted. Null means no cap. */
+  maxPresentPlayers: number | null
 }
 
 export interface TrainingSession {
@@ -95,6 +98,10 @@ export interface Attendance {
   guestCount: number
   guests: AttendanceGuest[]
   respondedAt: string
+  /** False when status is PRESENT but the training's maxPresentPlayers cap is already full
+   * and this player is on the waitlist — always true for a non-PRESENT status or when the
+   * training has no cap. */
+  confirmed: boolean
 }
 
 export interface MatchAttendance {

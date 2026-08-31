@@ -145,6 +145,7 @@ function ManageTrainingsDialog() {
   const [endTime, setEndTime] = useState('20:30')
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = useState('')
+  const [maxPresentPlayers, setMaxPresentPlayers] = useState('')
 
   function resetForm() {
     setEditingId(null)
@@ -156,6 +157,7 @@ function ManageTrainingsDialog() {
     setEndTime('20:30')
     setStartDate(new Date().toISOString().slice(0, 10))
     setEndDate('')
+    setMaxPresentPlayers('')
   }
 
   function startEdit(training: NonNullable<typeof trainingsQuery.data>[number]) {
@@ -168,6 +170,7 @@ function ManageTrainingsDialog() {
     setEndTime(training.endTime.slice(0, 5))
     setStartDate(training.startDate)
     setEndDate(training.endDate ?? '')
+    setMaxPresentPlayers(training.maxPresentPlayers != null ? String(training.maxPresentPlayers) : '')
   }
 
   const formInput = () => ({
@@ -179,6 +182,7 @@ function ManageTrainingsDialog() {
     endTime,
     startDate,
     endDate: endDate || undefined,
+    maxPresentPlayers: maxPresentPlayers ? Number(maxPresentPlayers) : null,
   })
 
   const createMutation = useMutation({
@@ -341,6 +345,23 @@ function ManageTrainingsDialog() {
                 />
               </div>
             )}
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="maxPresentPlayers">Nombre de présents max (optionnel)</Label>
+              <Input
+                id="maxPresentPlayers"
+                className="bg-background"
+                type="number"
+                min={2}
+                placeholder="ex. 16 pour du 8v8"
+                value={maxPresentPlayers}
+                onChange={(e) => setMaxPresentPlayers(e.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                Au-delà, les non-licenciés passent en liste d'attente — les licenciés restent
+                prioritaires tant qu'une place est encore libre.
+              </p>
+            </div>
 
             <div className="flex gap-2 sm:col-span-2">
               <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
@@ -1169,6 +1190,12 @@ export function SessionCard({
             {mutation.isError && (
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
+            {myAttendance?.status === 'PRESENT' && !myAttendance.confirmed && (
+              <p className="text-amber-600 text-xs font-medium">
+                Séance complète — tu es sur liste d'attente, tu seras confirmé automatiquement
+                si une place se libère.
+              </p>
+            )}
             {myAttendance?.status && (
               <div className="flex flex-col gap-1.5 text-xs">
                 <span className="text-muted-foreground">
@@ -1269,24 +1296,27 @@ export function SessionCard({
               .map((a) => (
                 <Badge
                   key={a.id}
-                  variant={ATTENDANCE_STATUS_VARIANTS[a.status!]}
+                  variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
                   className="animate-pop-in"
                 >
                   {a.user.firstName} {a.user.lastName[0]}.
                   {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
+                  {!a.confirmed && ' (attente)'}
                 </Badge>
               ))}
           </div>
         )}
         {(() => {
-          const presentCount = attendancesQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+          const presentAttendances = attendancesQuery.data?.filter((a) => a.status === 'PRESENT') ?? []
+          const confirmedCount = presentAttendances.filter((a) => a.confirmed).length
+          const waitlistedCount = presentAttendances.length - confirmedCount
           // Guests count regardless of the inviting player's own status — they can still
           // show up even if whoever registered them ends up not coming themselves.
           const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
-          if (presentCount === 0 && guestTotal === 0) return null
+          if (confirmedCount === 0 && guestTotal === 0) return null
           return (
             <p className="text-muted-foreground text-xs">
-              {presentCount} joueur{presentCount > 1 ? 's' : ''}
+              {confirmedCount} joueur{confirmedCount > 1 ? 's' : ''}
               {guestTotal > 0 && (
                 <>
                   {' '}
@@ -1294,7 +1324,13 @@ export function SessionCard({
                 </>
               )}
               {' = '}
-              <strong className="text-foreground">{presentCount + guestTotal} sur le terrain</strong>
+              <strong className="text-foreground">{confirmedCount + guestTotal} sur le terrain</strong>
+              {waitlistedCount > 0 && (
+                <>
+                  {' · '}
+                  {waitlistedCount} en liste d'attente
+                </>
+              )}
             </p>
           )
         })()}

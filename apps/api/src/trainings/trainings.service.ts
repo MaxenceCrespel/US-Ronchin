@@ -40,6 +40,7 @@ export class TrainingsService {
       ...dto,
       dayOfWeek: dto.dayOfWeek ?? null,
       endDate: dto.endDate ?? null,
+      maxPresentPlayers: dto.maxPresentPlayers ?? null,
       createdBy,
     });
     const saved = await this.trainingsRepository.save(training);
