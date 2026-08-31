@@ -1392,22 +1392,34 @@ export function SessionCard({
           <div className="flex flex-wrap gap-1.5">
             {sortAttendancesForDisplay(attendancesQuery.data)
               .filter((a) => a.status)
-              .map((a) => {
-                const waitlistedGuestCount = a.guestCount - a.confirmedGuestCount
-                return (
-                  <Badge
-                    key={a.id}
-                    variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
-                    className="animate-pop-in"
-                  >
-                    {a.user.firstName} {a.user.lastName[0]}.
-                    {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
-                    {!a.confirmed && ' (attente)'}
-                    {a.confirmed && waitlistedGuestCount > 0 &&
-                      ` (${waitlistedGuestCount} invité${waitlistedGuestCount > 1 ? 's' : ''} en attente)`}
-                  </Badge>
-                )
-              })}
+              .flatMap((a) => [
+                <Badge
+                  key={a.id}
+                  variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
+                  className="animate-pop-in"
+                >
+                  {a.user.firstName} {a.user.lastName[0]}.
+                  {!a.confirmed && ' (attente)'}
+                </Badge>,
+                // Each guest gets its own badge — a "+2" tucked into the inviter's own badge
+                // read as an afterthought, not as someone who's actually coming and counts
+                // toward the headcount/cap exactly like a real player.
+                ...a.guests.map((g, i) => {
+                  const guestConfirmed = a.confirmed && i < a.confirmedGuestCount
+                  return (
+                    <Badge
+                      key={`${a.id}-guest-${g.id}`}
+                      variant={guestConfirmed ? 'secondary' : 'outline'}
+                      className="animate-pop-in"
+                    >
+                      {g.firstName}
+                      {g.lastName ? ` ${g.lastName}` : ''}
+                      <span className="text-muted-foreground"> · invité de {a.user.firstName}</span>
+                      {!guestConfirmed && ' (attente)'}
+                    </Badge>
+                  )
+                }),
+              ])}
           </div>
         )}
         {(() => {
