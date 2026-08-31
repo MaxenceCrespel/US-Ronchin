@@ -14,6 +14,14 @@ export interface GuestNameInput {
   position?: PlayerSubPosition;
 }
 
+/** Headcount one row currently holds against the cap — the player's own confirmed slot
+ * (only while PRESENT) plus however many of their guests are confirmed. Guests count
+ * regardless of the inviter's own status (see team-balancing: a guest can still show up
+ * even if the inviter ends up absent), so this is the one place both concerns are unified. */
+function headcount(a: Pick<Attendance, 'status' | 'confirmed' | 'confirmedGuestCount'>): number {
+  return (a.status === AttendanceStatus.PRESENT && a.confirmed ? 1 : 0) + a.confirmedGuestCount;
+}
+
 @Injectable()
 export class AttendancesService {
   constructor(
@@ -84,11 +92,12 @@ export class AttendancesService {
       );
     }
 
-    // Captured before this row is mutated — used below to detect a PRESENT→(something else)
-    // transition that frees up a confirmed slot for someone else on the waitlist, and to log
-    // what actually changed (see AttendanceStatusChange).
+    // Captured before this row is mutated — used below to log what actually changed (see
+    // AttendanceStatusChange) and to decide whether the player's own slot is up for
+    // re-evaluation (sticky: only on a genuine new PRESENT arrival, see below).
     const previousStatus = attendance?.status ?? null;
     const previousConfirmed = attendance?.confirmed ?? true;
+    const previousConfirmedGuestCount = attendance?.confirmedGuestCount ?? 0;
     const wasConfirmedPresent = previousStatus === AttendanceStatus.PRESENT && previousConfirmed;
 
     if (!attendance) {
@@ -105,18 +114,34 @@ export class AttendancesService {
       attendance.respondedAt = new Date();
     }
 
-    // Whether THIS response gets a confirmed slot or lands on the waitlist. A slot, once
-    // granted, sticks with whoever holds it — re-declaring PRESENT (e.g. just to add a
-    // guest) never re-evaluates someone who already has one. Cap enforcement never blocks
-    // the write itself, only this flag — see the entity doc.
+    // Headcount allocation against the cap — the player's own slot (sticky: decided once,
+    // on a genuine new PRESENT arrival, never re-evaluated by re-declaring) plus this row's
+    // guest slots (recomputed on every call, since a guest list is freshly redeclared each
+    // time). Both draw from the SAME pool — a confirmed player couldn't otherwise blow past
+    // the cap by piling on guests. Cap enforcement never blocks the write itself, only these
+    // flags — see the entity doc.
     const cap = session.training?.maxPresentPlayers ?? null;
-    if (status !== AttendanceStatus.PRESENT) {
-      attendance.confirmed = true;
-    } else if (!wasConfirmedPresent) {
-      const confirmedCount = await this.attendancesRepository.count({
-        where: { trainingSessionId, status: AttendanceStatus.PRESENT, confirmed: true },
-      });
-      attendance.confirmed = cap == null || confirmedCount < cap;
+    if (cap == null) {
+      if (status !== AttendanceStatus.PRESENT) {
+        attendance.confirmed = true;
+      } else if (!wasConfirmedPresent) {
+        attendance.confirmed = true;
+      }
+      attendance.confirmedGuestCount = guests.length;
+    } else {
+      const others = await this.attendancesRepository.find({ where: { trainingSessionId } });
+      const otherHeadcount = others
+        .filter((a) => a.userId !== userId)
+        .reduce((sum, a) => sum + headcount(a), 0);
+
+      if (status !== AttendanceStatus.PRESENT) {
+        attendance.confirmed = true;
+      } else if (!wasConfirmedPresent) {
+        attendance.confirmed = otherHeadcount < cap;
+      }
+      const selfSlot = status === AttendanceStatus.PRESENT && attendance.confirmed ? 1 : 0;
+      const remainingForGuests = cap - otherHeadcount - selfSlot;
+      attendance.confirmedGuestCount = Math.max(0, Math.min(guests.length, remainingForGuests));
     }
 
     attendance = await this.attendancesRepository.save(attendance);
@@ -130,11 +155,19 @@ export class AttendancesService {
         newStatus: attendance.status!,
         previousConfirmed,
         newConfirmed: attendance.confirmed,
+        previousConfirmedGuestCount,
+        newConfirmedGuestCount: attendance.confirmedGuestCount,
       }),
     );
 
-    if (wasConfirmedPresent && status !== AttendanceStatus.PRESENT) {
-      await this.promoteNextWaitlisted(trainingSessionId);
+    if (cap != null) {
+      const freed =
+        (previousStatus === AttendanceStatus.PRESENT && previousConfirmed ? 1 : 0) +
+        previousConfirmedGuestCount -
+        headcount(attendance);
+      if (freed > 0) {
+        await this.promoteWaitlist(trainingSessionId, cap);
+      }
     }
 
     await this.attendanceGuestsRepository.delete({ attendanceId: attendance.id });
@@ -154,31 +187,73 @@ export class AttendancesService {
     return attendance;
   }
 
-  /** A confirmed PRESENT slot just freed up — hands it to whoever's next in line (licensed
-   * players first, then longest-waiting) among those still on the waitlist for this
-   * session, if anyone is. See pickNextWaitlisted. */
-  private async promoteNextWaitlisted(trainingSessionId: string): Promise<void> {
-    const waitlisted = await this.attendancesRepository.find({
-      where: { trainingSessionId, status: AttendanceStatus.PRESENT, confirmed: false },
-      relations: { user: true },
-    });
-    const next = pickNextWaitlisted(waitlisted);
-    if (!next) return;
-    next.confirmed = true;
-    await this.attendancesRepository.save(next);
-    // Nobody "did" this — it's a side effect of someone else leaving — so changedBy is the
-    // promoted player themselves, not whoever triggered it (that's a separate history row).
-    await this.statusChangesRepository.save(
-      this.statusChangesRepository.create({
-        trainingSessionId,
-        userId: next.userId,
-        changedBy: next.userId,
-        previousStatus: AttendanceStatus.PRESENT,
-        newStatus: AttendanceStatus.PRESENT,
-        previousConfirmed: false,
-        newConfirmed: true,
-      }),
-    );
+  /** Headcount just freed up — fills it as far as it goes, one unit of demand at a time:
+   * first any waitlisted PLAYER (licensed, then longest-waiting — see pickNextWaitlisted),
+   * who brings themselves AND as many of their own already-declared guests as fit; once no
+   * waitlisted player fits any more, tops up already-confirmed players' own unmet guest
+   * demand (oldest declaration first). Nobody "did" any of this — it's a side effect of
+   * someone else's headcount shrinking — so changedBy is always the promoted row's own
+   * userId. */
+  private async promoteWaitlist(trainingSessionId: string, cap: number): Promise<void> {
+    for (;;) {
+      const rows = await this.attendancesRepository.find({
+        where: { trainingSessionId, status: AttendanceStatus.PRESENT },
+        relations: { user: true },
+      });
+      const used = rows.reduce((sum, a) => sum + headcount(a), 0);
+      const room = cap - used;
+      if (room <= 0) return;
+
+      const waitlisted = rows.filter((a) => !a.confirmed);
+      const nextPlayer = pickNextWaitlisted(waitlisted);
+      if (nextPlayer) {
+        const previousConfirmed = nextPlayer.confirmed;
+        const previousConfirmedGuestCount = nextPlayer.confirmedGuestCount;
+        nextPlayer.confirmed = true;
+        const guestRoom = Math.max(0, room - 1);
+        nextPlayer.confirmedGuestCount = Math.min(
+          nextPlayer.guestCount,
+          previousConfirmedGuestCount + guestRoom,
+        );
+        await this.attendancesRepository.save(nextPlayer);
+        await this.statusChangesRepository.save(
+          this.statusChangesRepository.create({
+            trainingSessionId,
+            userId: nextPlayer.userId,
+            changedBy: nextPlayer.userId,
+            previousStatus: AttendanceStatus.PRESENT,
+            newStatus: AttendanceStatus.PRESENT,
+            previousConfirmed,
+            newConfirmed: true,
+            previousConfirmedGuestCount,
+            newConfirmedGuestCount: nextPlayer.confirmedGuestCount,
+          }),
+        );
+        continue;
+      }
+
+      const withShortfall = rows
+        .filter((a) => a.confirmed && a.guestCount > a.confirmedGuestCount)
+        .sort((a, b) => a.respondedAt.getTime() - b.respondedAt.getTime());
+      const next = withShortfall[0];
+      if (!next) return;
+      const previousConfirmedGuestCount = next.confirmedGuestCount;
+      next.confirmedGuestCount = Math.min(next.guestCount, previousConfirmedGuestCount + room);
+      await this.attendancesRepository.save(next);
+      await this.statusChangesRepository.save(
+        this.statusChangesRepository.create({
+          trainingSessionId,
+          userId: next.userId,
+          changedBy: next.userId,
+          previousStatus: AttendanceStatus.PRESENT,
+          newStatus: AttendanceStatus.PRESENT,
+          previousConfirmed: true,
+          newConfirmed: true,
+          previousConfirmedGuestCount,
+          newConfirmedGuestCount: next.confirmedGuestCount,
+        }),
+      );
+    }
   }
 
   /** Coach-only: records what actually happened, independently of what the player declared.

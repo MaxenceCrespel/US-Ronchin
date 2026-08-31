@@ -61,6 +61,12 @@ export class AttendanceStatusChange {
   @Column({ name: 'new_confirmed' })
   newConfirmed: boolean;
 
+  @Column({ name: 'previous_confirmed_guest_count', type: 'int' })
+  previousConfirmedGuestCount: number;
+
+  @Column({ name: 'new_confirmed_guest_count', type: 'int' })
+  newConfirmedGuestCount: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

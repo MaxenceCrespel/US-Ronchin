@@ -102,6 +102,9 @@ export interface Attendance {
    * and this player is on the waitlist — always true for a non-PRESENT status or when the
    * training has no cap. */
   confirmed: boolean
+  /** How many of `guests` count toward the cap (0 to guestCount) — the rest (guestCount -
+   * confirmedGuestCount) are waitlisted right alongside the player, same pool as `confirmed`. */
+  confirmedGuestCount: number
 }
 
 /** One row of AttendanceStatusChange's append-only trail — see the API entity doc. */
@@ -115,6 +118,8 @@ export interface AttendanceStatusChangeEntry {
   newStatus: AttendanceStatus
   previousConfirmed: boolean
   newConfirmed: boolean
+  previousConfirmedGuestCount: number
+  newConfirmedGuestCount: number
   createdAt: string
 }
 

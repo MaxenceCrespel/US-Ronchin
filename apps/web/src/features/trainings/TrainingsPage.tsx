@@ -716,15 +716,22 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
     const to = ATTENDANCE_STATUS_LABELS[entry.newStatus]
     const isSelf = entry.changedBy === entry.userId
     const actor = isSelf ? null : `${entry.changer.firstName} ${entry.changer.lastName[0]}.`
-    let confirmNote = ''
+    const notes: string[] = []
     if (entry.previousConfirmed !== entry.newConfirmed) {
-      confirmNote = entry.newConfirmed ? ' — passé de liste d\'attente à confirmé' : ' — mis en liste d\'attente'
+      notes.push(entry.newConfirmed ? "passé de liste d'attente à confirmé" : "mis en liste d'attente")
     }
+    const guestDiff = entry.newConfirmedGuestCount - entry.previousConfirmedGuestCount
+    if (guestDiff > 0) {
+      notes.push(`${guestDiff} invité${guestDiff > 1 ? 's' : ''} confirmé${guestDiff > 1 ? 's' : ''} en plus`)
+    } else if (guestDiff < 0) {
+      notes.push(`${-guestDiff} invité${-guestDiff > 1 ? 's' : ''} repassé${-guestDiff > 1 ? 's' : ''} en attente`)
+    }
+    const noteText = notes.length > 0 ? ` — ${notes.join(', ')}` : ''
     if (from === to && !isSelf) {
-      // The auto-promotion case: status doesn't change, only confirmed does.
-      return `Promu de la liste d'attente${confirmNote.replace(' — ', ', ')}`
+      // The auto-promotion case: status doesn't change, only confirmed/guests do.
+      return `Mis à jour depuis la liste d'attente${noteText}`
     }
-    return `${from} → ${to}${confirmNote}${actor ? ` (par ${actor}, coach)` : ''}`
+    return `${from} → ${to}${noteText}${actor ? ` (par ${actor}, coach)` : ''}`
   }
 
   return (
@@ -1385,26 +1392,36 @@ export function SessionCard({
           <div className="flex flex-wrap gap-1.5">
             {sortAttendancesForDisplay(attendancesQuery.data)
               .filter((a) => a.status)
-              .map((a) => (
-                <Badge
-                  key={a.id}
-                  variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
-                  className="animate-pop-in"
-                >
-                  {a.user.firstName} {a.user.lastName[0]}.
-                  {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
-                  {!a.confirmed && ' (attente)'}
-                </Badge>
-              ))}
+              .map((a) => {
+                const waitlistedGuestCount = a.guestCount - a.confirmedGuestCount
+                return (
+                  <Badge
+                    key={a.id}
+                    variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
+                    className="animate-pop-in"
+                  >
+                    {a.user.firstName} {a.user.lastName[0]}.
+                    {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
+                    {!a.confirmed && ' (attente)'}
+                    {a.confirmed && waitlistedGuestCount > 0 &&
+                      ` (${waitlistedGuestCount} invité${waitlistedGuestCount > 1 ? 's' : ''} en attente)`}
+                  </Badge>
+                )
+              })}
           </div>
         )}
         {(() => {
           const presentAttendances = attendancesQuery.data?.filter((a) => a.status === 'PRESENT') ?? []
           const confirmedCount = presentAttendances.filter((a) => a.confirmed).length
-          const waitlistedCount = presentAttendances.length - confirmedCount
+          const waitlistedPlayerCount = presentAttendances.length - confirmedCount
           // Guests count regardless of the inviting player's own status — they can still
-          // show up even if whoever registered them ends up not coming themselves.
-          const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+          // show up even if whoever registered them ends up not coming themselves. Split the
+          // same way as players — confirmedGuestCount is the cap-respecting figure, the rest
+          // (guestCount - confirmedGuestCount) is waitlisted right alongside the player.
+          const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.confirmedGuestCount, 0) ?? 0
+          const waitlistedGuestTotal =
+            attendancesQuery.data?.reduce((sum, a) => sum + (a.guestCount - a.confirmedGuestCount), 0) ?? 0
+          const waitlistedCount = waitlistedPlayerCount + waitlistedGuestTotal
           if (confirmedCount === 0 && guestTotal === 0) return null
           return (
             <p className="text-muted-foreground text-xs">

@@ -103,12 +103,18 @@ export class TeamBalancingService {
         ? a.actualStatus === AttendanceStatus.PRESENT
         : a.status === AttendanceStatus.PRESENT && a.confirmed,
     );
-    const guestSourceAttendances = allAttendances.filter((a) => a.guestCount > 0);
+    // confirmedGuestCount, not the raw guestCount someone declared — a guest is a headcount
+    // unit against the SAME cap as the inviting player (see AttendancesService.setAttendance),
+    // so an excess guest beyond the cap never makes it onto a team, same as a waitlisted
+    // player. Unlike presentAttendances above, this isn't gated by pointage — guests were
+    // never part of that concept, the poll-time allocation is always the source of truth.
+    const guestSourceAttendances = allAttendances.filter((a) => a.confirmedGuestCount > 0);
     if (presentAttendances.length === 0 && guestSourceAttendances.length === 0) {
       throw new BadRequestException('Aucun joueur présent pour générer des équipes');
     }
     const totalHeadcount =
-      presentAttendances.length + guestSourceAttendances.reduce((sum, a) => sum + a.guestCount, 0);
+      presentAttendances.length +
+      guestSourceAttendances.reduce((sum, a) => sum + a.confirmedGuestCount, 0);
 
     const playerStats = await this.statsService.getPlayerStats();
     const scoreByUserId = new Map(playerStats.map((p) => [p.userId, p.skillScore]));
@@ -207,7 +213,7 @@ export class TeamBalancingService {
       teamIndex: number;
     }[] = [];
     for (const attendance of guestSourceAttendances) {
-      for (let i = 0; i < attendance.guestCount; i++) {
+      for (let i = 0; i < attendance.confirmedGuestCount; i++) {
         const guest = attendance.guests?.[i];
         const label = guest
           ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`

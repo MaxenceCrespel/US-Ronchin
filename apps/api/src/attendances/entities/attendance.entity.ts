@@ -57,9 +57,17 @@ export class Attendance {
    * full at the moment this player declared present — they're on the waitlist. Always true
    * for a non-PRESENT status or when the training has no cap. Persisted (not recomputed on
    * every read) so a slot, once granted, sticks with whoever holds it — see
-   * AttendancesService.setAttendance/promoteNextWaitlisted for how it's kept in sync. */
+   * AttendancesService.setAttendance/promoteWaitlist for how it's kept in sync. */
   @Column({ default: true })
   confirmed: boolean;
+
+  /** How many of this row's guests currently count toward the cap (0 to guestCount) — a
+   * guest is a headcount unit exactly like the inviting player, so a confirmed player
+   * couldn't otherwise blow past the cap by piling on guests. Independent of `confirmed`:
+   * a guest can accompany the inviter regardless of the inviter's own status (see
+   * team-balancing), so this is recomputed on every setAttendance call, not gated by it. */
+  @Column({ name: 'confirmed_guest_count', type: 'int', default: 0 })
+  confirmedGuestCount: number;
 
   @OneToMany(() => AttendanceGuest, (guest) => guest.attendance)
   guests: AttendanceGuest[];
