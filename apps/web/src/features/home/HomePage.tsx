@@ -103,10 +103,19 @@ function UpcomingSessionCard({
     )
   }, [myAttendance?.guests])
 
-  const presentCount = attendancesQuery.data?.filter((a) => a.status === 'PRESENT').length ?? 0
+  // Only confirmed PRESENT counts toward "sur le terrain" — a training's maxPresentPlayers
+  // cap means some PRESENT responses are actually waitlisted (a.confirmed === false), same
+  // distinction the dedicated Entraînements page already makes.
+  const presentAttendances = attendancesQuery.data?.filter((a) => a.status === 'PRESENT') ?? []
+  const presentCount = presentAttendances.filter((a) => a.confirmed).length
+  const waitlistedPlayerCount = presentAttendances.length - presentCount
   // Guests count regardless of the inviting player's own status — they can still show up
-  // even if whoever registered them ends up not coming themselves.
-  const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
+  // even if whoever registered them ends up not coming themselves. confirmedGuestCount is
+  // the cap-respecting figure, same split as players.
+  const guestTotal = attendancesQuery.data?.reduce((sum, a) => sum + a.confirmedGuestCount, 0) ?? 0
+  const waitlistedGuestTotal =
+    attendancesQuery.data?.reduce((sum, a) => sum + (a.guestCount - a.confirmedGuestCount), 0) ?? 0
+  const waitlistedTotal = waitlistedPlayerCount + waitlistedGuestTotal
 
   return (
     <Card className="border-club-blue/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
@@ -152,6 +161,12 @@ function UpcomingSessionCard({
             </p>
           )}
           {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {myAttendance?.status === 'PRESENT' && !myAttendance.confirmed && (
+            <p className="text-amber-600 text-xs font-medium">
+              Séance complète — tu es sur liste d'attente, tu seras confirmé automatiquement si
+              une place se libère.
+            </p>
+          )}
           {myAttendance?.status && (
             <div className="flex flex-col gap-1.5 text-xs">
               <span className="text-muted-foreground">
@@ -224,6 +239,7 @@ function UpcomingSessionCard({
               <strong className="text-foreground">{presentCount + guestTotal}</strong> sur le terrain
               {guestTotal > 0 &&
                 ` (${presentCount} joueur${presentCount > 1 ? 's' : ''} + ${guestTotal} invité${guestTotal > 1 ? 's' : ''})`}
+              {waitlistedTotal > 0 && ` · ${waitlistedTotal} en liste d'attente`}
             </p>
           )}
         </div>
