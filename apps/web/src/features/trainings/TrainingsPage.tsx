@@ -105,6 +105,23 @@ function formatDate(date: string) {
   })
 }
 
+/** Orders the attendance badges to actually reflect the waitlist logic (see
+ * AttendancesService.setAttendance/promoteNextWaitlisted) instead of raw DB order, which
+ * only ever reflected each row's first-ever creation time, not later status changes:
+ * confirmed PRESENT first by arrival order, then waitlisted PRESENT (licensed first, then
+ * arrival order — same priority a freed slot would go to), then everyone else. */
+function sortAttendancesForDisplay(attendances: Attendance[]): Attendance[] {
+  const rank = (a: Attendance) => (a.status === 'PRESENT' ? (a.confirmed ? 0 : 1) : 2)
+  return [...attendances].sort((a, b) => {
+    const rankDiff = rank(a) - rank(b)
+    if (rankDiff !== 0) return rankDiff
+    if (rank(a) === 1 && a.user.isLicensed !== b.user.isLicensed) {
+      return a.user.isLicensed ? -1 : 1
+    }
+    return new Date(a.respondedAt).getTime() - new Date(b.respondedAt).getTime()
+  })
+}
+
 export function AttendanceToggle({
   value,
   onChange,
@@ -1291,7 +1308,7 @@ export function SessionCard({
         )}
         {attendancesQuery.data && attendancesQuery.data.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {attendancesQuery.data
+            {sortAttendancesForDisplay(attendancesQuery.data)
               .filter((a) => a.status)
               .map((a) => (
                 <Badge
