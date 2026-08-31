@@ -1414,7 +1414,10 @@ export function SessionCard({
                     >
                       {g.firstName}
                       {g.lastName ? ` ${g.lastName}` : ''}
-                      <span className="text-muted-foreground"> · invité de {a.user.firstName}</span>
+                      <span className={guestConfirmed ? 'text-white/80' : 'text-muted-foreground'}>
+                        {' '}
+                        · invité de {a.user.firstName}
+                      </span>
                       {!guestConfirmed && ' (attente)'}
                     </Badge>
                   )
