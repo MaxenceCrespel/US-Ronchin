@@ -66,6 +66,7 @@ import { fetchPlayers } from '@/features/players/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
+import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import {
   addEvent,
@@ -166,6 +167,21 @@ const GOAL_TYPE_LABELS: Record<GoalType, string> = {
 }
 
 const RATING_OPTIONS = Array.from({ length: 21 }, (_, i) => i * 0.5)
+
+type MatchStatSortKey = 'name' | 'avgRating' | 'myRating' | 'goals' | 'assists' | 'yellow' | 'red'
+
+// Text sorts alphabetically first by default; every numeric stat sorts highest-first —
+// the order you'd actually want when scanning a column of goals or cards. Same convention
+// as StatsPage's roster table (see ROSTER_SORT_DEFAULT_DIR).
+const MATCH_STATS_SORT_DEFAULT_DIR: Record<MatchStatSortKey, 'asc' | 'desc'> = {
+  name: 'asc',
+  avgRating: 'desc',
+  myRating: 'desc',
+  goals: 'desc',
+  assists: 'desc',
+  yellow: 'desc',
+  red: 'desc',
+}
 
 /** Once a guest composition entry's player creates a real account, the coach links the
  * entry to it here — the match sheet then counts for that player's stats/badges. */
@@ -273,6 +289,17 @@ export function MatchDetailPage() {
   const [configOpen, setConfigOpen] = useState(false)
   const autoOpenedConfigRef = useRef(false)
   const [configStep, setConfigStep] = useState<'presence' | 'formation' | 'events'>('presence')
+
+  const [statsSortKey, setStatsSortKey] = useState<MatchStatSortKey>('name')
+  const [statsSortDir, setStatsSortDir] = useState<'asc' | 'desc'>('asc')
+  function handleStatsSort(key: MatchStatSortKey) {
+    if (key === statsSortKey) {
+      setStatsSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setStatsSortKey(key)
+      setStatsSortDir(MATCH_STATS_SORT_DEFAULT_DIR[key])
+    }
+  }
 
   const [editingMatch, setEditingMatch] = useState(false)
   const [editOpponent, setEditOpponent] = useState('')
@@ -2022,6 +2049,51 @@ export function MatchDetailPage() {
     </Card>
   )
 
+  const statsRows = compositionQuery.data?.map((entry) => {
+    const isSelf = entry.userId === user?.id
+    const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
+    // Match by whichever field is set on each rating row, not by the entry's
+    // *current* link state — a rating cast before a guest gets linked to a real
+    // account is stored with ratedGuestId forever (see getRatingsSummary).
+    const myRating = myRatingsQuery.data?.find(
+      (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
+    )
+    const guestStatsKey = entry.guestFirstName
+      ? `name:${entry.guestFirstName} ${entry.guestLastName}`
+      : null
+    const statsKey = entry.userId ?? guestStatsKey
+    const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
+      goals: 0,
+      assists: 0,
+      yellow: 0,
+      red: 0,
+    }
+    const name = entry.user
+      ? `${entry.user.lastName} ${entry.user.firstName}`
+      : `${entry.guestLastName} ${entry.guestFirstName}`
+    return { entry, isSelf, summary, myRating, stats, name }
+  })
+
+  const MATCH_STATS_SORT_VALUE: Record<
+    MatchStatSortKey,
+    (r: NonNullable<typeof statsRows>[number]) => number | string
+  > = {
+    name: (r) => r.name.toLowerCase(),
+    avgRating: (r) => r.summary?.average ?? -1,
+    myRating: (r) => (r.isSelf || r.myRating == null ? -1 : r.myRating.rating),
+    goals: (r) => r.stats.goals,
+    assists: (r) => r.stats.assists,
+    yellow: (r) => r.stats.yellow,
+    red: (r) => r.stats.red,
+  }
+
+  const sortedStatsRows = [...(statsRows ?? [])].sort((a, b) => {
+    const va = MATCH_STATS_SORT_VALUE[statsSortKey](a)
+    const vb = MATCH_STATS_SORT_VALUE[statsSortKey](b)
+    const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number)
+    return statsSortDir === 'asc' ? cmp : -cmp
+  })
+
   const statsTable = (
     <Card>
       <CardHeader>
@@ -2032,35 +2104,25 @@ export function MatchDetailPage() {
           <Table className="text-xs sm:text-sm">
             <TableHeader>
               <TableRow>
-                <TableHead className="bg-card sticky left-0 z-10 px-1.5 sm:px-2">Joueur</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">Note moy.</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">Ma note</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">Buts</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">Passes D.</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">🟨</TableHead>
-                <TableHead className="px-1.5 text-right sm:px-2">🟥</TableHead>
+                <SortableTableHead
+                  label="Joueur"
+                  sortKey="name"
+                  activeKey={statsSortKey}
+                  dir={statsSortDir}
+                  onSort={handleStatsSort}
+                  align="left"
+                  stickyLeft
+                />
+                <SortableTableHead label="Note moy." sortKey="avgRating" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
+                <SortableTableHead label="Ma note" sortKey="myRating" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
+                <SortableTableHead label="Buts" sortKey="goals" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
+                <SortableTableHead label="Passes D." sortKey="assists" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
+                <SortableTableHead label="🟨" sortKey="yellow" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
+                <SortableTableHead label="🟥" sortKey="red" activeKey={statsSortKey} dir={statsSortDir} onSort={handleStatsSort} />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {compositionQuery.data?.map((entry) => {
-                const isSelf = entry.userId === user?.id
-                const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
-                // Match by whichever field is set on each rating row, not by the entry's
-                // *current* link state — a rating cast before a guest gets linked to a real
-                // account is stored with ratedGuestId forever (see getRatingsSummary).
-                const myRating = myRatingsQuery.data?.find(
-                  (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
-                )
-                const guestStatsKey = entry.guestFirstName
-                  ? `name:${entry.guestFirstName} ${entry.guestLastName}`
-                  : null
-                const statsKey = entry.userId ?? guestStatsKey
-                const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
-                  goals: 0,
-                  assists: 0,
-                  yellow: 0,
-                  red: 0,
-                }
+              {sortedStatsRows.map(({ entry, isSelf, summary, myRating, stats }) => {
                 return (
                   <TableRow key={entry.id}>
                     <TableCell className="bg-card sticky left-0 z-10 px-1.5 font-medium sm:px-2">
