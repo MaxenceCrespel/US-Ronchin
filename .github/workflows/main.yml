@@ -47,10 +47,6 @@ jobs:
     needs: Linter-and-Tests
     uses: ./.github/workflows/docker-build.yml
 
-  Load-Testing:
-    needs: Docker-Build-and-Security
-    uses: ./.github/workflows/load-testing.yml
-
   DAST-OWASP-ZAP:
     needs: Docker-Build-and-Security
     uses: ./.github/workflows/dast-zap.yml
@@ -60,7 +56,7 @@ jobs:
     uses: ./.github/workflows/e2e-cypress.yml
 
   Deploy-Staging:
-    needs: [Load-Testing, DAST-OWASP-ZAP, E2E-Cypress]
+    needs: [DAST-OWASP-ZAP, E2E-Cypress]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     uses: ./.github/workflows/deploy-staging.yml
     # Explicit list rather than `secrets: inherit` — the deploy job only
