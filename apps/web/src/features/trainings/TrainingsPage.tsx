@@ -1409,7 +1409,7 @@ export function SessionCard({
                   return (
                     <Badge
                       key={`${a.id}-guest-${g.id}`}
-                      variant={guestConfirmed ? 'secondary' : 'outline'}
+                      variant={guestConfirmed ? ATTENDANCE_STATUS_VARIANTS.PRESENT : 'outline'}
                       className="animate-pop-in"
                     >
                       {g.firstName}
