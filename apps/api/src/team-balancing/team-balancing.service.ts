@@ -137,9 +137,17 @@ export class TeamBalancingService {
 
     // Real players first, balanced by skill score.
     for (const userId of presentUserIds) {
-      let minTeam = 0;
-      for (let i = 1; i < effectiveTeamCount; i++) {
-        if (teamSums[i] < teamSums[minTeam]) minTeam = i;
+      // Eligible teams are only those tied for the CURRENT lowest headcount — picking
+      // purely by lowest skill-sum (as before) could keep favoring the same team forever
+      // whenever several players share a score (very common: 0 is the default for anyone
+      // with no stats yet), producing something like 11 vs 7 instead of 9 vs 9. Restricting
+      // to the least-full team(s) first, and breaking ties by skill-sum, keeps sizes within
+      // 1 of each other no matter how scores cluster.
+      const minCount = Math.min(...teamCounts);
+      let minTeam = -1;
+      for (let i = 0; i < effectiveTeamCount; i++) {
+        if (teamCounts[i] > minCount) continue;
+        if (minTeam === -1 || teamSums[i] < teamSums[minTeam]) minTeam = i;
       }
       teamSums[minTeam] += scoreByUserId.get(userId) ?? 0;
       teamCounts[minTeam] += 1;
@@ -274,10 +282,14 @@ export class TeamBalancingService {
 
   /** Mutates assignments in place, swapping one member of a violating pair to another team
    * whenever two admin-separated players land together — picks whichever legal swap partner
-   * has the closest skill score to minimize balance disruption, and never picks a partner
-   * who'd just recreate a different violation on the origin team. If no safe swap exists
-   * for a pair (constraints overlapping too tightly for the team count), that pair is left
-   * as-is — this never throws or blocks team generation. */
+   * has the closest skill score to minimize balance disruption. "Legal" is checked in BOTH
+   * directions: pulling the candidate onto the staying player's team must not recreate a
+   * different violation there, AND pushing the mover onto the candidate's team must not
+   * recreate a different violation there either — e.g. someone excluded from two other
+   * players (a "triangle") can't be shuffled onto whichever team already holds the other
+   * one. If moving the rule's second player is boxed in that way, the first player is tried
+   * instead; if neither can move safely, the pair is left as-is — this never throws or
+   * blocks team generation. */
   private resolveSeparationRules(
     assignments: { userId: string; teamIndex: number }[],
     rules: { userAId: string; userBId: string }[],
@@ -287,41 +299,60 @@ export class TeamBalancingService {
     if (rules.length === 0 || teamCount < 2) return;
     const assignmentByUserId = new Map(assignments.map((a) => [a.userId, a]));
 
+    // Would `personId` sitting on `team` conflict, under some rule other than the one
+    // currently being resolved, with whoever else is already assigned there?
+    const conflictsOnTeam = (
+      personId: string,
+      team: number,
+      ignoreRule: { userAId: string; userBId: string },
+    ): boolean =>
+      rules.some((r) => {
+        if (r === ignoreRule) return false;
+        const partnerId = r.userAId === personId ? r.userBId : r.userBId === personId ? r.userAId : null;
+        if (!partnerId || partnerId === personId) return false;
+        return assignmentByUserId.get(partnerId)?.teamIndex === team;
+      });
+
+    // Looks for the closest-skill candidate elsewhere who can swap places with `mover`
+    // without recreating a different violation on either side, and applies it. Returns
+    // whether a swap was made.
+    const trySwap = (
+      mover: { userId: string; teamIndex: number },
+      staying: { userId: string; teamIndex: number },
+      rule: { userAId: string; userBId: string },
+    ): boolean => {
+      let bestCandidate: { userId: string; teamIndex: number } | null = null;
+      let bestDiff = Infinity;
+      for (const candidate of assignments) {
+        if (candidate.teamIndex === staying.teamIndex || candidate.userId === mover.userId) continue;
+        if (
+          conflictsOnTeam(candidate.userId, staying.teamIndex, rule) ||
+          conflictsOnTeam(mover.userId, candidate.teamIndex, rule)
+        ) {
+          continue;
+        }
+        const diff = Math.abs((scoreByUserId.get(candidate.userId) ?? 0) - (scoreByUserId.get(mover.userId) ?? 0));
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCandidate = candidate;
+        }
+      }
+      if (!bestCandidate) return false;
+      const targetTeam = bestCandidate.teamIndex;
+      bestCandidate.teamIndex = staying.teamIndex;
+      mover.teamIndex = targetTeam;
+      return true;
+    };
+
     for (const rule of rules) {
       const a = assignmentByUserId.get(rule.userAId);
       const b = assignmentByUserId.get(rule.userBId);
       // One or both absent from this session, or already on different teams — nothing to do.
       if (!a || !b || a.teamIndex !== b.teamIndex) continue;
 
-      let bestCandidate: { userId: string; teamIndex: number } | null = null;
-      let bestDiff = Infinity;
-      for (const candidate of assignments) {
-        if (candidate.teamIndex === a.teamIndex) continue;
-        // Don't pull in someone who'd immediately recreate a (different) violation with
-        // whoever stays behind on a's team.
-        const wouldViolate = rules.some((r) => {
-          if (r === rule) return false;
-          const partnerId =
-            r.userAId === candidate.userId ? r.userBId : r.userBId === candidate.userId ? r.userAId : null;
-          if (!partnerId || partnerId === b.userId) return false;
-          const partner = assignmentByUserId.get(partnerId);
-          return partner?.teamIndex === a.teamIndex;
-        });
-        if (wouldViolate) continue;
-
-        const diff = Math.abs((scoreByUserId.get(candidate.userId) ?? 0) - (scoreByUserId.get(b.userId) ?? 0));
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          bestCandidate = candidate;
-        }
-      }
-
-      if (bestCandidate) {
-        const targetTeam = bestCandidate.teamIndex;
-        bestCandidate.teamIndex = b.teamIndex;
-        b.teamIndex = targetTeam;
-      }
-      // else: no safe swap this round — best-effort, move on rather than block generation.
+      if (!trySwap(b, a, rule)) trySwap(a, b, rule);
+      // else: neither direction had a safe swap this round — best-effort, move on rather
+      // than block generation.
     }
   }
 
