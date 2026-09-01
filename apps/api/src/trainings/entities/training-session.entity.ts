@@ -42,6 +42,15 @@ export class TrainingSession {
   @Column({ name: 'attendance_reminder_sent_at', type: 'timestamp', nullable: true })
   attendanceReminderSentAt: Date | null;
 
+  /** One-off exception to the parent Training's cap, for this session only — null means
+   * "inherit the template's maxPresentPlayers" (see AttendancesService.setAttendance,
+   * TrainingsService.findSessionsBetween). Lets a coach bump up (or down) tonight's spots
+   * without touching every other week of a RECURRING series — editing the template itself
+   * (via "Gérer les entraînements") still changes the default for every session that
+   * hasn't set its own override. */
+  @Column({ name: 'max_present_players_override', type: 'int', nullable: true })
+  maxPresentPlayersOverride: number | null;
+
   /** Intra-squad scrimmage score — team 0 vs team 1 (generateTeams always creates exactly
    * two). Null until the coach enters it; feeds the training ranking (see
    * TeamBalancingService.getTrainingRanking). */

@@ -41,6 +41,13 @@ export async function removeGuestFromTeam(
   return data
 }
 
+/** Wipes the composition entirely — back to "not generated yet". Distinct from
+ * generateTeams, which replaces it immediately with a fresh split instead of leaving it
+ * empty. */
+export async function deleteTeams(sessionId: string): Promise<void> {
+  await apiClient.delete(`/training-sessions/${sessionId}/teams`)
+}
+
 /** Adds someone who showed up without being on the original list at all — no app account,
  * nobody registered them as a guest either. Placed straight onto whichever team is
  * thinnest, same as generateTeams/confirmFinalTeams's other guest/newcomer placement. */

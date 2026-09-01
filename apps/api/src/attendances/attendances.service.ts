@@ -122,7 +122,7 @@ export class AttendancesService {
     // time). Both draw from the SAME pool — a confirmed player couldn't otherwise blow past
     // the cap by piling on guests. Cap enforcement never blocks the write itself, only these
     // flags — see the entity doc.
-    const cap = session.training?.maxPresentPlayers ?? null;
+    const cap = session.maxPresentPlayersOverride ?? session.training?.maxPresentPlayers ?? null;
     if (cap == null) {
       if (status !== AttendanceStatus.PRESENT) {
         attendance.confirmed = true;
@@ -207,6 +207,23 @@ export class AttendancesService {
       : [];
 
     return attendance;
+  }
+
+  /** Called by TrainingsService whenever a session's effective cap might have just gone up
+   * — raising the training template's maxPresentPlayers, or setting a higher per-session
+   * override, never touches any Attendance row on its own, so anyone already waitlisted
+   * stayed waitlisted even though there's now room. Promotes as many as now fit, same
+   * priority as a slot freeing up naturally (see promoteWaitlist). No-op if the session has
+   * no cap or nothing changed. */
+  async syncCapPromotions(trainingSessionId: string): Promise<void> {
+    const session = await this.sessionsRepository.findOne({
+      where: { id: trainingSessionId },
+      relations: { training: true },
+    });
+    if (!session) return;
+    const cap = session.maxPresentPlayersOverride ?? session.training?.maxPresentPlayers ?? null;
+    if (cap == null) return;
+    await this.promoteWaitlist(trainingSessionId, cap);
   }
 
   /** Headcount just freed up — fills it as far as it goes, one unit of demand at a time:

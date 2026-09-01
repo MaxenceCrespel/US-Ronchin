@@ -98,6 +98,16 @@ export class TeamBalancingController {
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 
+  // Wipes the whole composition back to "not generated yet" — distinct from the
+  // per-assignment removeGuest above (one slot) and from generate (which replaces
+  // immediately with a fresh split instead of leaving it empty).
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Delete()
+  async deleteAll(@Param('sessionId') sessionId: string) {
+    await this.teamBalancingService.deleteTeams(sessionId);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch()

@@ -7,6 +7,13 @@ export class UpdateTrainingSessionDto extends PartialType(CreateTrainingSessionD
   @IsBoolean()
   cancelled?: boolean;
 
+  /** One-off exception to the training's cap for this session only — null clears it back
+   * to inheriting the template's maxPresentPlayers. */
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  maxPresentPlayersOverride?: number | null;
+
   @IsOptional()
   @IsInt()
   @Min(0)

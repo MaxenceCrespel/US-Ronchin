@@ -52,6 +52,7 @@ export async function updateSession(
     cancelled: boolean
     scoreTeam0: number
     scoreTeam1: number
+    maxPresentPlayersOverride: number | null
   }>,
 ): Promise<TrainingSession> {
   const { data } = await apiClient.patch<TrainingSession>(`/training-sessions/${id}`, input)

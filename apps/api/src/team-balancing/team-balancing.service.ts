@@ -72,6 +72,13 @@ export class TeamBalancingService {
     return count > 0;
   }
 
+  /** Wipes the composition entirely — back to "not generated yet", distinct from
+   * generateTeams which immediately replaces it with a fresh split. Coach-only, same as
+   * every other team-editing action here. */
+  async deleteTeams(sessionId: string): Promise<void> {
+    await this.assignmentsRepository.delete({ trainingSessionId: sessionId });
+  }
+
   async generateTeams(
     sessionId: string,
     teamCount: number = DEFAULT_TEAM_COUNT,

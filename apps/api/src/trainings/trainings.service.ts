@@ -7,6 +7,7 @@ import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
+import { AttendancesService } from '../attendances/attendances.service';
 
 const GENERATION_WINDOW_WEEKS = 8;
 
@@ -26,6 +27,7 @@ export class TrainingsService {
     private readonly trainingsRepository: Repository<Training>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
+    private readonly attendancesService: AttendancesService,
   ) {}
 
   findAllTrainings(): Promise<Training[]> {
@@ -59,7 +61,23 @@ export class TrainingsService {
     const saved = await this.trainingsRepository.save(training);
     await this.generateSessions(saved.id);
     await this.syncFutureSessionTimes(saved);
+    if (dto.maxPresentPlayers !== undefined) {
+      await this.syncCapPromotionsForTraining(saved.id);
+    }
     return saved;
+  }
+
+  /** Raising the cap doesn't itself touch any Attendance row, so anyone already waitlisted
+   * on an affected session would otherwise stay waitlisted even though there's now room —
+   * promote as many as now fit on every future session of this training (a session with
+   * its own maxPresentPlayersOverride resolves against that instead, unaffected by the
+   * template). Past sessions are left alone, same cutoff as syncFutureSessionTimes. */
+  private async syncCapPromotionsForTraining(trainingId: string): Promise<void> {
+    const today = toDateOnly(new Date());
+    const sessions = await this.sessionsRepository.find({ where: { trainingId } });
+    for (const session of sessions.filter((s) => s.date >= today)) {
+      await this.attendancesService.syncCapPromotions(session.id);
+    }
   }
 
   /** Sessions are snapshotted from the template at generation time (see generateSessions),
@@ -136,12 +154,11 @@ export class TrainingsService {
     return this.sessionsRepository.save(session);
   }
 
-  /** Flattens the parent Training's type + cap onto each session — a session doesn't own
-   * either (they live on the template, see the entity docs), but the frontend needs both
-   * to know whether a ONE_OFF session's own "Modifier" card can edit the cap directly
-   * (there's no separate "manage the series" screen to reach for a one-off) versus a
-   * RECURRING one, where that stays exclusively in "Gérer les entraînements" since editing
-   * it from a single week would silently change the whole series. */
+  /** Flattens the parent Training's type onto each session, plus the EFFECTIVE cap — this
+   * session's own maxPresentPlayersOverride if it has one, else the template's
+   * maxPresentPlayers. The frontend edits that resolved number directly from a session's
+   * own card regardless of type; it always writes back as an override on the session,
+   * never the template (see SessionCard / updateSession). */
   async findSessionsBetween(from?: string, to?: string): Promise<TrainingSessionWithTraining[]> {
     const query = this.sessionsRepository
       .createQueryBuilder('session')
@@ -160,7 +177,7 @@ export class TrainingsService {
     return sessions.map(({ training, ...session }) => ({
       ...session,
       trainingType: training?.type ?? null,
-      maxPresentPlayers: training?.maxPresentPlayers ?? null,
+      maxPresentPlayers: session.maxPresentPlayersOverride ?? training?.maxPresentPlayers ?? null,
     }));
   }
 
@@ -175,7 +192,11 @@ export class TrainingsService {
   async updateSession(id: string, dto: UpdateTrainingSessionDto): Promise<TrainingSession> {
     const session = await this.findSessionById(id);
     Object.assign(session, dto);
-    return this.sessionsRepository.save(session);
+    const saved = await this.sessionsRepository.save(session);
+    if (dto.maxPresentPlayersOverride !== undefined) {
+      await this.attendancesService.syncCapPromotions(saved.id);
+    }
+    return saved;
   }
 
   async deleteSession(id: string): Promise<void> {

@@ -88,6 +88,7 @@ import {
 import {
   addWalkIn,
   confirmFinalTeams,
+  deleteTeams,
   fetchTeams,
   generateTeams,
   moveTeamPlayer,
@@ -515,6 +516,11 @@ function TeamsSection({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
   })
 
+  const deleteTeamsMutation = useMutation({
+    mutationFn: () => deleteTeams(sessionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
+  })
+
   const moveMutation = useMutation({
     mutationFn: ({ assignmentId, teamIndex }: { assignmentId: string; teamIndex: number }) =>
       moveTeamPlayer(sessionId, assignmentId, teamIndex),
@@ -558,16 +564,34 @@ function TeamsSection({
           Équipes {teams.length > 0 ? '' : "(générées 30 min avant le coup d'envoi)"}
         </p>
         {isCoach && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1.5 px-2 text-xs"
-            disabled={generateMutation.isPending}
-            onClick={() => generateMutation.mutate()}
-          >
-            <Shuffle className="size-3.5" />
-            {teams.length > 0 ? 'Régénérer' : 'Générer maintenant'}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 px-2 text-xs"
+              disabled={generateMutation.isPending}
+              onClick={() => generateMutation.mutate()}
+            >
+              <Shuffle className="size-3.5" />
+              {teams.length > 0 ? 'Régénérer' : 'Générer maintenant'}
+            </Button>
+            {teams.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive h-8 gap-1.5 px-2 text-xs"
+                disabled={deleteTeamsMutation.isPending}
+                onClick={() => {
+                  if (confirm('Supprimer les équipes de cette séance ? Retour à « pas encore générées ».')) {
+                    deleteTeamsMutation.mutate()
+                  }
+                }}
+              >
+                <Trash2 className="size-3.5" />
+                Supprimer
+              </Button>
+            )}
+          </div>
         )}
       </div>
       {generateMutation.isError && (
@@ -1075,7 +1099,6 @@ export function SessionCard({
   cancelled,
   scoreTeam0 = null,
   scoreTeam1 = null,
-  trainingId = null,
   trainingType = null,
   maxPresentPlayers = null,
   inDialog,
@@ -1088,7 +1111,6 @@ export function SessionCard({
   cancelled: boolean
   scoreTeam0?: number | null
   scoreTeam1?: number | null
-  trainingId?: string | null
   trainingType?: TrainingType | null
   maxPresentPlayers?: number | null
   inDialog?: boolean
@@ -1128,20 +1150,14 @@ export function SessionCard({
   }
 
   const updateSessionMutation = useMutation({
-    mutationFn: async () => {
-      const session = await updateSession(sessionId, {
+    mutationFn: () =>
+      updateSession(sessionId, {
         date: editDate,
         startTime: editStartTime,
         endTime: editEndTime,
         location: editLocation,
-      })
-      if (trainingType === 'ONE_OFF' && trainingId) {
-        await updateTraining(trainingId, {
-          maxPresentPlayers: editMaxPresentPlayers ? Number(editMaxPresentPlayers) : null,
-        })
-      }
-      return session
-    },
+        maxPresentPlayersOverride: editMaxPresentPlayers ? Number(editMaxPresentPlayers) : null,
+      }),
     onSuccess: () => {
       invalidateSessions()
       setEditing(false)
@@ -1266,20 +1282,20 @@ export function SessionCard({
               placeholder="Lieu"
               required
             />
-            {trainingType === 'ONE_OFF' && (
-              <div className="flex flex-col gap-1">
-                <Input
-                  type="number"
-                  min={2}
-                  placeholder="Nombre de présents max (optionnel)"
-                  value={editMaxPresentPlayers}
-                  onChange={(e) => setEditMaxPresentPlayers(e.target.value)}
-                />
-                <p className="text-muted-foreground text-xs">
-                  Au-delà, les non-licenciés passent en liste d'attente.
-                </p>
-              </div>
-            )}
+            <div className="flex flex-col gap-1">
+              <Input
+                type="number"
+                min={2}
+                placeholder="Nombre de présents max pour cette séance (optionnel)"
+                value={editMaxPresentPlayers}
+                onChange={(e) => setEditMaxPresentPlayers(e.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                {trainingType === 'RECURRING'
+                  ? "Ne change que cette séance, pas le reste de la série — vide pour reprendre la valeur par défaut du modèle."
+                  : "Au-delà, les non-licenciés passent en liste d'attente."}
+              </p>
+            </div>
             <div className="flex gap-2">
               <Button size="sm" type="submit" disabled={updateSessionMutation.isPending}>
                 {updateSessionMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
@@ -2049,7 +2065,6 @@ export function TrainingsPage() {
                 cancelled={session.cancelled}
                 scoreTeam0={session.scoreTeam0}
                 scoreTeam1={session.scoreTeam1}
-                trainingId={session.trainingId}
                 trainingType={session.trainingType}
                 maxPresentPlayers={session.maxPresentPlayers}
               />
@@ -2083,7 +2098,6 @@ export function TrainingsPage() {
                 cancelled={activeSession.cancelled}
                 scoreTeam0={activeSession.scoreTeam0}
                 scoreTeam1={activeSession.scoreTeam1}
-                trainingId={activeSession.trainingId}
                 trainingType={activeSession.trainingType}
                 maxPresentPlayers={activeSession.maxPresentPlayers}
                 inDialog
