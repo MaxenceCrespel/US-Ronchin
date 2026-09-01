@@ -5,7 +5,6 @@ import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { join } from './api'
 
@@ -19,7 +18,6 @@ export function JoinPage() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
-  const [isLicensed, setIsLicensed] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
@@ -36,7 +34,7 @@ export function JoinPage() {
   }, [])
 
   const mutation = useMutation({
-    mutationFn: () => join({ token, firstName, lastName, email, isLicensed, password }),
+    mutationFn: () => join({ token, firstName, lastName, email, password }),
     onSuccess: () => {
       localStorage.setItem(PENDING_JOIN_EMAIL_KEY, email)
       navigate(`/join/waiting?email=${encodeURIComponent(email)}&token=${token}`)
@@ -54,7 +52,10 @@ export function JoinPage() {
         <CardHeader className="items-center text-center">
           <img src="/club-logo.png" alt="US Ronchin" className="mb-2 h-20 w-20 drop-shadow" />
           <CardTitle>Rejoindre US Ronchin</CardTitle>
-          <CardDescription>Crée ton compte joueur pour accéder à l'appli.</CardDescription>
+          <CardDescription>
+            Crée ton compte joueur pour accéder à l'appli. Ton statut de licencié sera
+            confirmé par le coach.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {!token ? (
@@ -94,14 +95,6 @@ export function JoinPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="isLicensed"
-                  checked={isLicensed}
-                  onCheckedChange={(checked) => setIsLicensed(checked === true)}
-                />
-                <Label htmlFor="isLicensed">Joueur licencié FFF</Label>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="password">Mot de passe (8 caractères min.)</Label>

@@ -24,7 +24,6 @@ export interface JoinInput {
   email: string
   firstName: string
   lastName: string
-  isLicensed: boolean
   password: string
 }
 

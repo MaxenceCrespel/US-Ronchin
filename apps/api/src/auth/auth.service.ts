@@ -120,11 +120,15 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
+    // Never self-declared — only a coach/admin can grant licensed status (via the
+    // invitation flow's own isLicensed, or by editing the player afterwards), since it
+    // now drives real priority on the training attendance cap and a false claim would
+    // bump someone ahead of an actually-paying member.
     await this.usersService.createJoinedUser({
       email: dto.email,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      isLicensed: dto.isLicensed ?? false,
+      isLicensed: false,
       passwordHash,
     });
   }

@@ -56,8 +56,10 @@ export class Attendance {
   /** False only when status is PRESENT and the training's maxPresentPlayers cap was already
    * full at the moment this player declared present — they're on the waitlist. Always true
    * for a non-PRESENT status or when the training has no cap. Persisted (not recomputed on
-   * every read) so a slot, once granted, sticks with whoever holds it — see
-   * AttendancesService.setAttendance/promoteWaitlist for how it's kept in sync. */
+   * every read) so a slot, once granted, sticks with whoever holds it — with one exception:
+   * a licensed player arriving into a full cap can flip a non-licensed row's `confirmed`
+   * back to false to take their slot (see AttendancesService.setAttendance/promoteWaitlist/
+   * evictLastNonLicensed for how it's kept in sync). */
   @Column({ default: true })
   confirmed: boolean;
 

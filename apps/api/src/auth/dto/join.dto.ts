@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 
 export class JoinDto {
   @IsString()
@@ -12,10 +12,6 @@ export class JoinDto {
 
   @IsString()
   lastName: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isLicensed?: boolean;
 
   @IsString()
   @MinLength(8)

@@ -5,7 +5,7 @@ import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
-import { PlayerSubPosition } from '../users/entities/user.entity';
+import { PlayerSubPosition, User } from '../users/entities/user.entity';
 import { pickNextWaitlisted } from './attendance-cap';
 
 export interface GuestNameInput {
@@ -33,6 +33,8 @@ export class AttendancesService {
     private readonly statusChangesRepository: Repository<AttendanceStatusChange>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
   ) {}
 
   findBySession(trainingSessionId: string): Promise<Attendance[]> {
@@ -129,15 +131,35 @@ export class AttendancesService {
       }
       attendance.confirmedGuestCount = guests.length;
     } else {
-      const others = await this.attendancesRepository.find({ where: { trainingSessionId } });
-      const otherHeadcount = others
+      const others = await this.attendancesRepository.find({
+        where: { trainingSessionId },
+        relations: { user: true },
+      });
+      let otherHeadcount = others
         .filter((a) => a.userId !== userId)
         .reduce((sum, a) => sum + headcount(a), 0);
 
       if (status !== AttendanceStatus.PRESENT) {
         attendance.confirmed = true;
       } else if (!wasConfirmedPresent) {
-        attendance.confirmed = otherHeadcount < cap;
+        if (otherHeadcount < cap) {
+          attendance.confirmed = true;
+        } else {
+          // Full — a licensed player arriving late still bumps the most recently
+          // confirmed non-licensed player back to the waitlist instead of joining it
+          // themselves (see evictLastNonLicensed). Anyone else — including a second
+          // licensed player fighting over the same last slot — just waitlists.
+          const arrivingUser = await this.usersRepository.findOne({ where: { id: userId } });
+          const evicted = arrivingUser?.isLicensed
+            ? await this.evictLastNonLicensed(trainingSessionId, others, userId)
+            : null;
+          if (evicted) {
+            otherHeadcount -= evicted.freedHeadcount;
+            attendance.confirmed = true;
+          } else {
+            attendance.confirmed = false;
+          }
+        }
       }
       const selfSlot = status === AttendanceStatus.PRESENT && attendance.confirmed ? 1 : 0;
       const remainingForGuests = cap - otherHeadcount - selfSlot;
@@ -254,6 +276,55 @@ export class AttendancesService {
         }),
       );
     }
+  }
+
+  /** A licensed player declaring PRESENT into an already-full cap bumps the most recently
+   * confirmed non-licensed player back to the waitlist instead of joining it themselves —
+   * they've paid to train, a non-licensed member hasn't (same priority as promoteWaitlist,
+   * just triggered the other direction: a slot doesn't have to free up naturally first).
+   * Demotes at most one row, and only when a genuine non-licensed candidate is currently
+   * holding a confirmed slot — two licensed players contesting the same last slot still
+   * resolve first-come-first-served. */
+  private async evictLastNonLicensed(
+    trainingSessionId: string,
+    others: Attendance[],
+    arrivingUserId: string,
+  ): Promise<{ freedHeadcount: number } | null> {
+    const candidates = others
+      .filter(
+        (a) =>
+          a.userId !== arrivingUserId &&
+          a.status === AttendanceStatus.PRESENT &&
+          a.confirmed &&
+          a.user &&
+          !a.user.isLicensed,
+      )
+      .sort((a, b) => b.respondedAt.getTime() - a.respondedAt.getTime());
+    const evicted = candidates[0];
+    if (!evicted) return null;
+
+    const freedHeadcount = headcount(evicted);
+    const previousConfirmed = evicted.confirmed;
+    const previousConfirmedGuestCount = evicted.confirmedGuestCount;
+    evicted.confirmed = false;
+    evicted.confirmedGuestCount = 0;
+    await this.attendancesRepository.save(evicted);
+
+    await this.statusChangesRepository.save(
+      this.statusChangesRepository.create({
+        trainingSessionId,
+        userId: evicted.userId,
+        changedBy: arrivingUserId,
+        previousStatus: evicted.status!,
+        newStatus: evicted.status!,
+        previousConfirmed,
+        newConfirmed: false,
+        previousConfirmedGuestCount,
+        newConfirmedGuestCount: 0,
+      }),
+    );
+
+    return { freedHeadcount };
   }
 
   /** Coach-only: records what actually happened, independently of what the player declared.
