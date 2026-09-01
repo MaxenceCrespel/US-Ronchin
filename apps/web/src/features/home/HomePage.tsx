@@ -12,7 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
-import { ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import type { AttendanceStatus, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
@@ -416,16 +415,6 @@ function UpcomingMatchCard({
                   Ajouter
                 </Button>
               </div>
-            </div>
-          )}
-          {attendanceQuery.data && attendanceQuery.data.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {attendanceQuery.data.map((a) => (
-                <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
-                  {a.user.firstName} {a.user.lastName[0]}.
-                  {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
-                </Badge>
-              ))}
             </div>
           )}
           {(presentCount > 0 || guestTotal > 0) && (
