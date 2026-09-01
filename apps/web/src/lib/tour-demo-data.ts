@@ -71,6 +71,8 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     cancelled: false,
     scoreTeam0: null,
     scoreTeam1: null,
+    trainingType: null,
+    maxPresentPlayers: null,
   }
 
   const matches: Match[] = [

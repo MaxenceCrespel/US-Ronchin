@@ -68,6 +68,10 @@ export interface TrainingSession {
    * pas saisi, alimente le classement (voir TrainingRankingEntry / /training-ranking). */
   scoreTeam0: number | null
   scoreTeam1: number | null
+  /** Flattened from the parent Training (a session doesn't own either) — null for an
+   * ad-hoc session with no trainingId. */
+  trainingType: TrainingType | null
+  maxPresentPlayers: number | null
 }
 
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'MAYBE'

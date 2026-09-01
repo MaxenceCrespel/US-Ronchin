@@ -14,6 +14,11 @@ function toDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export interface TrainingSessionWithTraining extends Omit<TrainingSession, 'training'> {
+  trainingType: TrainingType | null;
+  maxPresentPlayers: number | null;
+}
+
 @Injectable()
 export class TrainingsService {
   constructor(
@@ -131,9 +136,16 @@ export class TrainingsService {
     return this.sessionsRepository.save(session);
   }
 
-  async findSessionsBetween(from?: string, to?: string): Promise<TrainingSession[]> {
+  /** Flattens the parent Training's type + cap onto each session — a session doesn't own
+   * either (they live on the template, see the entity docs), but the frontend needs both
+   * to know whether a ONE_OFF session's own "Modifier" card can edit the cap directly
+   * (there's no separate "manage the series" screen to reach for a one-off) versus a
+   * RECURRING one, where that stays exclusively in "Gérer les entraînements" since editing
+   * it from a single week would silently change the whole series. */
+  async findSessionsBetween(from?: string, to?: string): Promise<TrainingSessionWithTraining[]> {
     const query = this.sessionsRepository
       .createQueryBuilder('session')
+      .leftJoinAndSelect('session.training', 'training')
       .orderBy('session.date', 'ASC')
       .addOrderBy('session.startTime', 'ASC');
 
@@ -144,7 +156,12 @@ export class TrainingsService {
       query.andWhere('session.date <= :to', { to });
     }
 
-    return query.getMany();
+    const sessions = await query.getMany();
+    return sessions.map(({ training, ...session }) => ({
+      ...session,
+      trainingType: training?.type ?? null,
+      maxPresentPlayers: training?.maxPresentPlayers ?? null,
+    }));
   }
 
   async findSessionById(id: string): Promise<TrainingSession> {

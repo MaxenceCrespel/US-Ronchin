@@ -1075,6 +1075,9 @@ export function SessionCard({
   cancelled,
   scoreTeam0 = null,
   scoreTeam1 = null,
+  trainingId = null,
+  trainingType = null,
+  maxPresentPlayers = null,
   inDialog,
 }: {
   sessionId: string
@@ -1085,6 +1088,9 @@ export function SessionCard({
   cancelled: boolean
   scoreTeam0?: number | null
   scoreTeam1?: number | null
+  trainingId?: string | null
+  trainingType?: TrainingType | null
+  maxPresentPlayers?: number | null
   inDialog?: boolean
 }) {
   const queryClient = useQueryClient()
@@ -1095,6 +1101,14 @@ export function SessionCard({
   const [editStartTime, setEditStartTime] = useState(startTime.slice(0, 5))
   const [editEndTime, setEditEndTime] = useState(endTime.slice(0, 5))
   const [editLocation, setEditLocation] = useState(location)
+  // Only a ONE_OFF training's cap can be edited from right here — a session doesn't own
+  // this field (it lives on the Training template, see TrainingSessionWithTraining), and
+  // for a RECURRING training editing it from a single week would silently change the whole
+  // series, so that stays exclusively in "Gérer les entraînements". A ONE_OFF has no
+  // separate "series" screen to reach for, so this card is the only realistic place.
+  const [editMaxPresentPlayers, setEditMaxPresentPlayers] = useState(
+    maxPresentPlayers != null ? String(maxPresentPlayers) : '',
+  )
 
   const attendancesQuery = useQuery({
     queryKey: ['attendances', sessionId],
@@ -1114,13 +1128,20 @@ export function SessionCard({
   }
 
   const updateSessionMutation = useMutation({
-    mutationFn: () =>
-      updateSession(sessionId, {
+    mutationFn: async () => {
+      const session = await updateSession(sessionId, {
         date: editDate,
         startTime: editStartTime,
         endTime: editEndTime,
         location: editLocation,
-      }),
+      })
+      if (trainingType === 'ONE_OFF' && trainingId) {
+        await updateTraining(trainingId, {
+          maxPresentPlayers: editMaxPresentPlayers ? Number(editMaxPresentPlayers) : null,
+        })
+      }
+      return session
+    },
     onSuccess: () => {
       invalidateSessions()
       setEditing(false)
@@ -1245,6 +1266,20 @@ export function SessionCard({
               placeholder="Lieu"
               required
             />
+            {trainingType === 'ONE_OFF' && (
+              <div className="flex flex-col gap-1">
+                <Input
+                  type="number"
+                  min={2}
+                  placeholder="Nombre de présents max (optionnel)"
+                  value={editMaxPresentPlayers}
+                  onChange={(e) => setEditMaxPresentPlayers(e.target.value)}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Au-delà, les non-licenciés passent en liste d'attente.
+                </p>
+              </div>
+            )}
             <div className="flex gap-2">
               <Button size="sm" type="submit" disabled={updateSessionMutation.isPending}>
                 {updateSessionMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
@@ -2014,6 +2049,9 @@ export function TrainingsPage() {
                 cancelled={session.cancelled}
                 scoreTeam0={session.scoreTeam0}
                 scoreTeam1={session.scoreTeam1}
+                trainingId={session.trainingId}
+                trainingType={session.trainingType}
+                maxPresentPlayers={session.maxPresentPlayers}
               />
             ))}
             {selectedMatches.map((match) => (
@@ -2045,6 +2083,9 @@ export function TrainingsPage() {
                 cancelled={activeSession.cancelled}
                 scoreTeam0={activeSession.scoreTeam0}
                 scoreTeam1={activeSession.scoreTeam1}
+                trainingId={activeSession.trainingId}
+                trainingType={activeSession.trainingType}
+                maxPresentPlayers={activeSession.maxPresentPlayers}
                 inDialog
               />
             )}
