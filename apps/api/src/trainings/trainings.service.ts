@@ -53,7 +53,25 @@ export class TrainingsService {
     Object.assign(training, dto);
     const saved = await this.trainingsRepository.save(training);
     await this.generateSessions(saved.id);
+    await this.syncFutureSessionTimes(saved);
     return saved;
+  }
+
+  /** Sessions are snapshotted from the template at generation time (see generateSessions),
+   * so editing a recurring Training's hours/location only ever reached sessions not yet
+   * created — anything already on the calendar kept its stale copy. Push the new values
+   * onto every not-yet-happened session for this training too, so a coach moving "le mardi
+   * 19h" to 19h30 sees it reflected right away instead of only for weeks generated after
+   * the edit. Past sessions are historical record and stay untouched. */
+  private async syncFutureSessionTimes(training: Training): Promise<void> {
+    const today = toDateOnly(new Date());
+    await this.sessionsRepository
+      .createQueryBuilder()
+      .update(TrainingSession)
+      .set({ startTime: training.startTime, endTime: training.endTime, location: training.location })
+      .where('training_id = :trainingId', { trainingId: training.id })
+      .andWhere('date >= :today', { today })
+      .execute();
   }
 
   async deleteTraining(id: string): Promise<void> {
