@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Bell, BellOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { unsubscribePush } from './api'
 import { enablePushNotifications, isPushSupported } from './subscribe'
 
@@ -57,10 +56,6 @@ export function NotificationSettingsCard() {
   return (
     <Card className="mx-auto w-full max-w-xl">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {enabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
-          Notifications
-        </CardTitle>
         <CardDescription>
           {isPushSupported()
             ? "Reçois une alerte pour les événements importants (nouveau joueur, résultat manquant, match joué, badge débloqué)."

@@ -131,7 +131,6 @@ export function AwardsSection() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-lg font-medium">Trophées de fin de saison</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {categories.map((category) => (
           <CategoryCard key={category.id} category={category} />

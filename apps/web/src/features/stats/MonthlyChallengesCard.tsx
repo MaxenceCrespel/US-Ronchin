@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Flame, Target } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
 import type { MonthlyChallengeEntry } from '@/lib/types'
 import { fetchMonthlyChallenges } from './api'
 
@@ -22,7 +22,6 @@ export function MonthlyChallengesCard() {
   return (
     <Card className="border-club-gold/40 border-l-4" data-tour="stats-monthly-challenges">
       <CardHeader>
-        <CardTitle className="text-base">Défis du mois</CardTitle>
         <CardDescription className="capitalize">{format(new Date(), 'MMMM yyyy', { locale: fr })}</CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">

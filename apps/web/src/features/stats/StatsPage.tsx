@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Crown, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -28,16 +29,10 @@ import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
 import { StandingsCard } from '@/features/standings/StandingsCard'
-import { AwardsSection } from '@/features/awards/AwardsSection'
 import { fetchMatches } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
 const CAREER = 'career'
-
-/** Trophées de fin de saison : visibles uniquement du 1er au 15 juin. */
-function isAwardsSeasonWindow(date = new Date()) {
-  return date.getMonth() === 5 && date.getDate() <= 15
-}
 
 const MEDAL_STYLES = [
   'bg-club-gold text-white', // 1st
@@ -81,7 +76,7 @@ function Leaderboard({ title, players, valueKey, valueLabel, onSeeAll }: {
           <p className="text-muted-foreground text-sm">Pas encore de données.</p>
         ) : (
           <ul className="flex flex-col gap-2.5">
-            {players.map((p, index) => (
+            {players.slice(0, 3).map((p, index) => (
               <li key={p.userId} className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2.5">
                   <RankBadge rank={index} />
@@ -310,10 +305,7 @@ function RosterStatsTable({ season }: { season: string }) {
 
   return (
     <Card data-tour="stats-roster-table">
-      <CardHeader>
-        <CardTitle className="text-base">Récapitulatif de l'effectif</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         {roster.length === 0 ? (
           <p className="text-muted-foreground text-sm">Pas encore de données.</p>
         ) : (
@@ -422,6 +414,11 @@ export function StatsPage() {
     [playerStatsQuery.data],
   )
 
+  // "Effectif" is always relevant (roster, coach or player) so it's a safe default tab —
+  // "Mes statistiques" only exists for roster players and would otherwise leave a coach
+  // landing on an empty pane.
+  const [tab, setTab] = useState('roster')
+
   return (
     <div className="flex flex-col gap-6" data-tour="stats-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -443,68 +440,128 @@ export function StatsPage() {
         )}
       </div>
 
-      {myStats && <MyStatsCard stats={myStats} />}
-
-      <MonthlyChallengesCard />
-
-      <RosterStatsTable season={activeSeason} />
-
-      <div>
-        <h2 className="mb-3 text-lg font-medium">Bilan de saison</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <StandingsCard />
-          <SeasonRecordCard season={activeSeason} />
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max">
+            {myStats && (
+              <TabsTrigger value="mine" className="flex-none px-3">
+                Mes stats
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="monthly" className="flex-none px-3">
+              Défis du mois
+            </TabsTrigger>
+            <TabsTrigger value="roster" className="flex-none px-3">
+              Effectif
+            </TabsTrigger>
+            <TabsTrigger value="season" className="flex-none px-3">
+              Bilan de saison
+            </TabsTrigger>
+            <TabsTrigger value="team" className="flex-none px-3">
+              Équipe
+            </TabsTrigger>
+          </TabsList>
         </div>
-      </div>
 
-      <div>
-        <h2 className="mb-3 text-lg font-medium">Statistiques de l'équipe</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Leaderboard
-            title="Meilleurs buteurs"
-            players={teamStatsQuery.data?.topScorers ?? []}
-            valueKey="goals"
-            valueLabel="buts"
-            onSeeAll={() => setOpenLeaderboard('goals')}
-          />
-          <Leaderboard
-            title="Meilleurs passeurs"
-            players={teamStatsQuery.data?.topAssists ?? []}
-            valueKey="assists"
-            valueLabel="passes"
-            onSeeAll={() => setOpenLeaderboard('assists')}
-          />
-          <Card
-            role="button"
-            tabIndex={0}
-            onClick={() => setOpenLeaderboard('decisive')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpenLeaderboard('decisive')}
-            className="cursor-pointer transition-colors hover:bg-accent/40"
-          >
+        {myStats && (
+          <TabsContent value="mine">
+            <MyStatsCard stats={myStats} />
+          </TabsContent>
+        )}
+
+        <TabsContent value="monthly">
+          <MonthlyChallengesCard />
+        </TabsContent>
+
+        <TabsContent value="roster">
+          <RosterStatsTable season={activeSeason} />
+        </TabsContent>
+
+        <TabsContent value="season">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <StandingsCard />
+            <SeasonRecordCard season={activeSeason} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="team" className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Leaderboard
+              title="Meilleurs buteurs"
+              players={teamStatsQuery.data?.topScorers ?? []}
+              valueKey="goals"
+              valueLabel="buts"
+              onSeeAll={() => setOpenLeaderboard('goals')}
+            />
+            <Leaderboard
+              title="Meilleurs passeurs"
+              players={teamStatsQuery.data?.topAssists ?? []}
+              valueKey="assists"
+              valueLabel="passes"
+              onSeeAll={() => setOpenLeaderboard('assists')}
+            />
+            <Card
+              role="button"
+              tabIndex={0}
+              onClick={() => setOpenLeaderboard('decisive')}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpenLeaderboard('decisive')}
+              className="cursor-pointer transition-colors hover:bg-accent/40"
+            >
+              <CardHeader>
+                <CardTitle className="text-base">Joueurs les plus décisifs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {(teamStatsQuery.data?.mostDecisive.length ?? 0) === 0 ? (
+                  <p className="text-muted-foreground text-sm">Pas encore de données.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2.5">
+                    {teamStatsQuery.data?.mostDecisive.slice(0, 3).map((p, index) => (
+                      <li key={p.userId} className="flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-2.5">
+                          <RankBadge rank={index} />
+                          {p.firstName} {p.lastName}
+                        </span>
+                        <Badge variant="secondary">{p.goals + p.assists} pts</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-muted-foreground mt-3 text-xs">Voir le classement complet →</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
             <CardHeader>
-              <CardTitle className="text-base">Joueurs les plus décisifs</CardTitle>
+              <CardTitle className="text-base">Meilleures connexions (buteur / passeur)</CardTitle>
             </CardHeader>
             <CardContent>
-              {(teamStatsQuery.data?.mostDecisive.length ?? 0) === 0 ? (
+              {(teamStatsQuery.data?.bestDuos.length ?? 0) === 0 ? (
                 <p className="text-muted-foreground text-sm">Pas encore de données.</p>
               ) : (
-                <ul className="flex flex-col gap-2.5">
-                  {teamStatsQuery.data?.mostDecisive.map((p, index) => (
-                    <li key={p.userId} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2.5">
-                        <RankBadge rank={index} />
-                        {p.firstName} {p.lastName}
-                      </span>
-                      <Badge variant="secondary">{p.goals + p.assists} pts</Badge>
-                    </li>
-                  ))}
-                </ul>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Passeur</TableHead>
+                      <TableHead>Buteur</TableHead>
+                      <TableHead>Buts</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {teamStatsQuery.data?.bestDuos.slice(0, 3).map((duo) => (
+                      <TableRow key={`${duo.scorerId}-${duo.assistId}`}>
+                        <TableCell>{duo.assistName}</TableCell>
+                        <TableCell>{duo.scorerName}</TableCell>
+                        <TableCell>{duo.count}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
-              <p className="text-muted-foreground mt-3 text-xs">Voir le classement complet →</p>
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {openLeaderboard === 'goals' && (
         <FullLeaderboardDialog
@@ -533,38 +590,6 @@ export function StatsPage() {
           onClose={() => setOpenLeaderboard(null)}
         />
       )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Meilleures connexions (buteur / passeur)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(teamStatsQuery.data?.bestDuos.length ?? 0) === 0 ? (
-            <p className="text-muted-foreground text-sm">Pas encore de données.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Passeur</TableHead>
-                  <TableHead>Buteur</TableHead>
-                  <TableHead>Buts</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {teamStatsQuery.data?.bestDuos.map((duo) => (
-                  <TableRow key={`${duo.scorerId}-${duo.assistId}`}>
-                    <TableCell>{duo.assistName}</TableCell>
-                    <TableCell>{duo.scorerName}</TableCell>
-                    <TableCell>{duo.count}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {isAwardsSeasonWindow() && <AwardsSection />}
     </div>
   )
 }

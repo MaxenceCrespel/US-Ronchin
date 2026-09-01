@@ -95,10 +95,19 @@ function formatEarnedDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-export function BadgesGrid({ userId }: { userId: string }) {
+export function BadgesGrid({
+  userId,
+  defaultExpanded = true,
+}: {
+  userId: string
+  /** ProfilePage passes false — one more collapsed section among several, to shorten the
+   * page's scroll on mobile. PlayerBadgesDialog (admin viewing a specific player) keeps the
+   * default true since opening that dialog already IS the "I want to see badges" action. */
+  defaultExpanded?: boolean
+}) {
   const badgesQuery = useQuery({ queryKey: ['badges', userId], queryFn: () => fetchBadgesForUser(userId) })
   const [activeBadge, setActiveBadge] = useState<BadgeStatus | null>(null)
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(defaultExpanded)
 
   const badges = badgesQuery.data ?? []
   const earnedCount = badges.filter((b) => b.earned).length

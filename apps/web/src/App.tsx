@@ -7,6 +7,11 @@ import { JoinPage } from '@/features/auth/JoinPage'
 import { JoinWaitingPage } from '@/features/auth/JoinWaitingPage'
 import { HomePage } from '@/features/home/HomePage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { EditProfilePage } from '@/features/profile/EditProfilePage'
+import { BadgesPage } from '@/features/profile/BadgesPage'
+import { NotificationsPage } from '@/features/profile/NotificationsPage'
+import { PasswordPage } from '@/features/profile/PasswordPage'
+import { ClubSettingsPage } from '@/features/profile/ClubSettingsPage'
 import { CompleteProfilePage } from '@/features/profile/CompleteProfilePage'
 import { FixPositionsPage } from '@/features/profile/FixPositionsPage'
 import { AdminKpisPage } from '@/features/admin/AdminKpisPage'
@@ -36,9 +41,14 @@ function App() {
           <Route path="/stats" element={<StatsPage />} />
           <Route path="/players" element={<PlayersPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/edit" element={<EditProfilePage />} />
+          <Route path="/profile/badges" element={<BadgesPage />} />
+          <Route path="/profile/notifications" element={<NotificationsPage />} />
+          <Route path="/profile/password" element={<PasswordPage />} />
 
           <Route element={<RequireAuth roles={['COACH']} />}>
             <Route path="/admin/import-pdf" element={<ImportMatchPdfPage />} />
+            <Route path="/profile/club" element={<ClubSettingsPage />} />
           </Route>
 
           <Route element={<RequireAuth roles={['SUPERADMIN']} />}>
