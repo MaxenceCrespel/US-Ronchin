@@ -166,8 +166,6 @@ const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   OWN_GOAL: 'Contre son camp',
 }
 
-const RATING_OPTIONS = Array.from({ length: 21 }, (_, i) => i * 0.5)
-
 type MatchStatSortKey = 'name' | 'avgRating' | 'myRating' | 'goals' | 'assists' | 'yellow' | 'red'
 
 // Text sorts alphabetically first by default; every numeric stat sorts highest-first —
@@ -249,6 +247,14 @@ function LinkGuestButton({ matchId, compositionId }: { matchId: string; composit
   )
 }
 
+/** Red at 0, green at 10 — the same hue ramp drives both the slider's track/thumb (via
+ * accent-color, which every evergreen browser applies to a native range input) and the
+ * numeric label next to it. */
+function ratingColor(value: number): string {
+  const hue = (value / 10) * 120
+  return `hsl(${hue}deg 75% 42%)`
+}
+
 function RatingDraftPicker({
   value,
   onChange,
@@ -256,19 +262,28 @@ function RatingDraftPicker({
   value: number | undefined
   onChange: (value: number) => void
 }) {
+  // Undefined only means "hasn't touched it yet" — the slider itself always needs some
+  // position to render at, so it starts fully red (0) until the first drag, which is also
+  // what marks the draft as filled (see allDraftsFilled).
+  const displayed = value ?? 0
+  const color = ratingColor(displayed)
   return (
-    <Select value={value != null ? String(value) : undefined} onValueChange={(v) => onChange(Number(v))}>
-      <SelectTrigger className="w-20">
-        <SelectValue placeholder="Note" />
-      </SelectTrigger>
-      <SelectContent>
-        {RATING_OPTIONS.map((v) => (
-          <SelectItem key={v} value={String(v)}>
-            {v}/10
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex w-36 items-center gap-2">
+      <input
+        type="range"
+        min={0}
+        max={10}
+        step={0.5}
+        value={displayed}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ accentColor: color }}
+        className="h-2 flex-1 cursor-pointer"
+        aria-label="Note du joueur"
+      />
+      <span className="w-9 text-right text-sm font-semibold tabular-nums" style={{ color }}>
+        {value != null ? value : '–'}
+      </span>
+    </div>
   )
 }
 
@@ -2094,10 +2109,21 @@ export function MatchDetailPage() {
     return statsSortDir === 'asc' ? cmp : -cmp
   })
 
+  const ratedAverages = (ratingsSummaryQuery.data ?? [])
+    .map((s) => s.average)
+    .filter((a): a is number => a != null)
+  const teamAverageRating =
+    ratedAverages.length > 0
+      ? ratedAverages.reduce((sum, a) => sum + a, 0) / ratedAverages.length
+      : null
+
   const statsTable = (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Stats du match</CardTitle>
+        {teamAverageRating != null && (
+          <CardDescription>Moyenne d'équipe : {teamAverageRating.toFixed(1)}/10</CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         <div className="-mx-2 overflow-x-auto px-2">
@@ -2220,7 +2246,13 @@ export function MatchDetailPage() {
               </DialogTitle>
               <DialogDescription>{activeStep.description}</DialogDescription>
             </DialogHeader>
-            {activeStep.node}
+            {/* motmCard/defenseBossCard/ratingsCard are plain <Card>s so they read well
+                stacked in the Résumé tab — but reused as-is here they stacked a second
+                bordered/shadowed box inside the dialog's own frame. Strip that chrome only
+                in this context rather than forking each card into a "bare" variant. */}
+            <div className="[&_[data-slot=card]]:gap-4 [&_[data-slot=card]]:border-none [&_[data-slot=card]]:bg-transparent [&_[data-slot=card]]:p-0 [&_[data-slot=card]]:shadow-none [&_[data-slot=card-content]]:px-0 [&_[data-slot=card-header]]:px-0">
+              {activeStep.node}
+            </div>
           </>
         )}
       </DialogContent>
