@@ -255,7 +255,12 @@ function ratingColor(value: number): string {
   return `hsl(${hue}deg 75% 42%)`
 }
 
-function RatingDraftPicker({
+/** Just the slider itself, always full-width — a fixed-width wrapper (with a value label
+ * squeezed next to it) used to overflow the vote modal's own padding on a real phone, even
+ * though it looked fine at desktop widths. The value now lives on its own line above,
+ * alongside the player's name (see ratingsCard), leaving the slider free to take the whole
+ * row without competing with anything else for space. */
+function RatingSlider({
   value,
   onChange,
 }: {
@@ -266,24 +271,18 @@ function RatingDraftPicker({
   // position to render at, so it starts fully red (0) until the first drag, which is also
   // what marks the draft as filled (see allDraftsFilled).
   const displayed = value ?? 0
-  const color = ratingColor(displayed)
   return (
-    <div className="flex w-36 items-center gap-2">
-      <input
-        type="range"
-        min={0}
-        max={10}
-        step={0.5}
-        value={displayed}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ accentColor: color }}
-        className="h-2 flex-1 cursor-pointer"
-        aria-label="Note du joueur"
-      />
-      <span className="w-9 text-right text-sm font-semibold tabular-nums" style={{ color }}>
-        {value != null ? value : '–'}
-      </span>
-    </div>
+    <input
+      type="range"
+      min={0}
+      max={10}
+      step={0.5}
+      value={displayed}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={{ accentColor: ratingColor(displayed) }}
+      className="h-2 w-full cursor-pointer"
+      aria-label="Note du joueur"
+    />
   )
 }
 
@@ -1844,6 +1843,7 @@ export function MatchDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <div className="divide-y">
             {compositionQuery.data?.map((entry) => {
               const isSelf = entry.userId === user?.id
               // A teammate added to the composition after this rater already validated once
@@ -1858,67 +1858,84 @@ export function MatchDetailPage() {
                 (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
               )
 
+              // Own line above a full-width slider (rather than squeezed next to the name)
+              // — a fixed-width picker crammed onto the same row as the name overflowed the
+              // vote modal's own padding on a real phone.
+              const draftValue = ratingDrafts[entry.id]
               return (
-                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    {entry.user ? (
-                      <AccountLevelRing
-                        userId={entry.userId!}
-                        tier={levelsQuery.data?.[entry.userId!]?.tier}
-                        ringWidth={2}
-                      >
+                <div key={entry.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                      {entry.user ? (
+                        <AccountLevelRing
+                          userId={entry.userId!}
+                          tier={levelsQuery.data?.[entry.userId!]?.tier}
+                          ringWidth={2}
+                        >
+                          <PlayerAvatar
+                            avatarUrl={entry.user.avatarUrl}
+                            firstName={entry.user.firstName}
+                            lastName={entry.user.lastName}
+                            shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
+                            size="sm"
+                          />
+                        </AccountLevelRing>
+                      ) : (
                         <PlayerAvatar
-                          avatarUrl={entry.user.avatarUrl}
-                          firstName={entry.user.firstName}
-                          lastName={entry.user.lastName}
-                          shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
+                          firstName={entry.guestFirstName ?? ''}
+                          lastName={entry.guestLastName ?? ''}
                           size="sm"
                         />
-                      </AccountLevelRing>
-                    ) : (
-                      <PlayerAvatar
-                        firstName={entry.guestFirstName ?? ''}
-                        lastName={entry.guestLastName ?? ''}
-                        size="sm"
-                      />
-                    )}
-                    {entry.user
-                      ? `${entry.user.firstName} ${entry.user.lastName}`
-                      : `${entry.guestFirstName} ${entry.guestLastName}`}
-                  </span>
+                      )}
+                      <span className="truncate">
+                        {entry.user
+                          ? `${entry.user.firstName} ${entry.user.lastName}`
+                          : `${entry.guestFirstName} ${entry.guestLastName}`}
+                      </span>
+                    </span>
 
-                  {!iPlayed ? (
-                    <span className="text-muted-foreground text-xs">
-                      Seuls les joueurs ayant participé peuvent noter
-                    </span>
-                  ) : isSelf ? (
-                    <span className="text-muted-foreground text-xs">
-                      {ratingsSubmitted && summary?.average != null
-                        ? `Moyenne : ${summary.average.toFixed(1)}/10`
-                        : ratingsSubmitted
-                          ? 'Pas encore de note'
-                          : 'Tu ne peux pas te noter toi-même'}
-                    </span>
-                  ) : isPending ? (
-                    <RatingDraftPicker
-                      value={ratingDrafts[entry.id]}
+                    {!iPlayed ? (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        Seuls les joueurs ayant participé peuvent noter
+                      </span>
+                    ) : isSelf ? (
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {ratingsSubmitted && summary?.average != null
+                          ? `Moyenne : ${summary.average.toFixed(1)}/10`
+                          : ratingsSubmitted
+                            ? 'Pas encore de note'
+                            : 'Tu ne peux pas te noter toi-même'}
+                      </span>
+                    ) : isPending ? (
+                      <span
+                        className="shrink-0 text-sm font-semibold tabular-nums"
+                        style={{ color: ratingColor(draftValue ?? 0) }}
+                      >
+                        {draftValue != null ? draftValue : 'Non noté'}
+                      </span>
+                    ) : (
+                      <span className="flex shrink-0 items-center gap-2 text-xs">
+                        <Badge variant="secondary">Ta note : {myRating?.rating}/10</Badge>
+                        <span className="text-muted-foreground">
+                          {summary?.average != null
+                            ? `Moyenne : ${summary.average.toFixed(1)}/10 (${summary.count})`
+                            : ''}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                  {isPending && (
+                    <RatingSlider
+                      value={draftValue}
                       onChange={(value) =>
                         setRatingDrafts((prev) => ({ ...prev, [entry.id]: value }))
                       }
                     />
-                  ) : (
-                    <span className="flex items-center gap-2 text-xs">
-                      <Badge variant="secondary">Ta note : {myRating?.rating}/10</Badge>
-                      <span className="text-muted-foreground">
-                        {summary?.average != null
-                          ? `Moyenne : ${summary.average.toFixed(1)}/10 (${summary.count})`
-                          : ''}
-                      </span>
-                    </span>
                   )}
                 </div>
               )
             })}
+            </div>
 
             {iPlayed && !ratingsSubmitted && (
               <div className="flex flex-col gap-2 border-t pt-4">
