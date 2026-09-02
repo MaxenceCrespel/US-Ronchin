@@ -16,22 +16,31 @@ import {
 } from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
+import { pointsForResult, MAX_POINTS_PER_SESSION } from '../team-balancing/points-for-result';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
 
 // skillScore weights — see getPlayerStats() below for the full breakdown. Sum of the
-// positive components is 95 (60 + 25 + 5 + 5), leaving headroom before the discipline
-// penalty (capped at -10) so a spotless record can still round up to 100 while a heavily
-// carded one has real room to drop.
+// positive components is 115 (60 + 25 + 5 + 5 + 20), leaving headroom before the
+// discipline penalty (capped at -10) so a spotless record can still round up to 100 while
+// a heavily carded one has real room to drop — the final clamp keeps it within [0, 100].
 const RATING_WEIGHT = 60;
 const PERFORMANCE_WEIGHT = 25;
 const ASSIDUITY_WEIGHT = 5;
 const DISTINCTIONS_CAP = 5; // one point per MOTM/patron de la défense, capped here
+const TRAINING_RANKING_WEIGHT = 20; // scrimmage results — see trainingRankingComponent below
 const DISCIPLINE_CAP = 10; // max deduction, however many cards
 const YELLOW_CARD_PENALTY = 2;
 const RED_CARD_PENALTY = 5;
 const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half as much
 const RATING_CONFIDENCE_PRIOR_WEIGHT = 3; // pseudo-count pulling a thin sample toward neutral
 const RATING_NEUTRAL = 5; // midpoint of the 0-10 scale, the confidence prior's target
+// Same damping idea as ratings, applied to points-per-training-session instead of
+// points-per-match — a single lucky scrimmage win shouldn't alone put someone at the top
+// just because they've only been to one training. Neutral prior = a draw (1 point), the
+// same "nobody really won" baseline pointsForResult itself uses.
+const TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT = 3;
+const TRAINING_RANKING_NEUTRAL_POINTS = 1;
 const DAY_MS = 86_400_000;
 
 export interface PlayerStats {
@@ -123,6 +132,8 @@ export class StatsService {
     private readonly defenseBossVotesRepository: Repository<MatchDefenseBossVote>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
+    @InjectRepository(TrainingTeamAssignment)
+    private readonly teamAssignmentsRepository: Repository<TrainingTeamAssignment>,
   ) {}
 
   private resolveSeasonBounds(season?: string): SeasonBounds | null {
@@ -263,6 +274,7 @@ export class StatsService {
       allAttendances,
       matches,
       sessions,
+      teamAssignments,
       motmCounts,
       patronDefenseCounts,
       presenceStreaks,
@@ -277,6 +289,7 @@ export class StatsService {
         // component needs the actual final score, all-time, regardless of season.
         this.matchesRepository.find(),
         this.sessionsRepository.find(),
+        this.teamAssignmentsRepository.find(),
         this.getMotmCounts(bounds),
         this.getPatronDefenseCounts(bounds),
         this.getPresenceStreaks(bounds),
@@ -290,6 +303,26 @@ export class StatsService {
       !bounds || isInSeason(matchDateById.get(matchId) ?? '', bounds);
     const sessionInSeason = (trainingSessionId: string) =>
       !bounds || isInSeason(sessionDateById.get(trainingSessionId) ?? '', bounds);
+
+    // Every scrimmage-scored session this season, mapped to what each team earned for it
+    // (see pointsForResult) — feeds skillScore's training-ranking component below. Only
+    // real accounts show up in teamAssignments with a teamIndex to look up (a guest slot
+    // has userId null and earns nothing, same exclusion getTrainingRanking already makes).
+    const scoredSessionPoints = new Map<string, [number, number]>();
+    for (const s of sessions) {
+      if (s.scoreTeam0 == null || s.scoreTeam1 == null || !sessionInSeason(s.id)) continue;
+      scoredSessionPoints.set(s.id, pointsForResult(s.scoreTeam0, s.scoreTeam1));
+    }
+    const trainingPointsByUserId = new Map<string, number[]>();
+    for (const assignment of teamAssignments) {
+      if (!assignment.userId) continue;
+      const teamPoints = scoredSessionPoints.get(assignment.trainingSessionId);
+      if (!teamPoints) continue;
+      const points = teamPoints[assignment.teamIndex] ?? 0;
+      const existing = trainingPointsByUserId.get(assignment.userId) ?? [];
+      existing.push(points);
+      trainingPointsByUserId.set(assignment.userId, existing);
+    }
 
     const events = allEvents.filter((e) => matchInSeason(e.matchId));
     const compositions = allCompositions.filter((c) => matchInSeason(c.matchId));
@@ -366,11 +399,17 @@ export class StatsService {
       const motmCount = motmCounts.get(user.id) ?? 0;
       const patronDefenseCount = patronDefenseCounts.get(user.id) ?? 0;
 
-      // Never rated at all → genuinely no basis for a score, not "assume average" (a
-      // never-rated player used to show ~35/100 from the old DEFAULT_RATING fallback,
-      // indistinguishable from an actually middling player).
+      const trainingPoints = trainingPointsByUserId.get(user.id) ?? [];
+
+      // No basis for a score at all → stays null, not "assume average" (a never-rated
+      // player used to show ~35/100 from the old DEFAULT_RATING fallback, indistinguishable
+      // from an actually middling player). But that only holds when there's truly nothing
+      // to go on — a player with no match rating yet but a real training-scrimmage record
+      // still has a genuine signal, so either one is enough to compute a score. The rating
+      // component itself already damps to a neutral 5/10 when userRatings is empty (see the
+      // confidence prior below), so no separate fallback value is needed here.
       let skillScore: number | null = null;
-      if (averageRating !== null) {
+      if (averageRating !== null || trainingPoints.length > 0) {
         // Recency-weighted, confidence-damped rating: a match 6 months ago counts half as
         // much as one today, and a thin sample (few ratings) gets pulled toward a neutral
         // 5/10 rather than trusted outright — 1 lucky 10/10 shouldn't swing the score alone.
@@ -407,6 +446,19 @@ export class StatsService {
         const assiduityBonus = (trainingAttendanceRate ?? 0) * ASSIDUITY_WEIGHT;
         const distinctionsBonus = Math.min(motmCount + patronDefenseCount, DISTINCTIONS_CAP);
 
+        // Average scrimmage points per training attended, not the raw cumulative total —
+        // a strong player who wins every time but only makes 3 sessions a month otherwise
+        // scores lower than a weak one carried to wins 4 times a month, purely because the
+        // second one showed up more. Damped toward a neutral "draw" the same way the match
+        // rating is, so one lucky win with a single training on record doesn't alone put
+        // someone at the top of this component.
+        const trainingPointsSum = trainingPoints.reduce((sum, p) => sum + p, 0);
+        const dampedTrainingPoints =
+          (trainingPointsSum + TRAINING_RANKING_NEUTRAL_POINTS * TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT) /
+          (trainingPoints.length + TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT);
+        const trainingRankingComponent =
+          Math.min(dampedTrainingPoints / MAX_POINTS_PER_SESSION, 1) * TRAINING_RANKING_WEIGHT;
+
         skillScore = Math.round(
           Math.max(
             0,
@@ -416,7 +468,8 @@ export class StatsService {
                 performanceComponent -
                 disciplinePenalty +
                 assiduityBonus +
-                distinctionsBonus,
+                distinctionsBonus +
+                trainingRankingComponent,
             ),
           ),
         );

@@ -9,6 +9,7 @@ import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { StatsService } from './stats.service';
 import { StatsController } from './stats.controller';
 
@@ -24,6 +25,7 @@ import { StatsController } from './stats.controller';
       MatchDefenseBossVote,
       Attendance,
       TrainingSession,
+      TrainingTeamAssignment,
     ]),
   ],
   controllers: [StatsController],

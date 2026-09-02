@@ -9,6 +9,7 @@ import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
 import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
+import { pointsForResult } from './points-for-result';
 
 const DEFAULT_TEAM_COUNT = 2;
 
@@ -637,16 +638,6 @@ export class TeamBalancingService {
     return sessionsNeedingTeams;
   }
 
-  /** Points for one team in a scrimmage: 3 for winning + the goal difference as a bonus
-   * (capped at 5, so a blowout doesn't swing the season on one session), 1 each on a draw,
-   * 0 for the losing team. */
-  private static pointsForResult(scoreTeam0: number, scoreTeam1: number): [number, number] {
-    if (scoreTeam0 === scoreTeam1) return [1, 1];
-    const bonus = Math.min(Math.abs(scoreTeam0 - scoreTeam1), 5);
-    const winnerPoints = 3 + bonus;
-    return scoreTeam0 > scoreTeam1 ? [winnerPoints, 0] : [0, winnerPoints];
-  }
-
   /** Cumulative "classement" from every scrimmage score entered so far — only real
    * accounts earn points (a guest has no profile to credit), and only sessions with both
    * scores filled in count. */
@@ -659,10 +650,7 @@ export class TeamBalancingService {
 
     const pointsBySessionTeam = new Map<string, [number, number]>();
     for (const session of scoredSessions) {
-      pointsBySessionTeam.set(
-        session.id,
-        TeamBalancingService.pointsForResult(session.scoreTeam0!, session.scoreTeam1!),
-      );
+      pointsBySessionTeam.set(session.id, pointsForResult(session.scoreTeam0!, session.scoreTeam1!));
     }
 
     const assignments = await this.assignmentsRepository.find({
