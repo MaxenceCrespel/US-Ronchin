@@ -6,7 +6,7 @@ import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
-import { pickNextWaitlisted } from './attendance-cap';
+import { pickNextWaitlisted, seniorityRank } from './attendance-cap';
 
 export interface GuestNameInput {
   firstName: string;
@@ -295,13 +295,15 @@ export class AttendancesService {
     }
   }
 
-  /** A licensed player declaring PRESENT into an already-full cap bumps the most recently
-   * confirmed non-licensed player back to the waitlist instead of joining it themselves —
-   * they've paid to train, a non-licensed member hasn't (same priority as promoteWaitlist,
-   * just triggered the other direction: a slot doesn't have to free up naturally first).
-   * Demotes at most one row, and only when a genuine non-licensed candidate is currently
-   * holding a confirmed slot — two licensed players contesting the same last slot still
-   * resolve first-come-first-served. */
+  /** A licensed player declaring PRESENT into an already-full cap bumps a non-licensed
+   * player back to the waitlist instead of joining it themselves — they've paid to train, a
+   * non-licensed member hasn't (same priority as pickNextWaitlisted, just triggered the
+   * other direction: a slot doesn't have to free up naturally first). Among non-licensed
+   * candidates, the lowest seniority tier is bumped first (a brand-new player before a
+   * "1-3 ans", before a "3-7 ans", before a "+7 ans"); within the same tier, the most
+   * recently confirmed goes first (LIFO). Demotes at most one row, and only when a genuine
+   * non-licensed candidate is currently holding a confirmed slot — two licensed players
+   * contesting the same last slot still resolve first-come-first-served. */
   private async evictLastNonLicensed(
     trainingSessionId: string,
     others: Attendance[],
@@ -316,7 +318,11 @@ export class AttendancesService {
           a.user &&
           !a.user.isLicensed,
       )
-      .sort((a, b) => b.respondedAt.getTime() - a.respondedAt.getTime());
+      .sort((a, b) => {
+        const seniorityDiff = seniorityRank(a.user.seniorityTier) - seniorityRank(b.user.seniorityTier);
+        if (seniorityDiff !== 0) return seniorityDiff;
+        return b.respondedAt.getTime() - a.respondedAt.getTime();
+      });
     const evicted = candidates[0];
     if (!evicted) return null;
 

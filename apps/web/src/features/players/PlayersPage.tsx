@@ -43,10 +43,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { approveUser, createInvitation } from '@/features/auth/api'
-import { SUB_POSITION_ABBR } from '@/lib/labels'
+import { SENIORITY_TIER_LABELS, SUB_POSITION_ABBR } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasAdminAccess, hasCoachAccess } from '@/lib/roles'
-import type { User, UserRole } from '@/lib/types'
+import type { SeniorityTier, User, UserRole } from '@/lib/types'
 import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
@@ -186,6 +186,7 @@ function EditPlayerDialog({ player }: { player: User }) {
   const [isPlayingCoach, setIsPlayingCoach] = useState(player.isPlayingCoach)
   const [isLicensed, setIsLicensed] = useState(player.isLicensed)
   const [licenseNumber, setLicenseNumber] = useState(player.licenseNumber ?? '')
+  const [seniorityTier, setSeniorityTier] = useState<SeniorityTier | null>(player.seniorityTier)
 
   useEffect(() => {
     if (!open) return
@@ -193,6 +194,7 @@ function EditPlayerDialog({ player }: { player: User }) {
     setIsPlayingCoach(player.isPlayingCoach)
     setIsLicensed(player.isLicensed)
     setLicenseNumber(player.licenseNumber ?? '')
+    setSeniorityTier(player.seniorityTier)
     setTemporaryPassword(null)
   }, [open, player])
 
@@ -205,6 +207,7 @@ function EditPlayerDialog({ player }: { player: User }) {
         isPlayingCoach: canBeOnRoster ? isPlayingCoach : undefined,
         isLicensed,
         licenseNumber: licenseNumber || undefined,
+        seniorityTier,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] })
@@ -282,6 +285,29 @@ function EditPlayerDialog({ player }: { player: User }) {
               value={licenseNumber}
               onChange={(e) => setLicenseNumber(e.target.value)}
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Ancienneté au club</Label>
+            <Select
+              value={seniorityTier ?? 'NONE'}
+              onValueChange={(v) => setSeniorityTier(v === 'NONE' ? null : (v as SeniorityTier))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">Nouveau joueur (moins d'1 an)</SelectItem>
+                {(Object.entries(SENIORITY_TIER_LABELS) as [SeniorityTier, string][]).map(([tier, label]) => (
+                  <SelectItem key={tier} value={tier}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Priorité sur un entraînement complet : licencié, puis par ancienneté, puis premier arrivé.
+            </p>
           </div>
 
           <Button type="submit" disabled={mutation.isPending}>

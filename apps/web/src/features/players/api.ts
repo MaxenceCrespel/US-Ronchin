@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api-client'
-import type { User, UserRole } from '@/lib/types'
+import type { SeniorityTier, User, UserRole } from '@/lib/types'
 
 export async function fetchPlayers(): Promise<User[]> {
   const { data } = await apiClient.get<User[]>('/users')
@@ -11,6 +11,7 @@ export interface AdminUpdateUserInput {
   isPlayingCoach?: boolean
   isLicensed?: boolean
   licenseNumber?: string
+  seniorityTier?: SeniorityTier | null
 }
 
 export async function adminUpdateUser(

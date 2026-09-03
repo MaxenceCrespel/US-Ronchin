@@ -1,4 +1,4 @@
-import type { AttendanceStatus, PlayerPosition, PlayerSubPosition, PreferredFoot } from './types'
+import type { AttendanceStatus, PlayerPosition, PlayerSubPosition, PreferredFoot, SeniorityTier } from './types'
 
 /** Broad pitch band, used only for `MatchComposition.position` (auto-derived per match, never
  * user-selected) — see `PlayerSubPosition`/`SUB_POSITION_LABELS` for a player's own profile positions. */
@@ -39,6 +39,12 @@ export const SUB_POSITION_ABBR: Record<PlayerSubPosition, string> = {
   RIGHT_WINGER: 'AD',
   LEFT_WINGER: 'AG',
   STRIKER: 'BU',
+}
+
+export const SENIORITY_TIER_LABELS: Record<SeniorityTier, string> = {
+  ONE_TO_THREE: '1 à 3 ans',
+  THREE_TO_SEVEN: '3 à 7 ans',
+  SEVEN_PLUS: '+ de 7 ans',
 }
 
 export const FOOT_LABELS: Record<PreferredFoot, string> = {

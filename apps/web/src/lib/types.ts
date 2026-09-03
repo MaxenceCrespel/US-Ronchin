@@ -16,6 +16,7 @@ export type PlayerSubPosition =
   | 'STRIKER'
 
 export type UserStatus = 'ACTIVE' | 'PENDING'
+export type SeniorityTier = 'ONE_TO_THREE' | 'THREE_TO_SEVEN' | 'SEVEN_PLUS'
 
 export interface User {
   id: string
@@ -27,6 +28,11 @@ export interface User {
   lastName: string
   isLicensed: boolean
   licenseNumber: string | null
+  /** Coach/admin-set — seniority bracket at the club (not derived from account age, the app
+   * just launched). Null means "moins d'un an". Ranks below "licencié" and, within it,
+   * ONE_TO_THREE < THREE_TO_SEVEN < SEVEN_PLUS when a training's headcount cap frees up a
+   * slot. */
+  seniorityTier: SeniorityTier | null
   positions: PlayerSubPosition[]
   jerseyNumber: number | null
   preferredFoot: PreferredFoot | null

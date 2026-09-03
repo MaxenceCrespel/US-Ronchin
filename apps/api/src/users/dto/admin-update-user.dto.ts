@@ -1,5 +1,5 @@
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { UserRole } from '../entities/user.entity';
+import { SeniorityTier, UserRole } from '../entities/user.entity';
 import { UpdateProfileDto } from './update-profile.dto';
 
 export class AdminUpdateUserDto extends UpdateProfileDto {
@@ -30,4 +30,8 @@ export class AdminUpdateUserDto extends UpdateProfileDto {
   @IsOptional()
   @IsString()
   licenseNumber?: string;
+
+  @IsOptional()
+  @IsEnum(SeniorityTier)
+  seniorityTier?: SeniorityTier | null;
 }

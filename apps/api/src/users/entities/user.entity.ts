@@ -23,6 +23,16 @@ export enum PreferredFoot {
   BOTH = 'BOTH',
 }
 
+/** Coach/admin-set seniority bracket — the app just launched, so there's no attendance
+ * history to derive this from automatically. Null means "moins d'un an" (a brand-new
+ * player). Ranks below "licencié" and, within it, ONE_TO_THREE < THREE_TO_SEVEN <
+ * SEVEN_PLUS when a training's headcount cap frees up a slot (see attendance-cap.ts). */
+export enum SeniorityTier {
+  ONE_TO_THREE = 'ONE_TO_THREE',
+  THREE_TO_SEVEN = 'THREE_TO_SEVEN',
+  SEVEN_PLUS = 'SEVEN_PLUS',
+}
+
 /** Broad pitch band derived from a player's y-coordinate on the formation editor for a
  * SPECIFIC match (`MatchComposition.position`) — never chosen by a user, unrelated to
  * `User.positions` below. Kept separate and unchanged so the pitch layout/coloring logic
@@ -84,6 +94,9 @@ export class User {
 
   @Column({ name: 'license_number', type: 'varchar', nullable: true })
   licenseNumber: string | null;
+
+  @Column({ name: 'seniority_tier', type: 'enum', enum: SeniorityTier, nullable: true })
+  seniorityTier: SeniorityTier | null;
 
   @Column({ type: 'enum', enum: PlayerSubPosition, array: true, nullable: true })
   positions: PlayerSubPosition[] | null;

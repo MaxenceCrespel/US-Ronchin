@@ -27,6 +27,7 @@ function fakeUser(overrides: Partial<User> & Pick<User, 'id' | 'firstName' | 'la
     status: 'ACTIVE',
     isLicensed: true,
     licenseNumber: null,
+    seniorityTier: null,
     positions: [],
     jerseyNumber: null,
     preferredFoot: null,
