@@ -344,7 +344,24 @@ export interface TeamStats {
   topScorers: PlayerStats[]
   topAssists: PlayerStats[]
   mostDecisive: PlayerStats[]
+  mostPresent: PlayerStats[]
+  /** Best average match rating, minimum 3 ratings — same confidence floor as skillScore. */
+  topRated: PlayerStats[]
+  mostMotm: PlayerStats[]
+  mostPatronDefense: PlayerStats[]
+  totalGoals: number
+  totalAssists: number
   bestDuos: DuoStats[]
+  /** Team record for the season — wins/draws/losses and goals for/against, from played
+   * matches with a score entered. */
+  record: {
+    played: number
+    wins: number
+    draws: number
+    losses: number
+    goalsFor: number
+    goalsAgainst: number
+  }
 }
 
 export interface ParsedMatchInfo {

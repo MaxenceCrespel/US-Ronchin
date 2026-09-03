@@ -154,9 +154,16 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     topScorers: [...playerStats].sort((a, b) => b.goals - a.goals).slice(0, 3),
     topAssists: [...playerStats].sort((a, b) => b.assists - a.assists).slice(0, 3),
     mostDecisive: [...playerStats].sort((a, b) => b.goals + b.assists - (a.goals + a.assists)).slice(0, 3),
+    mostPresent: [...playerStats].sort((a, b) => b.trainingsPresent - a.trainingsPresent).slice(0, 3),
+    topRated: [...playerStats].filter((p) => p.ratingsCount >= 3).sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0)).slice(0, 3),
+    mostMotm: [...playerStats].filter((p) => p.motmCount > 0).sort((a, b) => b.motmCount - a.motmCount).slice(0, 3),
+    mostPatronDefense: [...playerStats].filter((p) => p.patronDefenseCount > 0).sort((a, b) => b.patronDefenseCount - a.patronDefenseCount).slice(0, 3),
+    totalGoals: playerStats.reduce((sum, p) => sum + p.goals, 0),
+    totalAssists: playerStats.reduce((sum, p) => sum + p.assists, 0),
     bestDuos: [
       { scorerId: fabien.id, scorerName: 'Fabien Caboche', assistId: vincent.id, assistName: 'Vincent Ringalle', count: 3 },
     ],
+    record: { played: 10, wins: 6, draws: 2, losses: 2, goalsFor: 24, goalsAgainst: 15 },
   }
 
   const monthlyChallenges: MonthlyChallenges = {

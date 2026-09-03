@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlayerPosition, User } from '../users/entities/user.entity';
-import { Match, MatchStatus } from '../matches/entities/match.entity';
+import { Match, MatchHomeAway, MatchStatus } from '../matches/entities/match.entity';
 import { MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
@@ -512,6 +512,28 @@ export class StatsService {
       ? allEvents.filter((e) => isInSeason(matchDateById.get(e.matchId) ?? '', bounds))
       : allEvents;
 
+    // Team record — wins/draws/losses and goals for/against, from our own side of each
+    // played match (home or away flips which score column is "ours").
+    const seasonMatches = bounds ? matches.filter((m) => isInSeason(m.date, bounds)) : matches;
+    const playedMatches = seasonMatches.filter(
+      (m) => m.status === MatchStatus.PLAYED && m.scoreHome !== null && m.scoreAway !== null,
+    );
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+    for (const m of playedMatches) {
+      const ourScore = m.homeAway === MatchHomeAway.HOME ? m.scoreHome! : m.scoreAway!;
+      const theirScore = m.homeAway === MatchHomeAway.HOME ? m.scoreAway! : m.scoreHome!;
+      goalsFor += ourScore;
+      goalsAgainst += theirScore;
+      if (ourScore > theirScore) wins++;
+      else if (ourScore === theirScore) draws++;
+      else losses++;
+    }
+    const record = { played: playedMatches.length, wins, draws, losses, goalsFor, goalsAgainst };
+
     const topScorers = [...playerStats]
       .filter((p) => p.goals > 0)
       .sort((a, b) => b.goals - a.goals)
@@ -526,6 +548,31 @@ export class StatsService {
       .filter((p) => p.goals + p.assists > 0)
       .sort((a, b) => b.goals + b.assists - (a.goals + a.assists))
       .slice(0, 5);
+
+    const mostPresent = [...playerStats]
+      .filter((p) => p.trainingsPresent > 0)
+      .sort((a, b) => b.trainingsPresent - a.trainingsPresent)
+      .slice(0, 5);
+
+    // A single loose rating shouldn't crown a "best average" — the same 3-rating floor the
+    // skillScore confidence-damping uses elsewhere for the same reason.
+    const topRated = [...playerStats]
+      .filter((p) => p.averageRating !== null && p.ratingsCount >= 3)
+      .sort((a, b) => (b.averageRating ?? 0) - (a.averageRating ?? 0))
+      .slice(0, 5);
+
+    const mostMotm = [...playerStats]
+      .filter((p) => p.motmCount > 0)
+      .sort((a, b) => b.motmCount - a.motmCount)
+      .slice(0, 5);
+
+    const mostPatronDefense = [...playerStats]
+      .filter((p) => p.patronDefenseCount > 0)
+      .sort((a, b) => b.patronDefenseCount - a.patronDefenseCount)
+      .slice(0, 5);
+
+    const totalGoals = playerStats.reduce((sum, p) => sum + p.goals, 0);
+    const totalAssists = playerStats.reduce((sum, p) => sum + p.assists, 0);
 
     const duoCounts = new Map<string, DuoStats>();
     for (const event of events) {
@@ -551,7 +598,19 @@ export class StatsService {
 
     const bestDuos = [...duoCounts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
 
-    return { topScorers, topAssists, mostDecisive, bestDuos };
+    return {
+      topScorers,
+      topAssists,
+      mostDecisive,
+      mostPresent,
+      topRated,
+      mostMotm,
+      mostPatronDefense,
+      totalGoals,
+      totalAssists,
+      bestDuos,
+      record,
+    };
   }
 
   async getMonthlyChallenges(): Promise<MonthlyChallenges> {

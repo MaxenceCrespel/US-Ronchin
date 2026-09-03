@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Bell, BellOff, Smartphone, UserX, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Bell, BellOff, Smartphone, UserX, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -280,6 +280,41 @@ function PlayerDetailDialog({
   )
 }
 
+type KpiSortKey = 'name' | 'role' | 'level' | 'lastSeen' | 'active7' | 'active30' | 'pwa' | 'notifs'
+
+/** A clickable column header — click sorts by that column (numeric columns default to
+ * highest first, name defaults to A→Z), click again on the same column flips direction. */
+function SortableHeader({
+  label,
+  sortKey,
+  active,
+  dir,
+  onSort,
+}: {
+  label: string
+  sortKey: KpiSortKey
+  active: boolean
+  dir: 'asc' | 'desc'
+  onSort: (key: KpiSortKey) => void
+}) {
+  const Icon = !active ? ArrowUpDown : dir === 'asc' ? ArrowUp : ArrowDown
+  return (
+    <TableHead>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'flex items-center gap-1 hover:text-foreground',
+          active ? 'text-foreground font-semibold' : 'text-muted-foreground',
+        )}
+      >
+        {label}
+        <Icon className="size-3" />
+      </button>
+    </TableHead>
+  )
+}
+
 export function AdminKpisPage() {
   const kpisQuery = useQuery({ queryKey: ['admin', 'kpis'], queryFn: fetchAdminKpis })
   const data = kpisQuery.data
@@ -293,6 +328,56 @@ export function AdminKpisPage() {
   const statsByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s]) ?? [])
 
   const [selectedPlayer, setSelectedPlayer] = useState<UserActivityKpi | null>(null)
+
+  // Null = the backend's own order (least active first). Once the viewer picks a column,
+  // client-side sort takes over — numeric columns default to highest first (a "niveau"
+  // sort should surface the strongest players, not the weakest), name defaults A→Z.
+  const [sortKey, setSortKey] = useState<KpiSortKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  function toggleSort(key: KpiSortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(key === 'name' ? 'asc' : 'desc')
+    }
+  }
+
+  const sortedPlayers = useMemo(() => {
+    const players = data?.players ?? []
+    if (!sortKey) return players
+
+    const value = (p: UserActivityKpi): number | string => {
+      switch (sortKey) {
+        case 'name':
+          return `${p.firstName} ${p.lastName}`.toLowerCase()
+        case 'role':
+          return ROLE_LABELS[p.role]
+        case 'level':
+          // No score yet sorts as the lowest, not last-alphabetically or NaN — a never-rated
+          // player is meaningfully "below" a 0, but shouldn't scatter the sort.
+          return skillScoreByUserId.get(p.userId) ?? -1
+        case 'lastSeen':
+          return p.lastSeenAt ? new Date(p.lastSeenAt).getTime() : -Infinity
+        case 'active7':
+          return p.activeDaysLast7
+        case 'active30':
+          return p.activeDaysLast30
+        case 'pwa':
+          return p.pwaInstalled ? 1 : 0
+        case 'notifs':
+          return p.notificationsEnabled ? 1 : 0
+      }
+    }
+
+    const sorted = [...players].sort((a, b) => {
+      const av = value(a)
+      const bv = value(b)
+      return typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number)
+    })
+    return sortDir === 'asc' ? sorted : sorted.reverse()
+  }, [data?.players, sortKey, sortDir, skillScoreByUserId])
 
   return (
     <div className="flex flex-col gap-6">
@@ -349,25 +434,53 @@ export function AdminKpisPage() {
       <Card>
         <CardHeader>
           <CardTitle>Activité par joueur</CardTitle>
-          <CardDescription>Triés par dernière connexion — les moins actifs en premier.</CardDescription>
+          <CardDescription>
+            {sortKey
+              ? "Clique une colonne pour changer le tri, ou une seconde fois pour l'inverser."
+              : 'Par défaut, triés par dernière connexion — les moins actifs en premier. Clique une colonne pour trier autrement.'}
+          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Joueur</TableHead>
-                <TableHead>Rôle</TableHead>
-                <TableHead>Niveau</TableHead>
-                <TableHead>Dernière connexion</TableHead>
+                <SortableHeader label="Joueur" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Rôle" sortKey="role" active={sortKey === 'role'} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Niveau" sortKey="level" active={sortKey === 'level'} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader
+                  label="Dernière connexion"
+                  sortKey="lastSeen"
+                  active={sortKey === 'lastSeen'}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
                 <TableHead>7 derniers jours</TableHead>
-                <TableHead>Jours actifs / 7</TableHead>
-                <TableHead>Jours actifs / 30</TableHead>
-                <TableHead>Appli</TableHead>
-                <TableHead>Notifs</TableHead>
+                <SortableHeader
+                  label="Jours actifs / 7"
+                  sortKey="active7"
+                  active={sortKey === 'active7'}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableHeader
+                  label="Jours actifs / 30"
+                  sortKey="active30"
+                  active={sortKey === 'active30'}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <SortableHeader label="Appli" sortKey="pwa" active={sortKey === 'pwa'} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader
+                  label="Notifs"
+                  sortKey="notifs"
+                  active={sortKey === 'notifs'}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.players.map((p) => (
+              {sortedPlayers.map((p) => (
                 <TableRow key={p.userId}>
                   <TableCell>
                     <button
