@@ -6,7 +6,7 @@ import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
-import { pickNextWaitlisted, seniorityRank } from './attendance-cap';
+import { pickNextWaitlisted, priorityRank } from './attendance-cap';
 
 export interface GuestNameInput {
   firstName: string;
@@ -145,13 +145,14 @@ export class AttendancesService {
         if (otherHeadcount < cap) {
           attendance.confirmed = true;
         } else {
-          // Full — a licensed player arriving late still bumps the most recently
-          // confirmed non-licensed player back to the waitlist instead of joining it
-          // themselves (see evictLastNonLicensed). Anyone else — including a second
-          // licensed player fighting over the same last slot — just waitlists.
+          // Full — an arriving player who outranks the lowest-priority confirmed player
+          // still bumps them back to the waitlist instead of joining it themselves (see
+          // evictLowerPriority) — not just "licensed bumps non-licensed" but the full
+          // 3-tier priority (licensed, then seniority bracket). Two players of equal rank
+          // fighting over the same last slot still just waitlists the later one.
           const arrivingUser = await this.usersRepository.findOne({ where: { id: userId } });
-          const evicted = arrivingUser?.isLicensed
-            ? await this.evictLastNonLicensed(trainingSessionId, others, userId)
+          const evicted = arrivingUser
+            ? await this.evictLowerPriority(trainingSessionId, others, userId, arrivingUser)
             : null;
           if (evicted) {
             otherHeadcount -= evicted.freedHeadcount;
@@ -295,20 +296,22 @@ export class AttendancesService {
     }
   }
 
-  /** A licensed player declaring PRESENT into an already-full cap bumps a non-licensed
-   * player back to the waitlist instead of joining it themselves — they've paid to train, a
-   * non-licensed member hasn't (same priority as pickNextWaitlisted, just triggered the
-   * other direction: a slot doesn't have to free up naturally first). Among non-licensed
-   * candidates, the lowest seniority tier is bumped first (a brand-new player before a
-   * "1-3 ans", before a "3-7 ans", before a "+7 ans"); within the same tier, the most
-   * recently confirmed goes first (LIFO). Demotes at most one row, and only when a genuine
-   * non-licensed candidate is currently holding a confirmed slot — two licensed players
-   * contesting the same last slot still resolve first-come-first-served. */
-  private async evictLastNonLicensed(
+  /** A player declaring PRESENT into an already-full cap bumps a lower-priority confirmed
+   * player back to the waitlist instead of joining it themselves — the full 3-tier
+   * priority (licensed, then seniority bracket: +7 ans > 3-7 ans > 1-3 ans > pas de palier),
+   * same ranking as pickNextWaitlisted, just triggered the other direction: a slot doesn't
+   * have to free up naturally first. Among candidates the arriving player actually outranks,
+   * the lowest-ranked one is bumped first; within the same rank, the most recently confirmed
+   * goes first (LIFO). Demotes at most one row, and only when a genuine lower-ranked
+   * candidate is currently holding a confirmed slot — two players of equal rank contesting
+   * the same last slot still resolve first-come-first-served. */
+  private async evictLowerPriority(
     trainingSessionId: string,
     others: Attendance[],
     arrivingUserId: string,
+    arrivingUser: User,
   ): Promise<{ freedHeadcount: number } | null> {
+    const arrivingRank = priorityRank(arrivingUser);
     const candidates = others
       .filter(
         (a) =>
@@ -316,11 +319,11 @@ export class AttendancesService {
           a.status === AttendanceStatus.PRESENT &&
           a.confirmed &&
           a.user &&
-          !a.user.isLicensed,
+          priorityRank(a.user) < arrivingRank,
       )
       .sort((a, b) => {
-        const seniorityDiff = seniorityRank(a.user.seniorityTier) - seniorityRank(b.user.seniorityTier);
-        if (seniorityDiff !== 0) return seniorityDiff;
+        const rankDiff = priorityRank(a.user) - priorityRank(b.user);
+        if (rankDiff !== 0) return rankDiff;
         return b.respondedAt.getTime() - a.respondedAt.getTime();
       });
     const evicted = candidates[0];

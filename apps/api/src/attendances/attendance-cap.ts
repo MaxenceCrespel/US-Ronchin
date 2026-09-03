@@ -7,30 +7,32 @@ const SENIORITY_RANK: Record<SeniorityTier, number> = {
   [SeniorityTier.ONE_TO_THREE]: 1,
 };
 
-/** Null (no tier set — "moins d'un an", a brand-new player) always ranks below every real
- * tier. Exported so evictLastNonLicensed (attendances.service.ts) ranks the same way when
- * bumping the other direction. */
-export function seniorityRank(tier: SeniorityTier | null): number {
-  return tier ? SENIORITY_RANK[tier] : 0;
+type PriorityUser = { isLicensed: boolean; seniorityTier: SeniorityTier | null };
+
+/** A single number capturing the full 3-tier priority: licensed always outranks every
+ * non-licensed player regardless of seniority (0-3 for seniority, offset by 4 once
+ * licensed, so the ranges never overlap), and within "not licensed" a higher seniority
+ * bracket outranks a lower one — null (no tier, "moins d'un an") ranks lowest of all.
+ * Used both to order the waitlist (pickNextWaitlisted) and to decide whether an arriving
+ * player outranks someone already confirmed (AttendancesService.evictLowerPriority). */
+export function priorityRank(user: PriorityUser): number {
+  const seniority = user.seniorityTier ? SENIORITY_RANK[user.seniorityTier] : 0;
+  return user.isLicensed ? seniority + 4 : seniority;
 }
 
-/** Picks who gets promoted when a confirmed PRESENT slot frees up — three priority tiers,
- * highest first: licensed players, then by seniority bracket (a coach/admin-set field — the
- * club's real history, not account age: +7 ans > 3-7 ans > 1-3 ans > pas de palier), and by
- * respondedAt (longest-waiting first) within the same tier. Only ever decides who's NEXT in
- * line for an open slot; it has no say over anyone already confirmed (see
- * AttendancesService.setAttendance, which keeps a slot with whoever holds it — "premier
- * arrivé, premier servi" once you're actually in). */
-export function pickNextWaitlisted<
-  T extends Pick<Attendance, 'respondedAt'> & {
-    user: { isLicensed: boolean; seniorityTier: SeniorityTier | null };
-  },
->(waitlisted: T[]): T | null {
+/** Picks who gets promoted when a confirmed PRESENT slot frees up — highest priorityRank
+ * first, then by respondedAt (longest-waiting first) within the same rank. Only ever
+ * decides who's NEXT in line for an open slot; it has no say over anyone already confirmed
+ * (see AttendancesService.setAttendance, which keeps a slot with whoever holds it —
+ * "premier arrivé, premier servi" once you're actually in — unless a later arrival
+ * outranks them, see evictLowerPriority). */
+export function pickNextWaitlisted<T extends Pick<Attendance, 'respondedAt'> & { user: PriorityUser }>(
+  waitlisted: T[],
+): T | null {
   if (waitlisted.length === 0) return null;
   return [...waitlisted].sort((a, b) => {
-    if (a.user.isLicensed !== b.user.isLicensed) return a.user.isLicensed ? -1 : 1;
-    const seniorityDiff = seniorityRank(b.user.seniorityTier) - seniorityRank(a.user.seniorityTier);
-    if (seniorityDiff !== 0) return seniorityDiff;
+    const rankDiff = priorityRank(b.user) - priorityRank(a.user);
+    if (rankDiff !== 0) return rankDiff;
     return a.respondedAt.getTime() - b.respondedAt.getTime();
   })[0];
 }
