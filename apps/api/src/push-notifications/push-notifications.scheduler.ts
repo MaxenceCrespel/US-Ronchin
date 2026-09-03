@@ -13,6 +13,7 @@ import { Attendance } from '../attendances/entities/attendance.entity';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { AttendancePollReminder, PollReminderKind } from './entities/attendance-poll-reminder.entity';
 import { PushNotificationsService } from './push-notifications.service';
+import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 
 @Injectable()
 export class PushNotificationsScheduler {
@@ -53,7 +54,7 @@ export class PushNotificationsScheduler {
 
   @Cron('0 0 9,21 * * *', { timeZone: 'Europe/Paris' })
   async handleMissingResultReminders() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = parisToday();
     const matches = await this.matchesRepository.find({
       where: {
         date: LessThan(today),
@@ -82,7 +83,7 @@ export class PushNotificationsScheduler {
   @Cron('0 */15 * * * *', { timeZone: 'Europe/Paris' })
   async handleMissingAttendanceReminders() {
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    const today = parisToday();
     const candidateSessions = await this.sessionsRepository.find({
       where: {
         date: LessThanOrEqual(today),
@@ -92,7 +93,7 @@ export class PushNotificationsScheduler {
     });
 
     for (const session of candidateSessions) {
-      const sessionEnd = new Date(`${session.date}T${session.endTime}`);
+      const sessionEnd = parisWallTimeToDate(session.date, session.endTime);
       if (sessionEnd.getTime() > now.getTime()) continue;
 
       try {
@@ -126,7 +127,7 @@ export class PushNotificationsScheduler {
     const sessions = await this.sessionsRepository.find({ where: { cancelled: false } });
 
     for (const session of sessions) {
-      const diffMinutes = (new Date(`${session.date}T${session.startTime}`).getTime() - now) / 60000;
+      const diffMinutes = (parisWallTimeToDate(session.date, session.startTime).getTime() - now) / 60000;
       if (diffMinutes <= 0 || diffMinutes > 180) continue;
 
       try {
@@ -174,7 +175,7 @@ export class PushNotificationsScheduler {
   async handleMatchResponseReminders() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+    const tomorrowKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(tomorrow);
 
     const matches = await this.matchesRepository.find({
       where: { date: tomorrowKey, status: MatchStatus.SCHEDULED },

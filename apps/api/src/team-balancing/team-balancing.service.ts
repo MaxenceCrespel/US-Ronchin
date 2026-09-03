@@ -8,6 +8,7 @@ import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
+import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
 import { pointsForResult } from './points-for-result';
 
@@ -613,7 +614,7 @@ export class TeamBalancingService {
 
   async findUpcomingSessionsNeedingTeams(): Promise<TrainingSession[]> {
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    const today = parisToday();
 
     const candidateSessions = await this.sessionsRepository.find({
       where: { date: today, cancelled: false },
@@ -621,7 +622,7 @@ export class TeamBalancingService {
 
     const sessionsNeedingTeams: TrainingSession[] = [];
     for (const session of candidateSessions) {
-      const sessionDateTime = new Date(`${session.date}T${session.startTime}`);
+      const sessionDateTime = parisWallTimeToDate(session.date, session.startTime);
       const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / 60000;
       // A single-minute window (diffMinutes > 29 && <= 30) meant one missed cron tick —
       // an API restart/deploy right at that moment, most often — permanently skipped the
