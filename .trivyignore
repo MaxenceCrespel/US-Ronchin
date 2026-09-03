@@ -81,6 +81,21 @@ CVE-2026-8927
 CVE-2026-8932
 CVE-2026-9538
 
+# CVE-2026-16742 (systemd-homed local privilege escalation via missing
+# home-record signature verification) affects libnss-systemd, libpam-
+# systemd, libsystemd-shared, libsystemd0, libudev1, systemd, systemd-sysv
+# and systemd-timesyncd, part of the source-2 base-image packages above —
+# no Debian bookworm fix published yet (the CI scan reports every one of
+# them as Status: affected with no Fixed Version, `apt-get upgrade` in the
+# Dockerfile already runs and has nothing newer to offer). Separately
+# unreachable regardless: systemd-homed is a daemon that only runs when
+# systemd is PID 1 and reachable over D-Bus; this container's PID 1 is
+# `node dist/main.js` directly (no init system, no systemd, no D-Bus ever
+# started), and the sole local account (`app`) is created with plain
+# `adduser`/`addgroup` — never a systemd-homed-managed home record for the
+# vulnerable signature check to even apply to.
+CVE-2026-16742
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
