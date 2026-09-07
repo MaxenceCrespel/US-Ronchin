@@ -40,11 +40,16 @@ export function parisWallTimeToDate(date: string, time: string): Date {
   return new Date(naiveUtc.getTime() + offsetMs);
 }
 
-/** "Today" as a Paris calendar date ("YYYY-MM-DD") — `new Date().toISOString().slice(0, 10)`
- * is the UTC calendar date, which is the wrong side of midnight for roughly two hours a day
+/** Any instant's Paris calendar date ("YYYY-MM-DD") — `date.toISOString().slice(0, 10)` is
+ * the UTC calendar date, which is the wrong side of midnight for roughly two hours a day
  * (22:00–00:00 Paris in summer, 23:00–00:00 in winter): a session scheduled for tonight would
  * be missed by a `WHERE date = today` query run in that window, since the UTC date has
  * already rolled over to tomorrow. */
+export function parisDateOnly(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(date);
+}
+
+/** `parisDateOnly(new Date())` — today's date as Paris sees it right now. */
 export function parisToday(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
+  return parisDateOnly(new Date());
 }

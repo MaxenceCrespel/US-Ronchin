@@ -8,11 +8,15 @@ import { UpdateTrainingDto } from './dto/update-training.dto';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { AttendancesService } from '../attendances/attendances.service';
+import { parisDateOnly } from '../common/utils/paris-time';
 
 const GENERATION_WINDOW_WEEKS = 8;
 
+// `date.toISOString().slice(0, 10)` is the UTC calendar date — the wrong side of midnight
+// for roughly two hours a day in Paris (server runs in UTC, Paris is ahead of it), which
+// would make "today" here lag behind the real Paris date late in the evening.
 function toDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return parisDateOnly(date);
 }
 
 export interface TrainingSessionWithTraining extends Omit<TrainingSession, 'training'> {

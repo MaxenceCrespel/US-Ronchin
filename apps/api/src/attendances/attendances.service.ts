@@ -236,14 +236,21 @@ export class AttendancesService {
    * userId. */
   private async promoteWaitlist(trainingSessionId: string, cap: number): Promise<void> {
     for (;;) {
+      // Not filtered to status: PRESENT — a guest counts against the cap regardless of
+      // whether the inviting player themselves ends up Absent/Incertain (see headcount() and
+      // Attendance.confirmedGuestCount's own doc comment), so an Absent row with unpromoted
+      // guests still needs to be visible here, or the room they'd fit in silently vanishes.
       const rows = await this.attendancesRepository.find({
-        where: { trainingSessionId, status: AttendanceStatus.PRESENT },
+        where: { trainingSessionId },
         relations: { user: true },
       });
       const used = rows.reduce((sum, a) => sum + headcount(a), 0);
       const room = cap - used;
       if (room <= 0) return;
 
+      // Safe against the wider row set above: setAttendance always forces confirmed=true
+      // for any non-PRESENT status, so only a genuinely waitlisted PRESENT row ever has
+      // confirmed=false — an Absent/Incertain row never ends up in here.
       const waitlisted = rows.filter((a) => !a.confirmed);
       const nextPlayer = pickNextWaitlisted(waitlisted);
       if (nextPlayer) {
@@ -285,8 +292,11 @@ export class AttendancesService {
           trainingSessionId,
           userId: next.userId,
           changedBy: next.userId,
-          previousStatus: AttendanceStatus.PRESENT,
-          newStatus: AttendanceStatus.PRESENT,
+          // The bringer's own status here isn't necessarily PRESENT any more (that's the
+          // whole point of the fix above) — only their guest count is changing, so log
+          // their real, unchanged status rather than assuming PRESENT.
+          previousStatus: next.status!,
+          newStatus: next.status!,
           previousConfirmed: true,
           newConfirmed: true,
           previousConfirmedGuestCount,

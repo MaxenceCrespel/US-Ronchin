@@ -243,6 +243,12 @@ function ManageTrainingsDialog() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['trainings'] })
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] })
+      // Raising maxPresentPlayers here can silently promote waitlisted players/guests across
+      // every future session of this training (AttendancesService.syncCapPromotions) —
+      // without this, any attendance list already on screen keeps showing the stale
+      // pre-save waitlist state. No single sessionId to target (this affects the whole
+      // series), so invalidate the whole ['attendances', ...] family.
+      queryClient.invalidateQueries({ queryKey: ['attendances'] })
       resetForm()
     },
   })
@@ -1177,6 +1183,11 @@ export function SessionCard({
       }),
     onSuccess: () => {
       invalidateSessions()
+      // A cap change can silently promote waitlisted players/guests server-side
+      // (AttendancesService.syncCapPromotions) — without this, the list below kept showing
+      // the stale pre-save waitlist state until some unrelated action happened to refetch it,
+      // making a cap raise that actually worked look like it did nothing.
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
       setEditing(false)
     },
   })
