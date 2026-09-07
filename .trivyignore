@@ -96,6 +96,22 @@ CVE-2026-9538
 # vulnerable signature check to even apply to.
 CVE-2026-16742
 
+# CVE-2026-76642, CVE-2026-78408, CVE-2026-78409, CVE-2026-78410 (util-linux
+# mount-helper/nsenter/bind-mount privilege issues) affect bsdutils,
+# libblkid1, libfdisk1 and libmount1 — part of the same source-2 base-image
+# util-linux install already covered above, just newly-assigned CVEs against
+# it (installed version 1:2.38.1-5+deb12u3, Status: affected, no Fixed
+# Version; re-verified with `apt list --upgradable` inside a fresh
+# node:22-bookworm-slim — empty, no Debian bookworm fix published yet).
+# Every one of these needs a local, privileged mount/cgroup/nsenter
+# operation to trigger — this container never runs `mount`, `nsenter`, or
+# any privileged namespace operation; its own entrypoint is `node
+# dist/main.js` with no such syscalls anywhere in the app or its deps.
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to

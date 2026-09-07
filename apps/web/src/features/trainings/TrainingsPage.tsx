@@ -115,38 +115,16 @@ function formatDate(date: string) {
   })
 }
 
-const SENIORITY_RANK: Record<NonNullable<Attendance['user']['seniorityTier']>, number> = {
-  SEVEN_PLUS: 3,
-  THREE_TO_SEVEN: 2,
-  ONE_TO_THREE: 1,
-}
-
-/** Same priorityRank as the backend's attendance-cap.ts — licensed always outranks every
- * non-licensed player, and within "not licensed" a higher seniority bracket outranks a
- * lower one (no tier ranks lowest of all). Kept in sync by hand since this is a display-only
- * mirror, not shared code with the API. */
-function priorityRank(user: Attendance['user']): number {
-  const seniority = user.seniorityTier ? SENIORITY_RANK[user.seniorityTier] : 0
-  return user.isLicensed ? seniority + 4 : seniority
-}
-
-/** Orders the attendance badges to actually reflect the waitlist logic (see
- * AttendancesService.setAttendance/pickNextWaitlisted) instead of raw DB order, which only
- * ever reflected each row's first-ever creation time, not later status changes: confirmed
- * PRESENT first by arrival order, then waitlisted PRESENT (by priority — licensed, then
- * seniority bracket — then arrival order, same priority a freed slot would go to), then
- * everyone else. */
+/** Pure arrival order — whoever last answered (or changed their answer) first shows up
+ * first, full stop, regardless of what they answered or whether they're confirmed or
+ * waitlisted. `respondedAt` is bumped on every re-declaration (see setAttendance), so
+ * changing your answer moves you to your new position in the queue instead of keeping your
+ * original spot. No grouping by status/confirmed here on purpose — the badge's own color
+ * and "(attente)" tag already say what someone answered; this list is only about order. */
 function sortAttendancesForDisplay(attendances: Attendance[]): Attendance[] {
-  const rank = (a: Attendance) => (a.status === 'PRESENT' ? (a.confirmed ? 0 : 1) : 2)
-  return [...attendances].sort((a, b) => {
-    const rankDiff = rank(a) - rank(b)
-    if (rankDiff !== 0) return rankDiff
-    if (rank(a) === 1) {
-      const priorityDiff = priorityRank(b.user) - priorityRank(a.user)
-      if (priorityDiff !== 0) return priorityDiff
-    }
-    return new Date(a.respondedAt).getTime() - new Date(b.respondedAt).getTime()
-  })
+  return [...attendances].sort(
+    (a, b) => new Date(a.respondedAt).getTime() - new Date(b.respondedAt).getTime(),
+  )
 }
 
 export function AttendanceToggle({
