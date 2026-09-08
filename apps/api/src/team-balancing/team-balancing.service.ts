@@ -14,6 +14,12 @@ import { pointsForResult } from './points-for-result';
 
 const DEFAULT_TEAM_COUNT = 2;
 
+// skillScore is 0-100 — a ±5-point spread (so up to 10 points apart) is well within noise
+// for a score built from recency-weighted ratings, damped confidence priors, etc. (see
+// StatsService.getPlayerStats). Kept modest on purpose: enough to make close calls vary
+// between regenerations, not so wide that it could flip a genuinely lopsided matchup.
+const SCORE_JITTER_RANGE = 10;
+
 const BAND_BY_SUBPOSITION: Record<PlayerSubPosition, PlayerPosition> = {
   [PlayerSubPosition.GOALKEEPER]: PlayerPosition.GOALKEEPER,
   [PlayerSubPosition.CENTER_BACK]: PlayerPosition.DEFENDER,
@@ -128,9 +134,24 @@ export class TeamBalancingService {
     const playerStats = await this.statsService.getPlayerStats();
     const scoreByUserId = new Map(playerStats.map((p) => [p.userId, p.skillScore]));
 
+    // A 45 and a 55 aren't meaningfully different players — sorting strictly by score made
+    // "Régénérer" fully deterministic (same inputs → same split, every single time, since
+    // nothing here uses randomness), which reads as "the button doesn't do anything" even
+    // though it's actually just re-finding the one best split. Jittering the sort key lets
+    // players within SCORE_JITTER_RANGE of each other swap places from one regeneration to
+    // the next, so re-rolling gives a genuinely different (still fair) team split — while a
+    // wide gap (e.g. 20 vs 80) is never enough for the jitter to flip. Only the processing
+    // ORDER is jittered: teamSums below still accumulate the real, un-jittered score, so the
+    // actual size/skill balance of the two teams is unaffected — only which of two
+    // close-in-skill players ends up on which side varies.
+    const jitterByUserId = new Map(
+      presentAttendances.map((a) => [a.userId, (Math.random() - 0.5) * SCORE_JITTER_RANGE]),
+    );
+    const jitteredScore = (userId: string) =>
+      (scoreByUserId.get(userId) ?? 0) + (jitterByUserId.get(userId) ?? 0);
     const presentUserIds = presentAttendances
       .map((a) => a.userId)
-      .sort((a, b) => (scoreByUserId.get(b) ?? 0) - (scoreByUserId.get(a) ?? 0));
+      .sort((a, b) => jitteredScore(b) - jitteredScore(a));
 
     const effectiveTeamCount = Math.min(teamCount, Math.max(2, totalHeadcount));
     const teamSums = new Array(effectiveTeamCount).fill(0);
