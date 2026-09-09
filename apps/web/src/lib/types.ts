@@ -264,6 +264,23 @@ export interface BadgeStatus {
   progress: { current: number; target: number } | null
 }
 
+export interface BadgeHolder {
+  userId: string
+  firstName: string
+  lastName: string
+  count: number
+  earnedAt: string
+}
+
+export interface BadgeHolderGroup {
+  key: string
+  category: BadgeCategory
+  rarity: BadgeRarity
+  title: string
+  emoji: string
+  holders: BadgeHolder[]
+}
+
 export type AccountTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'RUBY'
 
 export interface AccountLevel {

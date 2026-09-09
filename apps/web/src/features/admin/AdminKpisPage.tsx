@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Bell, BellOff, Smartphone, UserX, X } 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -18,6 +19,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { cn } from '@/lib/utils'
 import { fetchPlayerStats } from '@/features/stats/api'
 import type { PlayerStats } from '@/lib/types'
+import { BadgeHoldersPanel } from './BadgeHoldersPanel'
 import {
   createSeparationRule,
   deleteSeparationRule,
@@ -328,6 +330,7 @@ export function AdminKpisPage() {
   const statsByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s]) ?? [])
 
   const [selectedPlayer, setSelectedPlayer] = useState<UserActivityKpi | null>(null)
+  const [tab, setTab] = useState('overview')
 
   // Null = the backend's own order (least active first). Once the viewer picks a column,
   // client-side sort takes over — numeric columns default to highest first (a "niveau"
@@ -388,166 +391,179 @@ export function AdminKpisPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Card>
-          <CardHeader>
-            <CardDescription>Actifs cette semaine</CardDescription>
-            <CardTitle className="text-2xl">
-              {data ? `${data.activeLast7Days}/${data.totalUsers}` : '—'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Actifs ce mois</CardDescription>
-            <CardTitle className="text-2xl">
-              {data ? `${data.activeLast30Days}/${data.totalUsers}` : '—'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Comptes au total</CardDescription>
-            <CardTitle className="text-2xl">{data?.totalUsers ?? '—'}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Appli installée</CardDescription>
-            <CardTitle className="text-2xl">
-              {data ? `${data.players.filter((p) => p.pwaInstalled).length}/${data.totalUsers}` : '—'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Notifications activées</CardDescription>
-            <CardTitle className="text-2xl">
-              {data
-                ? `${data.players.filter((p) => p.notificationsEnabled).length}/${data.totalUsers}`
-                : '—'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
+          <TabsTrigger value="badges">Badges</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Activité par joueur</CardTitle>
-          <CardDescription>
-            {sortKey
-              ? "Clique une colonne pour changer le tri, ou une seconde fois pour l'inverser."
-              : 'Par défaut, triés par dernière connexion — les moins actifs en premier. Clique une colonne pour trier autrement.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableHeader label="Joueur" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Rôle" sortKey="role" active={sortKey === 'role'} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Niveau" sortKey="level" active={sortKey === 'level'} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader
-                  label="Dernière connexion"
-                  sortKey="lastSeen"
-                  active={sortKey === 'lastSeen'}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <TableHead>7 derniers jours</TableHead>
-                <SortableHeader
-                  label="Jours actifs / 7"
-                  sortKey="active7"
-                  active={sortKey === 'active7'}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <SortableHeader
-                  label="Jours actifs / 30"
-                  sortKey="active30"
-                  active={sortKey === 'active30'}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <SortableHeader label="Appli" sortKey="pwa" active={sortKey === 'pwa'} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader
-                  label="Notifs"
-                  sortKey="notifs"
-                  active={sortKey === 'notifs'}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedPlayers.map((p) => (
-                <TableRow key={p.userId}>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPlayer(p)}
-                      className="flex items-center gap-2 hover:underline"
-                    >
-                      <PlayerAvatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size="sm" />
-                      <span className="font-medium">
-                        {p.firstName} {p.lastName}
-                      </span>
-                    </button>
-                  </TableCell>
-                  <TableCell>{ROLE_LABELS[p.role]}</TableCell>
-                  <TableCell className="font-medium">
-                    {skillScoreByUserId.get(p.userId) ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    {p.lastSeenAt
-                      ? formatDistanceToNow(new Date(p.lastSeenAt), { locale: fr, addSuffix: true })
-                      : 'Jamais connecté'}
-                  </TableCell>
-                  <TableCell>
-                    <MiniHeatmap days={p.last7Days} />
-                  </TableCell>
-                  <TableCell>{p.activeDaysLast7}/7</TableCell>
-                  <TableCell>{p.activeDaysLast30}/30</TableCell>
-                  <TableCell>
-                    {p.pwaInstalled ? (
-                      <span
-                        className="inline-flex items-center gap-1 text-emerald-600"
-                        title="Appli installée"
-                      >
-                        <Smartphone className="size-3.5" />
-                      </span>
-                    ) : (
-                      <span
-                        className="text-muted-foreground inline-flex items-center gap-1"
-                        title="Appli non installée"
-                      >
-                        <Smartphone className="size-3.5 opacity-40" />
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {p.notificationsEnabled ? (
-                      <span
-                        className="inline-flex items-center gap-1 text-emerald-600"
-                        title="A activé les notifications"
-                      >
-                        <Bell className="size-3.5" />
-                      </span>
-                    ) : (
-                      <span
-                        className="text-muted-foreground inline-flex items-center gap-1"
-                        title="N'a pas activé les notifications"
-                      >
-                        <BellOff className="size-3.5" />
-                      </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <TabsContent value="overview" className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <Card>
+              <CardHeader>
+                <CardDescription>Actifs cette semaine</CardDescription>
+                <CardTitle className="text-2xl">
+                  {data ? `${data.activeLast7Days}/${data.totalUsers}` : '—'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Actifs ce mois</CardDescription>
+                <CardTitle className="text-2xl">
+                  {data ? `${data.activeLast30Days}/${data.totalUsers}` : '—'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Comptes au total</CardDescription>
+                <CardTitle className="text-2xl">{data?.totalUsers ?? '—'}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Appli installée</CardDescription>
+                <CardTitle className="text-2xl">
+                  {data ? `${data.players.filter((p) => p.pwaInstalled).length}/${data.totalUsers}` : '—'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Notifications activées</CardDescription>
+                <CardTitle className="text-2xl">
+                  {data
+                    ? `${data.players.filter((p) => p.notificationsEnabled).length}/${data.totalUsers}`
+                    : '—'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Activité par joueur</CardTitle>
+              <CardDescription>
+                {sortKey
+                  ? "Clique une colonne pour changer le tri, ou une seconde fois pour l'inverser."
+                  : 'Par défaut, triés par dernière connexion — les moins actifs en premier. Clique une colonne pour trier autrement.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableHeader label="Joueur" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={toggleSort} />
+                    <SortableHeader label="Rôle" sortKey="role" active={sortKey === 'role'} dir={sortDir} onSort={toggleSort} />
+                    <SortableHeader label="Niveau" sortKey="level" active={sortKey === 'level'} dir={sortDir} onSort={toggleSort} />
+                    <SortableHeader
+                      label="Dernière connexion"
+                      sortKey="lastSeen"
+                      active={sortKey === 'lastSeen'}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                    />
+                    <TableHead>7 derniers jours</TableHead>
+                    <SortableHeader
+                      label="Jours actifs / 7"
+                      sortKey="active7"
+                      active={sortKey === 'active7'}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                    />
+                    <SortableHeader
+                      label="Jours actifs / 30"
+                      sortKey="active30"
+                      active={sortKey === 'active30'}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                    />
+                    <SortableHeader label="Appli" sortKey="pwa" active={sortKey === 'pwa'} dir={sortDir} onSort={toggleSort} />
+                    <SortableHeader
+                      label="Notifs"
+                      sortKey="notifs"
+                      active={sortKey === 'notifs'}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                    />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedPlayers.map((p) => (
+                    <TableRow key={p.userId}>
+                      <TableCell>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPlayer(p)}
+                          className="flex items-center gap-2 hover:underline"
+                        >
+                          <PlayerAvatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size="sm" />
+                          <span className="font-medium">
+                            {p.firstName} {p.lastName}
+                          </span>
+                        </button>
+                      </TableCell>
+                      <TableCell>{ROLE_LABELS[p.role]}</TableCell>
+                      <TableCell className="font-medium">
+                        {skillScoreByUserId.get(p.userId) ?? '—'}
+                      </TableCell>
+                      <TableCell>
+                        {p.lastSeenAt
+                          ? formatDistanceToNow(new Date(p.lastSeenAt), { locale: fr, addSuffix: true })
+                          : 'Jamais connecté'}
+                      </TableCell>
+                      <TableCell>
+                        <MiniHeatmap days={p.last7Days} />
+                      </TableCell>
+                      <TableCell>{p.activeDaysLast7}/7</TableCell>
+                      <TableCell>{p.activeDaysLast30}/30</TableCell>
+                      <TableCell>
+                        {p.pwaInstalled ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-emerald-600"
+                            title="Appli installée"
+                          >
+                            <Smartphone className="size-3.5" />
+                          </span>
+                        ) : (
+                          <span
+                            className="text-muted-foreground inline-flex items-center gap-1"
+                            title="Appli non installée"
+                          >
+                            <Smartphone className="size-3.5 opacity-40" />
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {p.notificationsEnabled ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-emerald-600"
+                            title="A activé les notifications"
+                          >
+                            <Bell className="size-3.5" />
+                          </span>
+                        ) : (
+                          <span
+                            className="text-muted-foreground inline-flex items-center gap-1"
+                            title="N'a pas activé les notifications"
+                          >
+                            <BellOff className="size-3.5" />
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="badges">
+          <BadgeHoldersPanel />
+        </TabsContent>
+      </Tabs>
 
       {selectedPlayer && (
         <PlayerDetailDialog

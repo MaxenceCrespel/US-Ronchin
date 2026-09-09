@@ -131,6 +131,23 @@ export interface BadgeStatus {
   progress: { current: number; target: number } | null;
 }
 
+export interface BadgeHolder {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  count: number;
+  earnedAt: Date;
+}
+
+export interface BadgeHolderGroup {
+  key: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  title: string;
+  emoji: string;
+  holders: BadgeHolder[];
+}
+
 @Injectable()
 export class BadgesService {
   constructor(
@@ -887,5 +904,38 @@ export class BadgesService {
       result[user.id] = this.levelFromScore(scoreByUser.get(user.id) ?? 0);
     }
     return result;
+  }
+
+  /** Admin-only reverse lookup — for every badge, who currently holds it. Reads
+   * already-persisted badges (same as getAccountLevelsForAll), not a live eligibility
+   * recompute: showing this list is about "who was awarded X", not "who could be right
+   * now". Every badge appears even with zero holders, so the admin UI can show the full
+   * roster of badges rather than only the ones someone has actually earned. */
+  async getHolders(): Promise<BadgeHolderGroup[]> {
+    const rows = await this.badgesRepository.find({ relations: { user: true } });
+    const holdersByKey = new Map<string, BadgeHolder[]>();
+    for (const row of rows) {
+      if (!row.user) continue; // defensive — CASCADE delete should make this impossible
+      const list = holdersByKey.get(row.badgeKey) ?? [];
+      list.push({
+        userId: row.userId,
+        firstName: row.user.firstName,
+        lastName: row.user.lastName,
+        count: row.count,
+        earnedAt: row.earnedAt,
+      });
+      holdersByKey.set(row.badgeKey, list);
+    }
+
+    return BADGE_DEFINITIONS.map((d) => ({
+      key: d.key,
+      category: d.category,
+      rarity: d.rarity,
+      title: d.title,
+      emoji: d.emoji,
+      holders: (holdersByKey.get(d.key) ?? []).sort((a, b) =>
+        `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`),
+      ),
+    }));
   }
 }

@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import type { BadgeCategory, BadgeRarity, BadgeStatus } from '@/lib/types'
 import { fetchBadgesForUser } from './api'
 
-const CATEGORY_LABELS: Record<BadgeCategory, string> = {
+export const CATEGORY_LABELS: Record<BadgeCategory, string> = {
   GOALS: 'Buts',
   ASSISTS: 'Passes décisives',
   MOTM: 'Homme du match',
@@ -21,7 +21,7 @@ const CATEGORY_LABELS: Record<BadgeCategory, string> = {
   SPECIAL: 'Spécial',
 }
 
-const CATEGORY_ORDER: BadgeCategory[] = [
+export const CATEGORY_ORDER: BadgeCategory[] = [
   'GOALS',
   'ASSISTS',
   'MOTM',

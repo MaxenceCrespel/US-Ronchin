@@ -26,6 +26,16 @@ export class BadgesController {
     return this.badgesService.getForUser(userId);
   }
 
+  // Admin-only reverse lookup — for every badge, who holds it. Same access rule as
+  // users/:userId above, same reason RolesGuard can't express it via @Roles(...).
+  @Get('holders')
+  getHolders(@CurrentUser() currentUser: AuthenticatedUser) {
+    if (currentUser.role !== UserRole.SUPERADMIN) {
+      throw new ForbiddenException();
+    }
+    return this.badgesService.getHolders();
+  }
+
   @Get('level')
   getMyLevel(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.badgesService.getAccountLevel(currentUser.id);

@@ -1,8 +1,14 @@
 import { apiClient } from '@/lib/api-client'
-import type { AccountLevel, BadgeStatus } from '@/lib/types'
+import type { AccountLevel, BadgeHolderGroup, BadgeStatus } from '@/lib/types'
 
 export async function fetchMyBadges(): Promise<BadgeStatus[]> {
   const { data } = await apiClient.get<BadgeStatus[]>('/badges/me')
+  return data
+}
+
+/** Admin-only — for every badge, who currently holds it. */
+export async function fetchBadgeHolders(): Promise<BadgeHolderGroup[]> {
+  const { data } = await apiClient.get<BadgeHolderGroup[]>('/badges/holders')
   return data
 }
 
