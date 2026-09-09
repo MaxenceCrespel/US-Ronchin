@@ -614,8 +614,15 @@ export class BadgesService {
         if (m.status !== 'PLAYED' || m.date > today) continue;
         bumpMonth(m.date, myMatchAttendanceByMatch.get(m.id)?.status === AttendanceStatus.PRESENT);
       }
-      const hasMoisParfait = [...monthOccasions.values()].some(
-        (e) => e.total >= MOIS_PARFAIT_MIN_OCCASIONS && e.present === e.total,
+      // The current, still-running month is excluded: monthOccasions only ever counts
+      // occasions up to `today`, so a mid-month streak (e.g. 2 Tuesdays + 1 Thursday, all
+      // attended, by the 8th) would otherwise look "complete" and award the badge — even
+      // though later sessions that same month can still be missed. Only a month that has
+      // fully finished can be judged perfect.
+      const currentMonthKey = today.slice(0, 7);
+      const hasMoisParfait = [...monthOccasions.entries()].some(
+        ([key, e]) =>
+          key !== currentMonthKey && e.total >= MOIS_PARFAIT_MIN_OCCASIONS && e.present === e.total,
       );
 
       const eligibility: Record<string, boolean> = {
