@@ -54,3 +54,21 @@ export async function createSeparationRule(userAId: string, userBId: string): Pr
 export async function deleteSeparationRule(id: string): Promise<void> {
   await apiClient.delete(`/player-separation-rules/${id}`)
 }
+
+export interface SeparationRulePair {
+  id: string
+  userAId: string
+  userAFirstName: string
+  userALastName: string
+  userBId: string
+  userBFirstName: string
+  userBLastName: string
+  createdAt: string
+}
+
+/** Every "never on the same team" pair club-wide — for the admin dashboard's global list,
+ * distinct from fetchSeparationRulesForUser's single-player view. */
+export async function fetchAllSeparationRules(): Promise<SeparationRulePair[]> {
+  const { data } = await apiClient.get<SeparationRulePair[]>('/player-separation-rules/all')
+  return data
+}

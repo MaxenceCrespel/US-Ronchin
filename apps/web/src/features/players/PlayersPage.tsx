@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import {
   Award,
   Check,
+  ClipboardList,
   Copy,
   History,
   Link2,
@@ -51,6 +52,7 @@ import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from '
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
+import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 import { fetchUnlinkedGuestMatches, linkPastGuestTrainings } from '@/features/trainings/teams-api'
 
@@ -174,6 +176,30 @@ function PlayerBadgesDialog({ player }: { player: User }) {
           </DialogTitle>
         </DialogHeader>
         {open && <BadgesGrid userId={player.id} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Coach AND admin, unlike PlayerBadgesDialog above which is admin-only — untangling a
+// "mes points sont faux" dispute is squarely a coach task, not something to gate behind
+// SUPERADMIN.
+function PlayerTrainingHistoryDialog({ player }: { player: User }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="icon" variant="ghost" className="size-7" aria-label="Voir l'historique d'entraînements">
+          <ClipboardList className="size-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Historique d'entraînements — {player.firstName} {player.lastName}
+          </DialogTitle>
+        </DialogHeader>
+        {open && <PlayerTrainingHistoryPanel userId={player.id} />}
       </DialogContent>
     </Dialog>
   )
@@ -771,6 +797,7 @@ export function PlayersPage() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {isAdmin && <PlayerBadgesDialog player={player} />}
+                        <PlayerTrainingHistoryDialog player={player} />
                         <LinkPastTrainingsDialog player={player} />
                         <EditPlayerDialog player={player} />
                         {player.id !== user?.id && <DeletePlayerDialog player={player} />}

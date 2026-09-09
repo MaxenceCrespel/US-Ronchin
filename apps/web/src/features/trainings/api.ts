@@ -3,6 +3,7 @@ import type {
   Attendance,
   AttendanceStatus,
   AttendanceStatusChangeEntry,
+  PlayerTrainingHistoryEntry,
   Training,
   TrainingRankingEntry,
   TrainingSession,
@@ -63,6 +64,14 @@ export async function updateSession(
  * TeamBalancingService.getTrainingRanking) — trié par points décroissants. */
 export async function fetchTrainingRanking(): Promise<TrainingRankingEntry[]> {
   const { data } = await apiClient.get<TrainingRankingEntry[]>('/training-ranking')
+  return data
+}
+
+/** Every training session a player has any record of — declared status vs. the coach's
+ * real pointage, team, score and points. Coach/admin can look up anyone (untangling a
+ * points dispute); a player can only fetch their own (backend-enforced). */
+export async function fetchPlayerTrainingHistory(userId: string): Promise<PlayerTrainingHistoryEntry[]> {
+  const { data } = await apiClient.get<PlayerTrainingHistoryEntry[]>(`/training-ranking/users/${userId}`)
   return data
 }
 

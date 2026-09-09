@@ -11,6 +11,17 @@ export interface SeparationRuleView {
   createdAt: Date;
 }
 
+export interface SeparationRulePairView {
+  id: string;
+  userAId: string;
+  userAFirstName: string;
+  userALastName: string;
+  userBId: string;
+  userBFirstName: string;
+  userBLastName: string;
+  createdAt: Date;
+}
+
 @Injectable()
 export class PlayerSeparationRulesService {
   constructor(
@@ -22,6 +33,25 @@ export class PlayerSeparationRulesService {
   async findAllPairs(): Promise<{ userAId: string; userBId: string }[]> {
     const rules = await this.rulesRepository.find();
     return rules.map((r) => ({ userAId: r.userAId, userBId: r.userBId }));
+  }
+
+  /** Every rule club-wide, both names attached — for the admin dashboard's global list,
+   * distinct from findForUser's single-player, "who am I separated from" view. */
+  async findAll(): Promise<SeparationRulePairView[]> {
+    const rules = await this.rulesRepository.find({
+      relations: { userA: true, userB: true },
+      order: { createdAt: 'DESC' },
+    });
+    return rules.map((r) => ({
+      id: r.id,
+      userAId: r.userAId,
+      userAFirstName: r.userA.firstName,
+      userALastName: r.userA.lastName,
+      userBId: r.userBId,
+      userBFirstName: r.userB.firstName,
+      userBLastName: r.userB.lastName,
+      createdAt: r.createdAt,
+    }));
   }
 
   async findForUser(userId: string): Promise<SeparationRuleView[]> {

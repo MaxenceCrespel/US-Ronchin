@@ -24,6 +24,16 @@ import { CreateSeparationRuleDto } from './dto/create-separation-rule.dto';
 export class PlayerSeparationRulesController {
   constructor(private readonly rulesService: PlayerSeparationRulesService) {}
 
+  // Static 'all' before the dynamic ':userId' below — Nest matches routes in declaration
+  // order, and 'all' would otherwise be swallowed as a literal userId by the wrong handler.
+  @Get('all')
+  getAll(@CurrentUser() currentUser: AuthenticatedUser) {
+    if (currentUser.role !== UserRole.SUPERADMIN) {
+      throw new ForbiddenException();
+    }
+    return this.rulesService.findAll();
+  }
+
   @Get(':userId')
   getForUser(@Param('userId') userId: string, @CurrentUser() currentUser: AuthenticatedUser) {
     if (currentUser.role !== UserRole.SUPERADMIN) {

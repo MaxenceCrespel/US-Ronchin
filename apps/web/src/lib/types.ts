@@ -281,6 +281,18 @@ export interface BadgeHolderGroup {
   holders: BadgeHolder[]
 }
 
+export interface PlayerTrainingHistoryEntry {
+  sessionId: string
+  date: string
+  cancelled: boolean
+  declaredStatus: AttendanceStatus | null
+  actualStatus: AttendanceStatus | null
+  teamIndex: number | null
+  scoreTeam0: number | null
+  scoreTeam1: number | null
+  points: number | null
+}
+
 export type AccountTier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND' | 'RUBY'
 
 export interface AccountLevel {

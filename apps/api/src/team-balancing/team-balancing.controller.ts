@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { UserRole } from '../users/entities/user.entity';
 import { sanitizeUser } from '../common/utils/sanitize-user';
 import { TeamBalancingService } from './team-balancing.service';
@@ -18,6 +20,19 @@ export class TrainingRankingController {
   @Get()
   getRanking() {
     return this.teamBalancingService.getTrainingRanking();
+  }
+
+  // Coach/admin can look up anyone (untangling a points dispute); a player can only look
+  // up themselves — RolesGuard can't express "this role, or the record owner" through
+  // @Roles(...), so it's a manual check like the rest of this admin-facing cluster.
+  @Get('users/:userId')
+  getHistoryForUser(@Param('userId') userId: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    const isSelf = currentUser.id === userId;
+    const isStaff = currentUser.role === UserRole.SUPERADMIN || currentUser.role === UserRole.COACH;
+    if (!isSelf && !isStaff) {
+      throw new ForbiddenException();
+    }
+    return this.teamBalancingService.getPlayerTrainingHistory(userId);
   }
 }
 

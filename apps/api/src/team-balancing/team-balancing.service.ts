@@ -707,6 +707,48 @@ export class TeamBalancingService {
 
     return [...entryByUserId.values()].sort((a, b) => b.points - a.points);
   }
+
+  /** Every training session a given player has any record of — attendance (declared vs.
+   * the coach's real pointage) and which team/score/points, most recent first. Built for
+   * untangling a "my points look wrong" dispute (wrong team assigned, a score that never
+   * got entered...) without a one-off SQL query each time — same underlying data as
+   * getTrainingRanking, just per-player and un-aggregated. Admin-only, see the controller. */
+  async getPlayerTrainingHistory(userId: string): Promise<PlayerTrainingHistoryEntry[]> {
+    const [sessions, attendances, assignments] = await Promise.all([
+      this.sessionsRepository.find({ order: { date: 'DESC' } }),
+      this.attendancesRepository.find({ where: { userId } }),
+      this.assignmentsRepository.find({ where: { userId } }),
+    ]);
+    const attendanceBySessionId = new Map(attendances.map((a) => [a.trainingSessionId, a]));
+    const assignmentBySessionId = new Map(assignments.map((a) => [a.trainingSessionId, a]));
+
+    const entries: PlayerTrainingHistoryEntry[] = [];
+    for (const session of sessions) {
+      const attendance = attendanceBySessionId.get(session.id);
+      const assignment = assignmentBySessionId.get(session.id);
+      // Nothing at all on record for this player at this session — skip rather than pad
+      // the history with rows that say nothing (never invited, joined after the fact...).
+      if (!attendance && !assignment) continue;
+
+      let points: number | null = null;
+      if (assignment && session.scoreTeam0 != null && session.scoreTeam1 != null) {
+        points = pointsForResult(session.scoreTeam0, session.scoreTeam1)[assignment.teamIndex] ?? 0;
+      }
+
+      entries.push({
+        sessionId: session.id,
+        date: session.date,
+        cancelled: session.cancelled,
+        declaredStatus: attendance?.status ?? null,
+        actualStatus: attendance?.actualStatus ?? null,
+        teamIndex: assignment?.teamIndex ?? null,
+        scoreTeam0: session.scoreTeam0,
+        scoreTeam1: session.scoreTeam1,
+        points,
+      });
+    }
+    return entries;
+  }
 }
 
 export interface TrainingRankingEntry {
@@ -718,4 +760,17 @@ export interface TrainingRankingEntry {
   wins: number;
   draws: number;
   losses: number;
+}
+
+export interface PlayerTrainingHistoryEntry {
+  sessionId: string;
+  date: string;
+  cancelled: boolean;
+  declaredStatus: AttendanceStatus | null;
+  actualStatus: AttendanceStatus | null;
+  teamIndex: number | null;
+  scoreTeam0: number | null;
+  scoreTeam1: number | null;
+  /** Null when unscored, or no team was ever assigned (never played that session). */
+  points: number | null;
 }

@@ -20,6 +20,8 @@ import { cn } from '@/lib/utils'
 import { fetchPlayerStats } from '@/features/stats/api'
 import type { PlayerStats } from '@/lib/types'
 import { BadgeHoldersPanel } from './BadgeHoldersPanel'
+import { SeparationRulesPanel } from './SeparationRulesPanel'
+import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import {
   createSeparationRule,
   deleteSeparationRule,
@@ -105,100 +107,121 @@ function PlayerDetailDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <PlayerAvatar firstName={player.firstName} lastName={player.lastName} avatarUrl={null} size="sm" />
             {player.firstName} {player.lastName}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col divide-y">
-            <DetailRow label="Email" value={player.email} />
-            <DetailRow label="Rôle" value={ROLE_LABELS[player.role]} />
-            <DetailRow label="Statut" value={STATUS_LABELS[player.status]} />
-            <DetailRow
-              label="Compte créé"
-              value={format(new Date(player.createdAt), 'd MMM yyyy', { locale: fr })}
-            />
+
+        <Tabs defaultValue="profile">
+          <div className="-mx-1 overflow-x-auto px-1">
+            <TabsList className="w-max">
+              <TabsTrigger value="profile" className="flex-none px-3">
+                Profil
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-none px-3">
+                Historique
+              </TabsTrigger>
+              <TabsTrigger value="separation" className="flex-none px-3">
+                Séparations
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-              Activité
-            </p>
+          <TabsContent value="profile" className="flex flex-col gap-4">
             <div className="flex flex-col divide-y">
+              <DetailRow label="Email" value={player.email} />
+              <DetailRow label="Rôle" value={ROLE_LABELS[player.role]} />
+              <DetailRow label="Statut" value={STATUS_LABELS[player.status]} />
               <DetailRow
-                label="Dernière connexion"
-                value={
-                  player.lastSeenAt
-                    ? formatDistanceToNow(new Date(player.lastSeenAt), { locale: fr, addSuffix: true })
-                    : 'Jamais connecté'
-                }
-              />
-              <DetailRow label="Connexions au total" value={player.loginCount} />
-              <DetailRow label="Jours actifs (total)" value={player.activeDaysAllTime} />
-              <DetailRow label="Jours actifs / 7 derniers jours" value={`${player.activeDaysLast7}/7`} />
-              <DetailRow label="Jours actifs / 30 derniers jours" value={`${player.activeDaysLast30}/30`} />
-              <DetailRow
-                label="Appli installée"
-                value={
-                  player.pwaInstalled
-                    ? `Oui${player.pwaInstalledAt ? ` (${format(new Date(player.pwaInstalledAt), 'd MMM yyyy', { locale: fr })})` : ''}`
-                    : 'Non'
-                }
-              />
-              <DetailRow
-                label="Notifications"
-                value={player.notificationsEnabled ? 'Activées' : 'Désactivées'}
+                label="Compte créé"
+                value={format(new Date(player.createdAt), 'd MMM yyyy', { locale: fr })}
               />
             </div>
-            <div className="pt-1">
-              <MiniHeatmap days={player.last7Days} />
-            </div>
-          </div>
 
-          {stats && (
             <div className="flex flex-col gap-1">
               <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                Niveau et performance
+                Activité
               </p>
               <div className="flex flex-col divide-y">
-                <DetailRow label="Niveau" value={stats.skillScore ?? '— (jamais noté)'} />
                 <DetailRow
-                  label="Note moyenne"
-                  value={stats.averageRating != null ? `${stats.averageRating.toFixed(1)}/10 (${stats.ratingsCount} note${stats.ratingsCount > 1 ? 's' : ''})` : '—'}
-                />
-                <DetailRow label="Matchs joués" value={stats.matchesPlayed} />
-                <DetailRow label="Buts / passes" value={`${stats.goals} / ${stats.assists}`} />
-                <DetailRow label="Cartons jaunes / rouges" value={`${stats.yellowCards} / ${stats.redCards}`} />
-                <DetailRow label="Homme du match" value={stats.motmCount} />
-                <DetailRow label="Patron de la défense" value={stats.patronDefenseCount} />
-                {stats.defensiveMatchesStarted > 0 && (
-                  <>
-                    <DetailRow
-                      label="Clean sheets (déf./gardien)"
-                      value={`${stats.cleanSheets}/${stats.defensiveMatchesStarted}`}
-                    />
-                    <DetailRow label="Buts encaissés (déf./gardien)" value={stats.goalsConceded} />
-                  </>
-                )}
-                <DetailRow
-                  label="Assiduité entraînements"
+                  label="Dernière connexion"
                   value={
-                    stats.trainingAttendanceRate != null
-                      ? `${Math.round(stats.trainingAttendanceRate * 100)}% (${stats.trainingsPresent}/${stats.trainingsResponded})`
-                      : '—'
+                    player.lastSeenAt
+                      ? formatDistanceToNow(new Date(player.lastSeenAt), { locale: fr, addSuffix: true })
+                      : 'Jamais connecté'
                   }
                 />
-                <DetailRow label="Série de présence" value={stats.presenceStreak} />
+                <DetailRow label="Connexions au total" value={player.loginCount} />
+                <DetailRow label="Jours actifs (total)" value={player.activeDaysAllTime} />
+                <DetailRow label="Jours actifs / 7 derniers jours" value={`${player.activeDaysLast7}/7`} />
+                <DetailRow label="Jours actifs / 30 derniers jours" value={`${player.activeDaysLast30}/30`} />
+                <DetailRow
+                  label="Appli installée"
+                  value={
+                    player.pwaInstalled
+                      ? `Oui${player.pwaInstalledAt ? ` (${format(new Date(player.pwaInstalledAt), 'd MMM yyyy', { locale: fr })})` : ''}`
+                      : 'Non'
+                  }
+                />
+                <DetailRow
+                  label="Notifications"
+                  value={player.notificationsEnabled ? 'Activées' : 'Désactivées'}
+                />
+              </div>
+              <div className="pt-1">
+                <MiniHeatmap days={player.last7Days} />
               </div>
             </div>
-          )}
 
-          <div className="flex flex-col gap-1.5">
-            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-              Jamais dans la même équipe (entraînements)
+            {stats && (
+              <div className="flex flex-col gap-1">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                  Niveau et performance
+                </p>
+                <div className="flex flex-col divide-y">
+                  <DetailRow label="Niveau" value={stats.skillScore ?? '— (jamais noté)'} />
+                  <DetailRow
+                    label="Note moyenne"
+                    value={stats.averageRating != null ? `${stats.averageRating.toFixed(1)}/10 (${stats.ratingsCount} note${stats.ratingsCount > 1 ? 's' : ''})` : '—'}
+                  />
+                  <DetailRow label="Matchs joués" value={stats.matchesPlayed} />
+                  <DetailRow label="Buts / passes" value={`${stats.goals} / ${stats.assists}`} />
+                  <DetailRow label="Cartons jaunes / rouges" value={`${stats.yellowCards} / ${stats.redCards}`} />
+                  <DetailRow label="Homme du match" value={stats.motmCount} />
+                  <DetailRow label="Patron de la défense" value={stats.patronDefenseCount} />
+                  {stats.defensiveMatchesStarted > 0 && (
+                    <>
+                      <DetailRow
+                        label="Clean sheets (déf./gardien)"
+                        value={`${stats.cleanSheets}/${stats.defensiveMatchesStarted}`}
+                      />
+                      <DetailRow label="Buts encaissés (déf./gardien)" value={stats.goalsConceded} />
+                    </>
+                  )}
+                  <DetailRow
+                    label="Assiduité entraînements"
+                    value={
+                      stats.trainingAttendanceRate != null
+                        ? `${Math.round(stats.trainingAttendanceRate * 100)}% (${stats.trainingsPresent}/${stats.trainingsResponded})`
+                        : '—'
+                    }
+                  />
+                  <DetailRow label="Série de présence" value={stats.presenceStreak} />
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="history">
+            <PlayerTrainingHistoryPanel userId={player.userId} />
+          </TabsContent>
+
+          <TabsContent value="separation" className="flex flex-col gap-1.5">
+            <p className="text-muted-foreground text-xs">
+              Ces joueurs ne seront jamais dans la même équipe lors d'une génération.
             </p>
             {rules.length > 0 && (
               <ul className="flex flex-col gap-1">
@@ -275,8 +298,8 @@ function PlayerDetailDialog({
             {createRuleMutation.isError && (
               <p className="text-destructive text-xs">Échec — réessaie.</p>
             )}
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )
@@ -392,10 +415,19 @@ export function AdminKpisPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
-          <TabsTrigger value="badges">Badges</TabsTrigger>
-        </TabsList>
+        <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max">
+            <TabsTrigger value="overview" className="flex-none px-3">
+              Vue d'ensemble
+            </TabsTrigger>
+            <TabsTrigger value="badges" className="flex-none px-3">
+              Badges
+            </TabsTrigger>
+            <TabsTrigger value="separation" className="flex-none px-3">
+              Séparations
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -562,6 +594,10 @@ export function AdminKpisPage() {
 
         <TabsContent value="badges">
           <BadgeHoldersPanel />
+        </TabsContent>
+
+        <TabsContent value="separation">
+          <SeparationRulesPanel />
         </TabsContent>
       </Tabs>
 

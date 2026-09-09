@@ -12,6 +12,23 @@ export async function fetchBadgeHolders(): Promise<BadgeHolderGroup[]> {
   return data
 }
 
+/** Admin-only override — grants a badge outright, bypassing eligibility (undoing a wrongly
+ * deleted award, or a one-off exceptional grant). */
+export async function grantBadge(badgeKey: string, userId: string): Promise<void> {
+  await apiClient.post(`/badges/holders/${badgeKey}/grant`, { userId })
+}
+
+/** Admin-only override — removes a badge entirely. */
+export async function revokeBadge(badgeKey: string, userId: string): Promise<void> {
+  await apiClient.delete(`/badges/holders/${badgeKey}/${userId}`)
+}
+
+/** Admin-only override — removes a badge from every current holder at once. */
+export async function revokeBadgeFromEveryone(badgeKey: string): Promise<{ removedCount: number }> {
+  const { data } = await apiClient.delete<{ removedCount: number }>(`/badges/holders/${badgeKey}`)
+  return data
+}
+
 export async function fetchBadgesForUser(userId: string): Promise<BadgeStatus[]> {
   const { data } = await apiClient.get<BadgeStatus[]>(`/badges/users/${userId}`)
   return data

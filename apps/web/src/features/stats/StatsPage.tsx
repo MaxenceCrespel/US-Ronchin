@@ -27,6 +27,7 @@ import type { PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
+import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
 import { StandingsCard } from '@/features/standings/StandingsCard'
 import { fetchMatches } from '@/features/matches/api'
@@ -448,9 +449,6 @@ export function StatsPage() {
                 Mes stats
               </TabsTrigger>
             )}
-            <TabsTrigger value="monthly" className="flex-none px-3">
-              Défis du mois
-            </TabsTrigger>
             <TabsTrigger value="roster" className="flex-none px-3">
               Effectif
             </TabsTrigger>
@@ -464,14 +462,21 @@ export function StatsPage() {
         </div>
 
         {myStats && (
-          <TabsContent value="mine">
+          <TabsContent value="mine" className="flex flex-col gap-4">
+            <MonthlyChallengesCard />
             <MyStatsCard stats={myStats} />
+            {user && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Historique d'entraînements</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <PlayerTrainingHistoryPanel userId={user.id} hideUpcoming pageSize={10} />
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
-
-        <TabsContent value="monthly">
-          <MonthlyChallengesCard />
-        </TabsContent>
 
         <TabsContent value="roster">
           <RosterStatsTable season={activeSeason} />

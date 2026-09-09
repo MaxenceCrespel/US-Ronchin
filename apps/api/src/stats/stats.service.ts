@@ -19,6 +19,7 @@ import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { pointsForResult, MAX_POINTS_PER_SESSION } from '../team-balancing/points-for-result';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
+import { parisToday } from '../common/utils/paris-time';
 
 // skillScore weights — see getPlayerStats() below for the full breakdown. Sum of the
 // positive components is 115 (60 + 25 + 5 + 5 + 20), leaving headroom before the
@@ -614,9 +615,17 @@ export class StatsService {
   }
 
   async getMonthlyChallenges(): Promise<MonthlyChallenges> {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    // `new Date(y, m, 1).toISOString().slice(0, 10)` looks like the obvious way to get
+    // "the 1st of this month" as a date string, but toISOString() converts to UTC first —
+    // in Europe/Paris (UTC+1/+2), that rolls local midnight back to the previous day, so
+    // this used to silently start the window on the 31st of last month and end it one day
+    // short. Deriving both from parisToday() (calendar math only, no timezone conversion)
+    // avoids that entirely — see paris-time.ts for the same class of bug elsewhere.
+    const todayParis = parisToday();
+    const [year, month] = todayParis.split('-').map(Number);
+    const monthStart = `${todayParis.slice(0, 7)}-01`;
+    const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const monthEnd = `${todayParis.slice(0, 7)}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
     const topScorersRaw = await this.eventsRepository
       .createQueryBuilder('event')
@@ -638,10 +647,24 @@ export class StatsService {
       .createQueryBuilder('attendance')
       .innerJoin('attendance.trainingSession', 'session')
       .innerJoin('attendance.user', 'user')
-      // Validated presence only (actual_status, set by the coach after the session) —
-      // a player declaring "présent" beforehand doesn't guarantee they'll actually show up.
-      .where('attendance.actual_status = :status', { status: AttendanceStatus.PRESENT })
+      // The coach's real pointage (actual_status) once it exists, same as effectiveStatus
+      // elsewhere in this file — a player declaring "présent" beforehand doesn't guarantee
+      // they'll actually show up, so it's overridden the moment a pointage disagrees. But
+      // requiring actual_status outright (as this used to) undercounted a session the coach
+      // simply hasn't pointed yet, punishing an on-time declaration for the coach's own
+      // delay — trust the declaration until it's actually contradicted, exactly like
+      // trainingsPresent/presenceStreak/Mois Parfait already do.
+      // Postgres enum quirk: actual_status and status are distinct enum types even though
+      // they share the same values (TypeORM creates one enum type per column) — COALESCE
+      // across the two needs an explicit cast to a common type or it fails to resolve one.
+      .where('COALESCE(attendance.actual_status::text, attendance.status::text) = :status', {
+        status: AttendanceStatus.PRESENT,
+      })
       .andWhere('session.date BETWEEN :start AND :end', { start: monthStart, end: monthEnd })
+      // Falling back to the declared status must not reach into the future — a player who
+      // simply declared "présent" for next week hasn't attended anything yet. Only a
+      // session that's actually happened can have that declaration trusted or overridden.
+      .andWhere('session.date <= :today', { today: todayParis })
       .select('attendance.userId', 'userId')
       .addSelect('user.firstName', 'firstName')
       .addSelect('user.lastName', 'lastName')

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { UserBadge } from './entities/user-badge.entity';
@@ -937,5 +937,51 @@ export class BadgesService {
         `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`),
       ),
     }));
+  }
+
+  /** Admin override — grants a badge outright, bypassing every eligibility check above.
+   * For the rare case a badge fired wrongly and got manually deleted (see the "Mois
+   * Parfait" mid-month bug), or a one-off exceptional award a coach wants to hand out.
+   * Idempotent on an existing (userId, badgeKey) row: bumps `count` by one rather than
+   * erroring, same "already has it, they got it again" semantics normal eligibility
+   * re-runs use for repeatable badges. */
+  async grantManually(userId: string, badgeKey: string): Promise<void> {
+    const definition = BADGE_DEFINITIONS.find((d) => d.key === badgeKey);
+    if (!definition) {
+      throw new BadRequestException(`Badge inconnu: ${badgeKey}`);
+    }
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Joueur introuvable');
+    }
+    const existing = await this.badgesRepository.findOne({ where: { userId, badgeKey } });
+    if (existing) {
+      existing.count += 1;
+      await this.badgesRepository.save(existing);
+      return;
+    }
+    await this.badgesRepository.save(this.badgesRepository.create({ userId, badgeKey, count: 1 }));
+  }
+
+  /** Admin override — removes a badge entirely (not a decrement), same "undo a mistake"
+   * use case as grantManually above. */
+  async revokeManually(userId: string, badgeKey: string): Promise<void> {
+    const result = await this.badgesRepository.delete({ userId, badgeKey });
+    if (result.affected === 0) {
+      throw new NotFoundException("Ce joueur n'a pas ce badge");
+    }
+  }
+
+  /** Wipes a badge from every current holder at once — for the "ça s'est déclenché à tort
+   * pour tout le monde" case (like the Mois Parfait mid-month bug), instead of revoking one
+   * by one. Same delete-by-badgeKey as revokeManually, just without the userId filter;
+   * returns how many rows were removed so the UI can confirm what actually happened. */
+  async revokeFromEveryone(badgeKey: string): Promise<{ removedCount: number }> {
+    const definition = BADGE_DEFINITIONS.find((d) => d.key === badgeKey);
+    if (!definition) {
+      throw new BadRequestException(`Badge inconnu: ${badgeKey}`);
+    }
+    const result = await this.badgesRepository.delete({ badgeKey });
+    return { removedCount: result.affected ?? 0 };
   }
 }
