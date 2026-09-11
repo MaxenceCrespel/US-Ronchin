@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
+import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
+import { AwardsCeremonyWatcher } from '@/features/awards/AwardsCeremonyWatcher'
 import { OnboardingTour } from '@/components/OnboardingTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
@@ -52,6 +54,8 @@ export function Layout() {
   return (
     <div className="flex min-h-svh">
       <BadgeUnlockWatcher />
+      <MandatoryVotePopup />
+      <AwardsCeremonyWatcher />
       <OnboardingTour />
 
       {sidebarOpen && (

@@ -477,7 +477,9 @@ export interface AwardCategory {
   id: string
   key: string
   title: string
+  season: string | null
   isActive: boolean
+  closedAt: string | null
   createdAt: string
   myVoteUserId: string | null
   totalVotes: number

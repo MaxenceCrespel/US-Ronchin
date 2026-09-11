@@ -37,7 +37,8 @@ function CategoryCard({ category }: { category: AwardCategory }) {
     onSuccess: invalidate,
   })
 
-  const players = playersQuery.data?.filter((p) => isRosterPlayer(p)) ?? []
+  // No voting for yourself.
+  const players = playersQuery.data?.filter((p) => isRosterPlayer(p) && p.id !== currentUser?.id) ?? []
   const winner = category.results?.[0]
 
   return (
