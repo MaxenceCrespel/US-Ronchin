@@ -130,6 +130,18 @@ CVE-2026-78410
 # source 1's whole Recommends chain above.
 CVE-2026-86140
 
+# CVE-2026-74860 (libxml2 double-free/UAF via Python bindings, HIGH) — same
+# package, same installed version (2.9.14+dfsg-1.3~deb12u6) and same source
+# as CVE-2026-86140 immediately above; re-verified `apt-cache policy
+# libxml2` inside a fresh node:22-bookworm-slim — that build is still both
+# the Installed-candidate and security-channel version, no Debian bookworm
+# fix published. This particular CVE is specifically about libxml2's
+# *Python* bindings (python3-libxml2/lxml) — this image installs neither
+# (Chrome's Recommends chain pulls the C library only, for its own internal
+# XML/SVG parsing), so it's unreachable on top of the reachability argument
+# already covering the whole block above.
+CVE-2026-74860
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
