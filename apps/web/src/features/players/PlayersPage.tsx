@@ -11,6 +11,7 @@ import {
   Pencil,
   QrCode,
   RefreshCw,
+  Search,
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
@@ -691,6 +692,52 @@ function InvitePlayerDialog() {
   )
 }
 
+/** The row of coach-only icon buttons (badges, training history, past-training linking,
+ * edit, delete) — shared by the desktop table row and the mobile card so the two layouts
+ * never drift out of sync with each other. */
+function PlayerActions({ player, isAdmin, currentUserId }: { player: User; isAdmin: boolean; currentUserId?: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      {isAdmin && <PlayerBadgesDialog player={player} />}
+      <PlayerTrainingHistoryDialog player={player} />
+      <LinkPastTrainingsDialog player={player} />
+      <EditPlayerDialog player={player} />
+      {player.id !== currentUserId && <DeletePlayerDialog player={player} />}
+    </div>
+  )
+}
+
+function RoleBadge({ player }: { player: User }) {
+  return (
+    <Badge variant={player.role === 'PLAYER' ? 'secondary' : 'default'}>
+      {player.role === 'COACH'
+        ? player.isPlayingCoach
+          ? 'Coach-Joueur'
+          : 'Coach'
+        : player.role === 'SUPERADMIN'
+          ? player.isPlayingCoach
+            ? 'Admin-Joueur'
+            : 'Admin'
+          : 'Joueur'}
+    </Badge>
+  )
+}
+
+const LICENSE_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tous' },
+  { value: 'licensed', label: 'Licenciés' },
+  { value: 'unlicensed', label: 'Non licenciés' },
+] as const
+type LicenseFilter = (typeof LICENSE_FILTER_OPTIONS)[number]['value']
+
+const ROLE_FILTER_OPTIONS = [
+  { value: 'all', label: 'Tous les rôles' },
+  { value: 'PLAYER', label: 'Joueurs' },
+  { value: 'COACH', label: 'Coachs' },
+  { value: 'SUPERADMIN', label: 'Admins' },
+] as const
+type RoleFilter = (typeof ROLE_FILTER_OPTIONS)[number]['value']
+
 export function PlayersPage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
@@ -704,6 +751,22 @@ export function PlayersPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['players'] }),
   })
 
+  const [search, setSearch] = useState('')
+  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>('all')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+
+  const allPlayers = playersQuery.data ?? []
+  const licensedCount = allPlayers.filter((p) => p.isLicensed).length
+  const players = allPlayers.filter((p) => {
+    if (licenseFilter === 'licensed' && !p.isLicensed) return false
+    if (licenseFilter === 'unlicensed' && p.isLicensed) return false
+    if (roleFilter !== 'all' && p.role !== roleFilter) return false
+    const q = search.trim().toLowerCase()
+    if (q && !`${p.firstName} ${p.lastName}`.toLowerCase().includes(q)) return false
+    return true
+  })
+  const filtersActive = search.trim() !== '' || licenseFilter !== 'all' || roleFilter !== 'all'
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -716,24 +779,61 @@ export function PlayersPage() {
       <Card data-tour="players-roster">
         <CardHeader>
           <CardTitle>Joueurs de l'équipe</CardTitle>
+          <CardDescription>
+            {allPlayers.length} joueur{allPlayers.length > 1 ? 's' : ''} · {licensedCount} licencié
+            {licensedCount > 1 ? 's' : ''} · {allPlayers.length - licensedCount} non licencié
+            {allPlayers.length - licensedCount > 1 ? 's' : ''}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="-mx-2 overflow-x-auto px-2">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="bg-card sticky left-0 z-10">Nom</TableHead>
-                <TableHead>Rôle</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Poste</TableHead>
-                <TableHead>N°</TableHead>
-                {isCoach && <TableHead>Compte</TableHead>}
-                {isCoach && <TableHead></TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {playersQuery.data?.map((player) => (
-                <TableRow key={player.id}>
-                  <TableCell className="bg-card sticky left-0 z-10">
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Rechercher un joueur"
+                className="pl-9"
+              />
+            </div>
+            <Select value={licenseFilter} onValueChange={(v) => setLicenseFilter(v as LicenseFilter)}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LICENSE_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as RoleFilter)}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {players.length === 0 ? (
+            <p className="text-muted-foreground py-6 text-center text-sm">
+              {filtersActive ? 'Aucun joueur ne correspond à ces filtres.' : 'Aucun joueur.'}
+            </p>
+          ) : (
+            <>
+              {/* Card list — the table below is unreadable on a phone (too many columns
+                  squeezed into a horizontal scroll); this is the primary layout under sm,
+                  the table takes over from sm upward where the width is actually there. */}
+              <div className="flex flex-col gap-2.5 sm:hidden">
+                {players.map((player) => (
+                  <div key={player.id} className="flex flex-col gap-2.5 rounded-lg border p-3">
                     <div className="flex items-center gap-2.5">
                       <AccountLevelRing
                         userId={player.id}
@@ -744,70 +844,139 @@ export function PlayersPage() {
                           avatarUrl={player.avatarUrl}
                           firstName={player.firstName}
                           lastName={player.lastName}
-                          size="sm"
                         />
                       </AccountLevelRing>
-                      <span className="text-xs font-medium">
-                        {player.firstName} {player.lastName}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={player.role === 'PLAYER' ? 'secondary' : 'default'}>
-                      {player.role === 'COACH'
-                        ? player.isPlayingCoach
-                          ? 'Coach-Joueur'
-                          : 'Coach'
-                        : player.role === 'SUPERADMIN'
-                          ? player.isPlayingCoach
-                            ? 'Admin-Joueur'
-                            : 'Admin'
-                          : 'Joueur'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{player.isLicensed ? 'Licencié' : 'Non licencié'}</TableCell>
-                  <TableCell>
-                    {player.positions && player.positions.length > 0
-                      ? player.positions.map((p) => SUB_POSITION_ABBR[p]).join(', ')
-                      : '—'}
-                  </TableCell>
-                  <TableCell>{player.jerseyNumber ?? '—'}</TableCell>
-                  {isCoach && (
-                    <TableCell>
-                      {player.status === 'PENDING' ? (
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">À valider</Badge>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={approveMutation.isPending}
-                            onClick={() => approveMutation.mutate(player.id)}
-                          >
-                            Approuver
-                          </Button>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {player.firstName} {player.lastName}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <RoleBadge player={player} />
+                          <Badge variant={player.isLicensed ? 'success' : 'outline'}>
+                            {player.isLicensed ? 'Licencié' : 'Non licencié'}
+                          </Badge>
                         </div>
-                      ) : player.accountActivated ? (
-                        <Badge variant="success">Actif</Badge>
-                      ) : (
-                        <Badge variant="outline">En attente d'activation</Badge>
-                      )}
-                    </TableCell>
-                  )}
-                  {isCoach && (
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {isAdmin && <PlayerBadgesDialog player={player} />}
-                        <PlayerTrainingHistoryDialog player={player} />
-                        <LinkPastTrainingsDialog player={player} />
-                        <EditPlayerDialog player={player} />
-                        {player.id !== user?.id && <DeletePlayerDialog player={player} />}
                       </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    </div>
+
+                    <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <span>
+                        Poste :{' '}
+                        {player.positions && player.positions.length > 0
+                          ? player.positions.map((p) => SUB_POSITION_ABBR[p]).join(', ')
+                          : '—'}
+                      </span>
+                      <span>N° {player.jerseyNumber ?? '—'}</span>
+                    </div>
+
+                    {isCoach && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2.5">
+                        {player.status === 'PENDING' ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">À valider</Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={approveMutation.isPending}
+                              onClick={() => approveMutation.mutate(player.id)}
+                            >
+                              Approuver
+                            </Button>
+                          </div>
+                        ) : player.accountActivated ? (
+                          <Badge variant="success">Actif</Badge>
+                        ) : (
+                          <Badge variant="outline">En attente d'activation</Badge>
+                        )}
+                        <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="-mx-2 hidden overflow-x-auto px-2 sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="bg-card sticky left-0 z-10">Nom</TableHead>
+                      <TableHead>Rôle</TableHead>
+                      <TableHead>Statut</TableHead>
+                      <TableHead>Poste</TableHead>
+                      <TableHead>N°</TableHead>
+                      {isCoach && <TableHead>Compte</TableHead>}
+                      {isCoach && <TableHead></TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {players.map((player) => (
+                      <TableRow key={player.id}>
+                        <TableCell className="bg-card sticky left-0 z-10">
+                          <div className="flex items-center gap-2.5">
+                            <AccountLevelRing
+                              userId={player.id}
+                              tier={levelsQuery.data?.[player.id]?.tier}
+                              ringWidth={2}
+                            >
+                              <PlayerAvatar
+                                avatarUrl={player.avatarUrl}
+                                firstName={player.firstName}
+                                lastName={player.lastName}
+                                size="sm"
+                              />
+                            </AccountLevelRing>
+                            <span className="text-xs font-medium">
+                              {player.firstName} {player.lastName}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <RoleBadge player={player} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={player.isLicensed ? 'success' : 'outline'}>
+                            {player.isLicensed ? 'Licencié' : 'Non licencié'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {player.positions && player.positions.length > 0
+                            ? player.positions.map((p) => SUB_POSITION_ABBR[p]).join(', ')
+                            : '—'}
+                        </TableCell>
+                        <TableCell>{player.jerseyNumber ?? '—'}</TableCell>
+                        {isCoach && (
+                          <TableCell>
+                            {player.status === 'PENDING' ? (
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">À valider</Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={approveMutation.isPending}
+                                  onClick={() => approveMutation.mutate(player.id)}
+                                >
+                                  Approuver
+                                </Button>
+                              </div>
+                            ) : player.accountActivated ? (
+                              <Badge variant="success">Actif</Badge>
+                            ) : (
+                              <Badge variant="outline">En attente d'activation</Badge>
+                            )}
+                          </TableCell>
+                        )}
+                        {isCoach && (
+                          <TableCell>
+                            <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} />
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
