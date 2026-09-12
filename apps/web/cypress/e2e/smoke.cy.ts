@@ -15,6 +15,16 @@ function login() {
   cy.get('#password').type(COACH_PASSWORD)
   cy.contains('button', 'Se connecter').click()
   cy.url().should('eq', Cypress.config().baseUrl + '/')
+
+  // The one-time trophy vitrine announcement (TrophyFeatureTour) is keyed off localStorage,
+  // which Cypress resets between tests — so it pops up full-screen on every fresh login here,
+  // covering the main nav. Dismiss it the same way a real first-time viewer would ("Plus
+  // tard") before any test interacts with the nav underneath.
+  cy.get('body').then(($body) => {
+    if ($body.find('button:contains("Plus tard")').length > 0) {
+      cy.contains('button', 'Plus tard').click()
+    }
+  })
 }
 
 describe('Parcours de base', () => {
