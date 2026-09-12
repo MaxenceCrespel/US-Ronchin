@@ -337,6 +337,9 @@ export class MatchesService {
     }
     return composition
       .filter((entry) => entry.userId !== raterId)
+      // A spectator (came to watch, didn't play) is a valid voter/rater but never a valid
+      // target — see MatchComposition.isSpectator's own doc comment.
+      .filter((entry) => !entry.isSpectator)
       .filter(
         (entry) =>
           !myRatings.some(
@@ -356,7 +359,8 @@ export class MatchesService {
 
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     const composedUserIds = new Set(composition.map((entry) => entry.userId));
-    if (!composedUserIds.has(raterId) || !composedUserIds.has(dto.ratedUserId)) {
+    const target = composition.find((entry) => entry.userId === dto.ratedUserId);
+    if (!composedUserIds.has(raterId) || !target || target.isSpectator) {
       throw new BadRequestException(
         'Seuls les joueurs ayant participé au match peuvent noter ou être notés',
       );
@@ -397,6 +401,11 @@ export class MatchesService {
     );
     const composedGuestIds = new Set(
       composition.filter((entry) => !entry.userId).map((entry) => entry.id),
+    );
+    // A spectator can rate others but is never a valid rating target — see
+    // MatchComposition.isSpectator's own doc comment.
+    const spectatorTargets = new Set(
+      composition.filter((entry) => entry.isSpectator).map((entry) => entry.userId ?? entry.id),
     );
 
     if (!composedUserIds.has(raterId)) {
@@ -441,6 +450,9 @@ export class MatchesService {
       }
       // Exactly one of ratedUserId/ratedGuestId is guaranteed set by the check just above.
       const target = (entry.ratedUserId ?? entry.ratedGuestId)!;
+      if (spectatorTargets.has(target)) {
+        throw new BadRequestException('Un spectateur ne peut pas être noté');
+      }
       if (!pendingTargets.has(target)) {
         throw new BadRequestException('Ce joueur a déjà été noté et ne peut plus être modifié');
       }
@@ -531,7 +543,11 @@ export class MatchesService {
       this.ratingsRepository.find({ where: { matchId } }),
     ]);
 
-    return composition.map((entry) => {
+    // A spectator is never rated, so they'd only ever show up here as a permanent
+    // "no notes yet" row — excluded rather than confusingly always-empty.
+    return composition
+      .filter((entry) => !entry.isSpectator)
+      .map((entry) => {
       // Match by whichever field is actually set on each rating row, not by the
       // composition entry's *current* link state — a rating cast before the coach links a
       // guest to a real account is stored with ratedGuestId, and stays that way forever
@@ -625,7 +641,7 @@ export class MatchesService {
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     const composedUserIds = new Set(composition.map((entry) => entry.userId));
     const target = composition.find((entry) => entry.id === votedForCompositionId);
-    if (!composedUserIds.has(voterId) || !target) {
+    if (!composedUserIds.has(voterId) || !target || target.isSpectator) {
       throw new BadRequestException(
         'Seuls les joueurs ayant participé au match peuvent voter ou être élus',
       );
@@ -673,7 +689,9 @@ export class MatchesService {
     // gates when results get revealed.
     const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
-    const hasEligibleTargets = composition.some((c) => c.position === PlayerPosition.DEFENDER);
+    const hasEligibleTargets = composition.some(
+      (c) => c.position === PlayerPosition.DEFENDER && !c.isSpectator,
+    );
     const revealed = isMotmRevealed(votes, totalPlayers);
     const first = firstVoteAt(votes);
     const votingClosesAt = first ? new Date(first.getTime() + MOTM_REVEAL_DELAY_MS).toISOString() : null;
@@ -729,7 +747,7 @@ export class MatchesService {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent voter');
     }
     const target = composition.find((entry) => entry.id === votedForCompositionId);
-    if (!target || target.position !== PlayerPosition.DEFENDER) {
+    if (!target || target.position !== PlayerPosition.DEFENDER || target.isSpectator) {
       throw new BadRequestException('Seul un défenseur du match peut être élu patron de la défense');
     }
 

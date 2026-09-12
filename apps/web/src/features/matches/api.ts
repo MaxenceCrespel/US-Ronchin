@@ -90,6 +90,7 @@ export interface CompositionEntryInput {
   guestFirstName?: string
   guestLastName?: string
   isStarter: boolean
+  isSpectator?: boolean
   position?: PlayerPosition
   shirtNumber?: number
   formationX?: number

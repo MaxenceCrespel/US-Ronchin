@@ -42,6 +42,11 @@ export class CompositionEntryDto {
   @IsBoolean()
   isStarter: boolean;
 
+  /** Present but not actually playing — see MatchComposition.isSpectator's own doc comment. */
+  @IsOptional()
+  @IsBoolean()
+  isSpectator?: boolean;
+
   @IsOptional()
   @IsEnum(PlayerPosition)
   position?: PlayerPosition;

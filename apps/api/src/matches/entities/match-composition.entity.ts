@@ -41,6 +41,14 @@ export class MatchComposition {
   @Column({ name: 'is_starter', default: false })
   isStarter: boolean;
 
+  /** Present for the match (came to watch, e.g. injured or between clubs) without actually
+   * playing — can vote/rate their teammates like anyone else in the composition, but is never
+   * a valid MOTM/patron de la défense target and is never rated by anyone (see
+   * MatchesService.voteMotm/voteDefenseBoss/getPendingRatingTargets/submitRatings/
+   * getRatingsSummary — this is the one flag threaded through all of those). */
+  @Column({ name: 'is_spectator', default: false })
+  isSpectator: boolean;
+
   @Column({ type: 'enum', enum: PlayerPosition, nullable: true })
   position: PlayerPosition | null;
 

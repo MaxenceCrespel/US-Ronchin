@@ -436,9 +436,9 @@ export function MatchDetailPage() {
     },
   })
 
-  const [selectedPlayers, setSelectedPlayers] = useState<Record<string, { played: boolean; starter: boolean }>>(
-    {},
-  )
+  const [selectedPlayers, setSelectedPlayers] = useState<
+    Record<string, { played: boolean; starter: boolean; spectator: boolean }>
+  >({})
   const [playerNotes, setPlayerNotes] = useState<Record<string, string>>({})
   // Players not yet registered in the app — keyed by a synthetic id (their composition row
   // id once saved, or a client-generated placeholder before the first save).
@@ -450,12 +450,12 @@ export function MatchDetailPage() {
   const [slotOrder, setSlotOrder] = useState<string[]>([])
   useEffect(() => {
     if (compositionQuery.data) {
-      const map: Record<string, { played: boolean; starter: boolean }> = {}
+      const map: Record<string, { played: boolean; starter: boolean; spectator: boolean }> = {}
       const notes: Record<string, string> = {}
       const guestMap: Record<string, { firstName: string; lastName: string }> = {}
       for (const entry of compositionQuery.data) {
         const key = entry.userId ?? entry.id
-        map[key] = { played: true, starter: entry.isStarter }
+        map[key] = { played: !entry.isSpectator, starter: entry.isStarter, spectator: entry.isSpectator }
         if (entry.note) notes[key] = entry.note
         if (!entry.userId && entry.guestFirstName && entry.guestLastName) {
           guestMap[key] = { firstName: entry.guestFirstName, lastName: entry.guestLastName }
@@ -479,7 +479,7 @@ export function MatchDetailPage() {
     if (!firstName || !lastName) return
     const key = `guest-${crypto.randomUUID()}`
     setGuests((prev) => ({ ...prev, [key]: { firstName, lastName } }))
-    setSelectedPlayers((prev) => ({ ...prev, [key]: { played: true, starter: false } }))
+    setSelectedPlayers((prev) => ({ ...prev, [key]: { played: true, starter: false, spectator: false } }))
     setNewGuestFirstName('')
     setNewGuestLastName('')
   }
@@ -553,7 +553,7 @@ export function MatchDetailPage() {
       setComposition(
         matchId,
         Object.entries(selectedPlayers)
-          .filter(([, v]) => v.played)
+          .filter(([, v]) => v.played || v.spectator)
           .map(([key, v]) => {
             const note = playerNotes[key]?.trim() || undefined
             const guest = guests[key]
@@ -568,6 +568,8 @@ export function MatchDetailPage() {
                   ...(key.startsWith('guest-') ? {} : { id: key }),
                 }
               : { userId: key }
+            // A spectator came to watch, not to play — never a starter, no pitch position.
+            if (v.spectator) return { ...identity, isStarter: false, isSpectator: true, note }
             if (!v.starter) return { ...identity, isStarter: false, note }
             const pos = formationCoords[key]
             return {
@@ -802,7 +804,10 @@ export function MatchDetailPage() {
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
   // Guests (no account yet) CAN be voted for MOTM/patron de la défense — the vote resolves
   // to them automatically once their entry is linked to a real account (see LinkGuestButton).
-  const teammates = compositionQuery.data?.filter((entry) => entry.userId !== user?.id) ?? []
+  // A spectator (came to watch, didn't play) can vote/rate others but is never a candidate —
+  // see MatchComposition.isSpectator's own doc comment.
+  const teammates =
+    compositionQuery.data?.filter((entry) => entry.userId !== user?.id && !entry.isSpectator) ?? []
   const hasComposition = (compositionQuery.data?.length ?? 0) > 0
   // Requires resultConfirmedAt, not just status PLAYED — status flips as early as the
   // score-entry step, well before the coach has been through composition AND events. Voting
@@ -1142,6 +1147,7 @@ export function MatchDetailPage() {
                 <TableHead>Joueur</TableHead>
                 <TableHead>A joué</TableHead>
                 <TableHead>Titulaire</TableHead>
+                <TableHead>Spectateur</TableHead>
                 <TableHead>Note</TableHead>
               </TableRow>
             </TableHeader>
@@ -1149,7 +1155,11 @@ export function MatchDetailPage() {
               {playersQuery.data
                 ?.filter((p) => isRosterPlayer(p))
                 .map((player) => {
-                  const state = selectedPlayers[player.id] ?? { played: false, starter: false }
+                  const state = selectedPlayers[player.id] ?? {
+                    played: false,
+                    starter: false,
+                    spectator: false,
+                  }
                   return (
                     <TableRow key={player.id}>
                       <TableCell>
@@ -1161,7 +1171,11 @@ export function MatchDetailPage() {
                           onCheckedChange={(checked) =>
                             setSelectedPlayers((prev) => ({
                               ...prev,
-                              [player.id]: { played: checked === true, starter: state.starter },
+                              [player.id]: {
+                                played: checked === true,
+                                starter: state.starter,
+                                spectator: checked === true ? false : state.spectator,
+                              },
                             }))
                           }
                         />
@@ -1173,13 +1187,28 @@ export function MatchDetailPage() {
                           onCheckedChange={(checked) =>
                             setSelectedPlayers((prev) => ({
                               ...prev,
-                              [player.id]: { played: state.played, starter: checked === true },
+                              [player.id]: { ...state, starter: checked === true },
                             }))
                           }
                         />
                       </TableCell>
                       <TableCell>
-                        {state.played && (
+                        <Checkbox
+                          checked={state.spectator}
+                          onCheckedChange={(checked) =>
+                            setSelectedPlayers((prev) => ({
+                              ...prev,
+                              [player.id]: {
+                                played: checked === true ? false : state.played,
+                                starter: checked === true ? false : state.starter,
+                                spectator: checked === true,
+                              },
+                            }))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {(state.played || state.spectator) && (
                           <Input
                             className="h-8 w-40 text-xs"
                             placeholder="ex: licence de Quentin"
@@ -1194,7 +1223,7 @@ export function MatchDetailPage() {
                   )
                 })}
               {Object.entries(guests).map(([key, guest]) => {
-                const state = selectedPlayers[key] ?? { played: false, starter: false }
+                const state = selectedPlayers[key] ?? { played: false, starter: false, spectator: false }
                 return (
                   <TableRow key={key}>
                     <TableCell>
@@ -1207,7 +1236,11 @@ export function MatchDetailPage() {
                         onCheckedChange={(checked) =>
                           setSelectedPlayers((prev) => ({
                             ...prev,
-                            [key]: { played: checked === true, starter: state.starter },
+                            [key]: {
+                              played: checked === true,
+                              starter: state.starter,
+                              spectator: checked === true ? false : state.spectator,
+                            },
                           }))
                         }
                       />
@@ -1219,7 +1252,22 @@ export function MatchDetailPage() {
                         onCheckedChange={(checked) =>
                           setSelectedPlayers((prev) => ({
                             ...prev,
-                            [key]: { played: state.played, starter: checked === true },
+                            [key]: { ...state, starter: checked === true },
+                          }))
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={state.spectator}
+                        onCheckedChange={(checked) =>
+                          setSelectedPlayers((prev) => ({
+                            ...prev,
+                            [key]: {
+                              played: checked === true ? false : state.played,
+                              starter: checked === true ? false : state.starter,
+                              spectator: checked === true,
+                            },
                           }))
                         }
                       />
@@ -1883,7 +1931,7 @@ export function MatchDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <div className="divide-y">
-            {compositionQuery.data?.map((entry) => {
+            {compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
               const isSelf = entry.userId === user?.id
               // A teammate added to the composition after this rater already validated once
               // stays pending on its own — everyone else rated earlier is locked, regardless
@@ -2114,7 +2162,7 @@ export function MatchDetailPage() {
     </Card>
   )
 
-  const statsRows = compositionQuery.data?.map((entry) => {
+  const statsRows = compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
     const isSelf = entry.userId === user?.id
     const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
     // Match by whichever field is set on each rating row, not by the entry's

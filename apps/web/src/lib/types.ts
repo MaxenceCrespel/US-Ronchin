@@ -180,6 +180,9 @@ export interface MatchComposition {
   guestFirstName: string | null
   guestLastName: string | null
   isStarter: boolean
+  /** Present for the match but not playing (came to watch) — can vote/rate teammates but is
+   * never a valid MOTM/patron de la défense target and is never rated by anyone. */
+  isSpectator: boolean
   position: PlayerPosition | null
   shirtNumber: number | null
   formationX: number | null
