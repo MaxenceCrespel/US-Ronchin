@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Dialog,
@@ -305,6 +304,78 @@ function MatchMetaLines({ match }: { match: Match }) {
       </span>
       {match.surface && <span>{match.surface}</span>}
     </CardDescription>
+  )
+}
+
+type PresenceFlags = { played: boolean; starter: boolean; spectator: boolean }
+type PresenceStatus = 'ABSENT' | 'TITULAIRE' | 'REMPLACANT' | 'SPECTATEUR'
+
+const ABSENT_PRESENCE: PresenceFlags = { played: false, starter: false, spectator: false }
+
+function presenceStatus(state: PresenceFlags): PresenceStatus {
+  if (state.spectator) return 'SPECTATEUR'
+  if (state.played && state.starter) return 'TITULAIRE'
+  if (state.played) return 'REMPLACANT'
+  return 'ABSENT'
+}
+
+function presenceFromStatus(status: PresenceStatus): PresenceFlags {
+  switch (status) {
+    case 'TITULAIRE':
+      return { played: true, starter: true, spectator: false }
+    case 'REMPLACANT':
+      return { played: true, starter: false, spectator: false }
+    case 'SPECTATEUR':
+      return { played: false, starter: false, spectator: true }
+    default:
+      return ABSENT_PRESENCE
+  }
+}
+
+const PRESENCE_OPTIONS: { status: PresenceStatus; label: string }[] = [
+  { status: 'ABSENT', label: 'Absent' },
+  { status: 'TITULAIRE', label: 'Titulaire' },
+  { status: 'REMPLACANT', label: 'Rempl.' },
+  { status: 'SPECTATEUR', label: 'Spect.' },
+]
+
+/** One tap picks the status directly — no checkbox combination to work out (a titulaire used
+ * to need "A joué" AND "Titulaire" both checked) and no cycling to remember an order for. */
+function PresenceSegmented({
+  value,
+  onChange,
+}: {
+  value: PresenceFlags
+  onChange: (next: PresenceFlags) => void
+}) {
+  const current = presenceStatus(value)
+  return (
+    <div className="flex gap-1">
+      {PRESENCE_OPTIONS.map(({ status, label }) => {
+        const selected = current === status
+        return (
+          <button
+            key={status}
+            type="button"
+            onClick={() => onChange(presenceFromStatus(status))}
+            className={cn(
+              'rounded-md border px-2 py-1 text-xs font-medium transition-colors',
+              selected
+                ? status === 'TITULAIRE'
+                  ? 'bg-club-blue border-club-blue text-white'
+                  : status === 'REMPLACANT'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                    : status === 'SPECTATEUR'
+                      ? 'border-amber-600 bg-amber-50 text-amber-700'
+                      : 'border-input bg-accent text-foreground'
+                : 'border-input text-muted-foreground bg-transparent hover:bg-accent',
+            )}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1130,6 +1201,10 @@ export function MatchDetailPage() {
         </Card>
       )
 
+  const presentUserIds = new Set(
+    (attendanceQuery.data ?? []).filter((a) => a.status === 'PRESENT').map((a) => a.userId),
+  )
+
   function renderPresenceStepCard() {
     return (
       <Card>
@@ -1138,72 +1213,42 @@ export function MatchDetailPage() {
             <Users className="text-club-blue size-4" />
             Étape 1/3 — Présence
           </CardTitle>
-          <CardDescription>Coche les joueurs qui étaient présents au match.</CardDescription>
+          <CardDescription>Choisis le statut de chaque joueur pour ce match.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Joueur</TableHead>
-                <TableHead>A joué</TableHead>
-                <TableHead>Titulaire</TableHead>
-                <TableHead>Spectateur</TableHead>
+                <TableHead>Statut</TableHead>
                 <TableHead>Note</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {playersQuery.data
                 ?.filter((p) => isRosterPlayer(p))
+                // Whoever already answered "Présent" on the attendance poll is overwhelmingly
+                // who actually played — surfacing them first saves scrolling/hunting through
+                // the full roster to tick off the handful who didn't show, or did but skipped
+                // the poll.
+                .slice()
+                .sort((a, b) => {
+                  const aPresent = presentUserIds.has(a.id) ? 0 : 1
+                  const bPresent = presentUserIds.has(b.id) ? 0 : 1
+                  return aPresent - bPresent
+                })
                 .map((player) => {
-                  const state = selectedPlayers[player.id] ?? {
-                    played: false,
-                    starter: false,
-                    spectator: false,
-                  }
+                  const state = selectedPlayers[player.id] ?? ABSENT_PRESENCE
                   return (
                     <TableRow key={player.id}>
                       <TableCell>
                         {player.firstName} {player.lastName}
                       </TableCell>
                       <TableCell>
-                        <Checkbox
-                          checked={state.played}
-                          onCheckedChange={(checked) =>
-                            setSelectedPlayers((prev) => ({
-                              ...prev,
-                              [player.id]: {
-                                played: checked === true,
-                                starter: state.starter,
-                                spectator: checked === true ? false : state.spectator,
-                              },
-                            }))
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          checked={state.starter}
-                          disabled={!state.played}
-                          onCheckedChange={(checked) =>
-                            setSelectedPlayers((prev) => ({
-                              ...prev,
-                              [player.id]: { ...state, starter: checked === true },
-                            }))
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Checkbox
-                          checked={state.spectator}
-                          onCheckedChange={(checked) =>
-                            setSelectedPlayers((prev) => ({
-                              ...prev,
-                              [player.id]: {
-                                played: checked === true ? false : state.played,
-                                starter: checked === true ? false : state.starter,
-                                spectator: checked === true,
-                              },
-                            }))
+                        <PresenceSegmented
+                          value={state}
+                          onChange={(next) =>
+                            setSelectedPlayers((prev) => ({ ...prev, [player.id]: next }))
                           }
                         />
                       </TableCell>
@@ -1223,7 +1268,7 @@ export function MatchDetailPage() {
                   )
                 })}
               {Object.entries(guests).map(([key, guest]) => {
-                const state = selectedPlayers[key] ?? { played: false, starter: false, spectator: false }
+                const state = selectedPlayers[key] ?? ABSENT_PRESENCE
                 return (
                   <TableRow key={key}>
                     <TableCell>
@@ -1231,45 +1276,9 @@ export function MatchDetailPage() {
                       <span className="text-muted-foreground ml-1.5 text-xs">(non inscrit)</span>
                     </TableCell>
                     <TableCell>
-                      <Checkbox
-                        checked={state.played}
-                        onCheckedChange={(checked) =>
-                          setSelectedPlayers((prev) => ({
-                            ...prev,
-                            [key]: {
-                              played: checked === true,
-                              starter: state.starter,
-                              spectator: checked === true ? false : state.spectator,
-                            },
-                          }))
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={state.starter}
-                        disabled={!state.played}
-                        onCheckedChange={(checked) =>
-                          setSelectedPlayers((prev) => ({
-                            ...prev,
-                            [key]: { ...state, starter: checked === true },
-                          }))
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={state.spectator}
-                        onCheckedChange={(checked) =>
-                          setSelectedPlayers((prev) => ({
-                            ...prev,
-                            [key]: {
-                              played: checked === true ? false : state.played,
-                              starter: checked === true ? false : state.starter,
-                              spectator: checked === true,
-                            },
-                          }))
-                        }
+                      <PresenceSegmented
+                        value={state}
+                        onChange={(next) => setSelectedPlayers((prev) => ({ ...prev, [key]: next }))}
                       />
                     </TableCell>
                     <TableCell>
