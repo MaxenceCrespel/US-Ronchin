@@ -845,6 +845,14 @@ export function MatchDetailPage() {
               )}
             </div>
           </CardTitle>
+          <CardDescription className="capitalize">
+            {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
+            {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`}
+            {match.competition && ` · ${match.competition}`}
+            {' · '}
+            {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
+            {match.venue && ` · ${match.venue}`}
+          </CardDescription>
         </CardHeader>
         {editingMatch && (
           <CardContent>
