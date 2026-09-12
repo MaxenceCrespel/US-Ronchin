@@ -30,6 +30,9 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
+      # Shared secret for the local FFF sync script (SyncApiKeyGuard) — epreuves.fff.fr blocks
+      # this server's own IP, so this is what lets a real computer's scrape result in instead.
+      FFF_SYNC_API_KEY: ${FFF_SYNC_API_KEY}
     # Le plus généreux des trois : c'est ici que Chrome se lance
     # (fff-scraper.service.ts), le seul vrai pic mémoire de toute l'appli.
     mem_limit: 1024m

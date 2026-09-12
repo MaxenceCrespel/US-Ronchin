@@ -507,6 +507,7 @@ export class FffScraperService {
       scoreAway,
       played,
       matchDetailUrl: block.matchHref ? `https://epreuves.fff.fr${block.matchHref}/match` : null,
+      surface: null,
     };
   }
 

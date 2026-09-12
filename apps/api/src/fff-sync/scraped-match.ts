@@ -13,4 +13,7 @@ export interface ScrapedMatch {
    * venue itself (see FffScraperService.scrapeVenue), so this is kept around for the sync
    * service to fetch it lazily, only for matches that don't already have one. */
   matchDetailUrl: string | null;
+  /** e.g. "Pelouse Naturelle"/"Synthétique" — like venue, this only ever comes from
+   * scrapeVenue, resolved lazily; null until (if ever) that lookup happens. */
+  surface: string | null;
 }

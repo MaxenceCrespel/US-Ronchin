@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardDescription } from '@/components/ui/card'
-import { fetchSettings, updateSettings, runFffSync } from '@/features/settings/api'
-import { syncStandings } from '@/features/standings/api'
+import { fetchSettings, updateSettings } from '@/features/settings/api'
 
 export function ClubSettingsCard() {
   const queryClient = useQueryClient()
@@ -16,22 +15,14 @@ export function ClubSettingsCard() {
     if (settingsQuery.data) setFffTeamUrl(settingsQuery.data.fffTeamUrl ?? '')
   }, [settingsQuery.data])
 
-  // Saving a new/changed URL here used to leave the coach to separately remember to go hit
-  // "Synchroniser" on the Matchs page and again on Stats > Bilan de saison — both scrapes are
-  // triggered right away instead, same as the weekly scheduler does (see
-  // fff-weekly-sync.scheduler.ts), so the new URL takes effect immediately everywhere.
+  // Just the URL, saved plain — epreuves.fff.fr blocks the production server's own IP (a WAF
+  // treats VPS/datacenter IPs, GitHub Actions' runners included, as bots), so this server can
+  // never scrape it itself. This value is only ever read by the local sync script
+  // (apps/api/src/local-fff-sync.ts, run from a real computer's connection, which isn't
+  // blocked) — no point auto-triggering a scrape here that would just fail every time.
   const mutation = useMutation({
-    mutationFn: async () => {
-      await updateSettings(fffTeamUrl)
-      await Promise.allSettled([runFffSync(), syncStandings()])
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings'] })
-      queryClient.invalidateQueries({ queryKey: ['fff-sync-logs'] })
-      queryClient.invalidateQueries({ queryKey: ['matches'] })
-      queryClient.invalidateQueries({ queryKey: ['standings'] })
-      queryClient.invalidateQueries({ queryKey: ['standings-logs'] })
-    },
+    mutationFn: () => updateSettings(fffTeamUrl),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
   })
 
   return (
@@ -57,22 +48,21 @@ export function ClubSettingsCard() {
               onChange={(e) => setFffTeamUrl(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
-              Change chaque saison — utilisée pour synchroniser le calendrier officiel depuis la
-              page Matchs. L'URL doit ressembler à{' '}
+              Exemple :{' '}
               <code className="text-[11px]">
-                https://epreuves.fff.fr/competition/club/.../equipe/.../...
-              </code>{' '}
-              — colle le lien de n'importe quel onglet de l'équipe (calendrier, classement,
-              statistiques...), seul le début compte.
+                https://epreuves.fff.fr/competition/club/500112-ronchin-us-3/equipe/2026_248_SEM_12/resultat-calendrier
+              </code>
+            </p>
+            <p className="text-muted-foreground text-xs">
+              Utilisée par le script de synchro à lancer depuis un ordinateur (voir
+              apps/api/src/local-fff-sync.ts) — le serveur ne peut plus scraper FFF lui-même.
             </p>
           </div>
           <Button type="submit" className="w-fit" size="sm" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Synchronisation...' : 'Enregistrer'}
+            {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
           {mutation.isSuccess && (
-            <span className="text-muted-foreground text-sm">
-              Paramètres enregistrés — calendrier et classement synchronisés.
-            </span>
+            <span className="text-muted-foreground text-sm">Paramètres mis à jour.</span>
           )}
         </form>
       </CardContent>
