@@ -34,7 +34,6 @@ import {
   MATCH_CATEGORY_LABELS,
 } from '@/lib/match-category'
 import { createMatch, fetchMatchAttendance, fetchMatches, fetchMotm } from './api'
-import { fetchFffSyncLogs } from '@/features/settings/api'
 import { VoteProgress } from './VoteProgress'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
 
@@ -45,28 +44,6 @@ function formatDate(date: string) {
     month: 'short',
     year: 'numeric',
   })
-}
-
-// Read-only status now — the sync itself fires automatically (saving the FFF URL in
-// Paramètres, and every Monday via fff-weekly-sync.scheduler.ts), so there's nothing left to
-// manually trigger from here.
-function FffSyncStatus() {
-  const logsQuery = useQuery({
-    queryKey: ['fff-sync-logs'],
-    queryFn: () => fetchFffSyncLogs(1),
-  })
-
-  const lastLog = logsQuery.data?.[0]
-  if (!lastLog) return null
-
-  return (
-    <span className="text-muted-foreground text-xs">
-      Dernière synchro FFF : {new Date(lastLog.runAt).toLocaleString('fr-FR')} —{' '}
-      {lastLog.status === 'SUCCESS'
-        ? `${lastLog.matchesCreated} créés, ${lastLog.matchesUpdated} mis à jour`
-        : `échec (${lastLog.errorMessage})`}
-    </span>
-  )
 }
 
 export function MatchesPage() {
@@ -325,8 +302,6 @@ export function MatchesPage() {
           </div>
         )}
       </div>
-
-      {isCoach && <FffSyncStatus />}
 
       <div className="flex flex-wrap items-center justify-between gap-2" data-tour="matches-month">
         <h2 className="text-lg font-semibold capitalize">
