@@ -5,6 +5,8 @@ import { Repository } from 'typeorm';
 import { AwardCategory } from './entities/award-category.entity';
 import { FIXED_AWARD_CATEGORIES } from './fixed-categories';
 import { getCurrentSeasonLabel } from '../stats/season.util';
+import { User, UserRole, UserStatus } from '../users/entities/user.entity';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 // The vote window opens every 1st of June and force-closes on the 16th — AwardsService
 // itself closes it earlier the instant the whole roster has voted everywhere, so this is
@@ -13,6 +15,13 @@ import { getCurrentSeasonLabel } from '../stats/season.util';
 const VOTE_OPEN_MONTH_INDEX = 5; // June, 0-indexed
 const VOTE_CLOSE_DAY = 16;
 
+/** Same rule as the frontend's isRosterPlayer / AwardsService's own local copy — only
+ * active regular players and playing coaches are forced to vote, so only they get pinged
+ * about it. */
+function isRosterPlayer(user: User): boolean {
+  return user.status === UserStatus.ACTIVE && (user.role === UserRole.PLAYER || user.isPlayingCoach);
+}
+
 @Injectable()
 export class AwardsScheduler {
   private readonly logger = new Logger(AwardsScheduler.name);
@@ -20,6 +29,9 @@ export class AwardsScheduler {
   constructor(
     @InjectRepository(AwardCategory)
     private readonly categoriesRepository: Repository<AwardCategory>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   @Cron('0 0 9,21 * * *', { timeZone: 'Europe/Paris' })
@@ -53,6 +65,11 @@ export class AwardsScheduler {
       ),
     );
     this.logger.log(`Votes des trophées de fin de saison ouverts pour ${season}`);
+    await this.notifyRoster({
+      title: 'Trophées de fin de saison',
+      body: `Le vote pour les 5 récompenses de la saison ${season} est ouvert — à toi de voter !`,
+      url: '/',
+    });
   }
 
   private async closeIfNeeded(season: string) {
@@ -66,5 +83,21 @@ export class AwardsScheduler {
     }
     await this.categoriesRepository.save(active);
     this.logger.log(`Votes des trophées de fin de saison clôturés pour ${season}`);
+    await this.notifyRoster({
+      title: 'Trophées de la saison dévoilés',
+      body: `Les résultats des trophées de fin de saison ${season} sont prêts — viens découvrir qui a gagné !`,
+      url: '/',
+    });
+  }
+
+  /** Shared by the June-16 backstop close above and AwardsService's own early-close (the
+   * instant the whole roster has voted everywhere) — both are genuine "results are in"
+   * moments and both should announce it, so this stays a plain public-ish helper other
+   * award services can reuse rather than each re-implementing the roster lookup. */
+  async notifyRoster(payload: { title: string; body: string; url: string }) {
+    const users = await this.usersRepository.find();
+    const recipientIds = users.filter(isRosterPlayer).map((u) => u.id);
+    if (recipientIds.length === 0) return;
+    await this.pushNotificationsService.sendToUsers(recipientIds, payload);
   }
 }

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Match, MatchSource, MatchStatus } from './entities/match.entity';
+import { In, IsNull, Not, Repository } from 'typeorm';
+import { Match, MatchHomeAway, MatchSource, MatchStatus } from './entities/match.entity';
 import { MatchComposition } from './entities/match-composition.entity';
 import { MatchEvent } from './entities/match-event.entity';
 import { PlayerRating } from './entities/player-rating.entity';
@@ -18,7 +18,13 @@ import { SetCompositionDto } from './dto/set-composition.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
-import { isMotmRevealed, firstVoteAt, MOTM_REVEAL_DELAY_MS } from './motm-utils';
+import {
+  isMotmRevealed,
+  firstVoteAt,
+  computeMotmWinners,
+  resolveWinnerUserIds,
+  MOTM_REVEAL_DELAY_MS,
+} from './motm-utils';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
 export interface RatingSummaryEntry {
@@ -68,6 +74,37 @@ export interface DefenseBossResponse {
   /** False when no defender played this match — the vote step doesn't apply. */
   hasEligibleTargets: boolean;
   results: DefenseBossResultEntry[] | null;
+}
+
+export interface MatchTrophyEntry {
+  matchId: string;
+  kind: 'motm' | 'defense_boss';
+  date: string;
+  opponent: string;
+  homeAway: MatchHomeAway;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  votes: number;
+}
+
+export interface MatchTrophyWinnerEntry {
+  userId: string;
+  firstName: string;
+  lastName: string;
+}
+
+/** One match's revealed winner(s) — for anyone to see, not "did I win" (see
+ * getMyMatchTrophies above) but "who actually won". `null` for a kind still gated (vote not
+ * revealed yet) or with nothing to show (no defender played, so no défense boss target). */
+export interface MatchTrophyWinners {
+  matchId: string;
+  date: string;
+  opponent: string;
+  homeAway: MatchHomeAway;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  motmWinners: MatchTrophyWinnerEntry[] | null;
+  defenseBossWinners: MatchTrophyWinnerEntry[] | null;
 }
 
 @Injectable()
@@ -712,5 +749,152 @@ export class MatchesService {
       votedForGuestId: target.userId ? null : target.id,
     });
     await this.defenseBossVotesRepository.save(vote);
+  }
+
+  /** Every match this player has actually won "Homme du match" or "Patron de la défense" in
+   * — for their personal trophy case. Reuses computeMotmWinners/resolveWinnerUserIds (the
+   * same tie-aware, guest-vote-merging logic as getMotm/getDefenseBoss) instead of the
+   * simpler per-match `results` list, since a raw top-of-results read would double-count a
+   * guest vote and a direct-account vote for the same person as two separate entries — see
+   * computeMotmWinners' own doc comment for the bug that produced. Bulk-fetches composition/
+   * votes across every confirmed match at once rather than looping getMotm/getDefenseBoss
+   * per match (which would be one pair of extra queries per match). */
+  async getMyMatchTrophies(userId: string): Promise<MatchTrophyEntry[]> {
+    const matches = await this.matchesRepository.find({
+      where: { resultConfirmedAt: Not(IsNull()) },
+      order: { date: 'DESC' },
+    });
+    if (matches.length === 0) return [];
+    const matchIds = matches.map((m) => m.id);
+
+    const [compositions, motmVotes, defenseBossVotes] = await Promise.all([
+      this.compositionsRepository.find({ where: { matchId: In(matchIds) } }),
+      this.motmVotesRepository.find({ where: { matchId: In(matchIds) } }),
+      this.defenseBossVotesRepository.find({ where: { matchId: In(matchIds) } }),
+    ]);
+
+    const compositionsByMatch = new Map<string, MatchComposition[]>();
+    for (const c of compositions) {
+      const list = compositionsByMatch.get(c.matchId) ?? [];
+      list.push(c);
+      compositionsByMatch.set(c.matchId, list);
+    }
+    const votesByMatch = <T extends { matchId: string }>(votes: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const v of votes) {
+        const list = map.get(v.matchId) ?? [];
+        list.push(v);
+        map.set(v.matchId, list);
+      }
+      return map;
+    };
+    const motmByMatch = votesByMatch(motmVotes);
+    const defenseBossByMatch = votesByMatch(defenseBossVotes);
+
+    const trophies: MatchTrophyEntry[] = [];
+    for (const match of matches) {
+      const composition = compositionsByMatch.get(match.id) ?? [];
+      const totalPlayers = composition.filter((c) => c.userId).length;
+      const compositionById = new Map(composition.map((c) => [c.id, c]));
+      const compositionByUserId = new Map(
+        composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
+      );
+
+      const kinds: { kind: 'motm' | 'defense_boss'; votes: MatchMotmVote[] | MatchDefenseBossVote[] }[] = [
+        { kind: 'motm', votes: motmByMatch.get(match.id) ?? [] },
+        { kind: 'defense_boss', votes: defenseBossByMatch.get(match.id) ?? [] },
+      ];
+      for (const { kind, votes } of kinds) {
+        if (!isMotmRevealed(votes, totalPlayers)) continue;
+        const winnerCompositionIds = computeMotmWinners(votes, compositionByUserId);
+        const winnerUserIds = resolveWinnerUserIds(winnerCompositionIds, compositionById);
+        if (!winnerUserIds.includes(userId)) continue;
+        const myCompositionId = compositionByUserId.get(userId)?.id;
+        const myVoteCount = votes.filter((v) => (v.votedForGuestId ?? compositionByUserId.get(v.votedForId ?? '')?.id) === myCompositionId).length;
+        trophies.push({
+          matchId: match.id,
+          kind,
+          date: match.date,
+          opponent: match.opponent,
+          homeAway: match.homeAway,
+          scoreHome: match.scoreHome,
+          scoreAway: match.scoreAway,
+          votes: myVoteCount,
+        });
+      }
+    }
+    return trophies;
+  }
+
+  /** The N most recent confirmed matches' revealed trophy winners — for anyone to see, not
+   * scoped to one player like getMyMatchTrophies above (see TeamHallOfFameCard on the
+   * frontend). Reuses the exact same reveal/tie logic (isMotmRevealed, computeMotmWinners,
+   * resolveWinnerUserIds) so "who actually won" never disagrees between the personal and
+   * general views. */
+  async getRecentMatchTrophyWinners(limit = 3): Promise<MatchTrophyWinners[]> {
+    const matches = await this.matchesRepository.find({
+      where: { resultConfirmedAt: Not(IsNull()) },
+      order: { date: 'DESC' },
+      take: limit,
+    });
+    if (matches.length === 0) return [];
+    const matchIds = matches.map((m) => m.id);
+
+    const [compositions, motmVotes, defenseBossVotes] = await Promise.all([
+      this.compositionsRepository.find({ where: { matchId: In(matchIds) }, relations: { user: true } }),
+      this.motmVotesRepository.find({ where: { matchId: In(matchIds) } }),
+      this.defenseBossVotesRepository.find({ where: { matchId: In(matchIds) } }),
+    ]);
+
+    const compositionsByMatch = new Map<string, MatchComposition[]>();
+    for (const c of compositions) {
+      const list = compositionsByMatch.get(c.matchId) ?? [];
+      list.push(c);
+      compositionsByMatch.set(c.matchId, list);
+    }
+    const votesByMatch = <T extends { matchId: string }>(votes: T[]) => {
+      const map = new Map<string, T[]>();
+      for (const v of votes) {
+        const list = map.get(v.matchId) ?? [];
+        list.push(v);
+        map.set(v.matchId, list);
+      }
+      return map;
+    };
+    const motmByMatch = votesByMatch(motmVotes);
+    const defenseBossByMatch = votesByMatch(defenseBossVotes);
+
+    return matches.map((match) => {
+      const composition = compositionsByMatch.get(match.id) ?? [];
+      const totalPlayers = composition.filter((c) => c.userId).length;
+      const compositionById = new Map(composition.map((c) => [c.id, c]));
+      const compositionByUserId = new Map(
+        composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c]),
+      );
+      const usersById = new Map(
+        composition.filter((c): c is MatchComposition & { userId: string } => !!c.userId).map((c) => [c.userId, c.user]),
+      );
+
+      const winnersFor = (votes: (MatchMotmVote | MatchDefenseBossVote)[]): MatchTrophyWinnerEntry[] | null => {
+        if (!isMotmRevealed(votes, totalPlayers)) return null;
+        const winnerCompositionIds = computeMotmWinners(votes, compositionByUserId);
+        const winnerUserIds = resolveWinnerUserIds(winnerCompositionIds, compositionById);
+        return winnerUserIds.map((userId) => {
+          const user = usersById.get(userId);
+          return { userId, firstName: user?.firstName ?? '', lastName: user?.lastName ?? '' };
+        });
+      };
+
+      return {
+        matchId: match.id,
+        date: match.date,
+        opponent: match.opponent,
+        homeAway: match.homeAway,
+        scoreHome: match.scoreHome,
+        scoreAway: match.scoreAway,
+        motmWinners: winnersFor(motmByMatch.get(match.id) ?? []),
+        defenseBossWinners: winnersFor(defenseBossByMatch.get(match.id) ?? []),
+      };
+    });
   }
 }

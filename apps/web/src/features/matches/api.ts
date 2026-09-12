@@ -10,6 +10,8 @@ import type {
   MatchHomeAway,
   MatchSource,
   MatchStatus,
+  MatchTrophyEntry,
+  MatchTrophyWinners,
   MotmResponse,
   DefenseBossResponse,
   PlayerPosition,
@@ -19,6 +21,16 @@ import type {
 
 export async function fetchMatches(): Promise<Match[]> {
   const { data } = await apiClient.get<Match[]>('/matches')
+  return data
+}
+
+export async function fetchMyMatchTrophies(): Promise<MatchTrophyEntry[]> {
+  const { data } = await apiClient.get<MatchTrophyEntry[]>('/matches/my-trophies')
+  return data
+}
+
+export async function fetchRecentMatchTrophyWinners(): Promise<MatchTrophyWinners[]> {
+  const { data } = await apiClient.get<MatchTrophyWinners[]>('/matches/recent-trophy-winners')
   return data
 }
 

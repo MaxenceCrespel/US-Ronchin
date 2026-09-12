@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PlayerPosition, User } from '../users/entities/user.entity';
 import { Match, MatchHomeAway, MatchStatus } from '../matches/entities/match.entity';
 import { MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
@@ -36,6 +36,11 @@ const RED_CARD_PENALTY = 5;
 const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half as much
 const RATING_CONFIDENCE_PRIOR_WEIGHT = 3; // pseudo-count pulling a thin sample toward neutral
 const RATING_NEUTRAL = 5; // midpoint of the 0-10 scale, the confidence prior's target
+// "Assidu du mois"/"Vainqueur d'entraînement" need a real sample to judge fairly — a month
+// with only one or two trainings (holidays, a short break) would let a single session decide
+// the whole trophy. "Joueur du mois" doesn't use this: it's gated on at least one *match*
+// instead (see MonthlyAwardScheduler.openIfNeeded), a different kind of evidence entirely.
+const MIN_TRAININGS_FOR_STAT_TROPHY = 4;
 // Same damping idea as ratings, applied to points-per-training-session instead of
 // points-per-match — a single lucky scrimmage win shouldn't alone put someone at the top
 // just because they've only been to one training. Neutral prior = a draw (1 point), the
@@ -91,6 +96,48 @@ export interface MonthlyChallengeEntry {
 export interface MonthlyChallenges {
   topScorers: MonthlyChallengeEntry[];
   mostPresentPlayers: MonthlyChallengeEntry[];
+}
+
+/** One past, fully-settled calendar month a player topped a stat-based monthly ranking —
+ * "Assidu du mois" (most training presences) or training-ranking champion (most scrimmage
+ * points). Unlike "Joueur du mois", nobody votes on these: the winner is just whoever the
+ * numbers say, tie-aware exactly like getMonthlyChallenges' own tiedAtTop. `value` is the
+ * count/points that won that month, for display context (see MatchTrophyEntry's `votes` for
+ * the same idea on the match-trophy side). */
+export interface MonthlyStatTrophy {
+  month: string;
+  value: number;
+}
+
+interface StatTrophyCandidate {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  value: number;
+}
+
+/** A stat trophy's winner(s) for one month, visible to anyone — not the "did *I* win"
+ * question MonthlyStatTrophy answers, the "who actually won" one (see
+ * StatsController's public routes, and TeamHallOfFameCard on the frontend). */
+export interface MonthlyStatTrophyWinner {
+  month: string;
+  value: number;
+  winners: { userId: string; firstName: string; lastName: string }[];
+}
+
+/** Ties at the top all win, same as everywhere else in the awards system — picks the most
+ * recent month key present in the map (string comparison works since "YYYY-MM" sorts
+ * chronologically) and returns everyone tied for its max value. */
+function latestWinner(byMonth: Map<string, StatTrophyCandidate[]>): MonthlyStatTrophyWinner | null {
+  const months = [...byMonth.keys()].sort();
+  const lastMonth = months[months.length - 1];
+  if (!lastMonth) return null;
+  const list = byMonth.get(lastMonth)!;
+  const max = Math.max(...list.map((r) => r.value));
+  const winners = list
+    .filter((r) => r.value === max)
+    .map((r) => ({ userId: r.userId, firstName: r.firstName, lastName: r.lastName }));
+  return { month: lastMonth, value: max, winners };
 }
 
 /** What actually happened, not what the player declared beforehand — falls back to the
@@ -690,6 +737,169 @@ export class StatsService {
       topScorers: tiedAtTop(topScorersRaw),
       mostPresentPlayers: tiedAtTop(mostPresentRaw),
     };
+  }
+
+  /** Every calendar month ("YYYY-MM") the club held at least MIN_TRAININGS_FOR_STAT_TROPHY
+   * trainings in — a month with barely any (a summer break, holidays) doesn't have enough of
+   * a sample to fairly judge "most present" or "most scrimmage wins" on, unlike "Joueur du
+   * mois" (see MonthlyAwardScheduler.openIfNeeded), which is gated on there having been at
+   * least one *match* instead — the two trophies are settled on different evidence, so they
+   * get different minimums. Shared by both stat-trophy month-grouping methods below. */
+  private async getMonthsWithEnoughTrainings(): Promise<Set<string>> {
+    const sessions = await this.sessionsRepository.find({ where: { cancelled: false }, select: { date: true } });
+    const countByMonth = new Map<string, number>();
+    for (const session of sessions) {
+      const month = session.date.slice(0, 7);
+      countByMonth.set(month, (countByMonth.get(month) ?? 0) + 1);
+    }
+    const eligible = new Set<string>();
+    for (const [month, count] of countByMonth) {
+      if (count >= MIN_TRAININGS_FOR_STAT_TROPHY) eligible.add(month);
+    }
+    return eligible;
+  }
+
+  /** Month → every player's count/name for that month, for whichever stat trophy `kind`
+   * names — shared by the personal "my trophies" history methods and the general "who won
+   * this recently, for anyone to see" ones (see getLastAttendanceTrophyWinner /
+   * getLastTrainingChampionWinner), so the two never compute the ranking two different ways. */
+  private async getAttendanceCountsByMonth(): Promise<Map<string, StatTrophyCandidate[]>> {
+    const currentMonth = parisToday().slice(0, 7);
+    const eligibleMonths = await this.getMonthsWithEnoughTrainings();
+
+    const rows = await this.attendancesRepository
+      .createQueryBuilder('attendance')
+      .innerJoin('attendance.trainingSession', 'session')
+      .innerJoin('attendance.user', 'user')
+      // Only what the coach actually validated at training counts toward this trophy — a
+      // session the coach never pointed (or a player's own unconfirmed declaration) doesn't
+      // count for anyone, even if they'd declared themselves present. Deliberately stricter
+      // than trainingsPresent/presenceStreak/"Défis du mois" elsewhere in the app, which
+      // trust a declaration until it's contradicted — a trophy is handed out for something
+      // real, not provisional.
+      .where('attendance.actual_status = :status', { status: AttendanceStatus.PRESENT })
+      .andWhere('session.date <= :today', { today: parisToday() })
+      .select('attendance.userId', 'userId')
+      .addSelect('user.firstName', 'firstName')
+      .addSelect('user.lastName', 'lastName')
+      .addSelect("to_char(session.date::date, 'YYYY-MM')", 'month')
+      .addSelect('COUNT(*)', 'value')
+      .groupBy('attendance.userId')
+      .addGroupBy('user.firstName')
+      .addGroupBy('user.lastName')
+      .addGroupBy("to_char(session.date::date, 'YYYY-MM')")
+      .getRawMany<{ userId: string; firstName: string; lastName: string; month: string; value: string }>();
+
+    const byMonth = new Map<string, StatTrophyCandidate[]>();
+    for (const row of rows) {
+      if (row.month >= currentMonth) continue; // still in progress — not settled yet
+      if (!eligibleMonths.has(row.month)) continue; // not enough trainings to judge fairly
+      const list = byMonth.get(row.month) ?? [];
+      list.push({ userId: row.userId, firstName: row.firstName, lastName: row.lastName, value: Number(row.value) });
+      byMonth.set(row.month, list);
+    }
+    return byMonth;
+  }
+
+  /** Every past, fully-settled month this player was (tied for) the most present at training
+   * — the personal trophy-case history behind "Assidu du mois". Deliberately excludes the
+   * current, still-running month: showing a trophy for a ranking that can still flip before
+   * month-end would make it feel provisional rather than actually won, the same reason a
+   * match trophy only exists once that match's vote has revealed. */
+  async getMyAttendanceTrophies(userId: string): Promise<MonthlyStatTrophy[]> {
+    const byMonth = await this.getAttendanceCountsByMonth();
+    const won: MonthlyStatTrophy[] = [];
+    for (const [month, list] of byMonth) {
+      const max = Math.max(...list.map((r) => r.value));
+      if (list.some((r) => r.userId === userId && r.value === max)) won.push({ month, value: max });
+    }
+    return won.sort((a, b) => (a.month < b.month ? 1 : -1));
+  }
+
+  /** The most recently settled month's "Assidu du mois" winner(s) — for anyone to see, not
+   * just the winner (see StatsController's public route). Null if no past month has any
+   * validated presence on record yet. */
+  async getLastAttendanceTrophyWinner(): Promise<MonthlyStatTrophyWinner | null> {
+    const byMonth = await this.getAttendanceCountsByMonth();
+    return latestWinner(byMonth);
+  }
+
+  /** Month → every player's *scrimmage win count* for that month (not points — a training
+   * trophy decided by goal difference would reward a blowout over just winning, which isn't
+   * the point). Shared by the personal history method and the general "who won" one. */
+  private async getTrainingWinCountsByMonth(): Promise<Map<string, StatTrophyCandidate[]>> {
+    const currentMonth = parisToday().slice(0, 7);
+    const eligibleMonths = await this.getMonthsWithEnoughTrainings();
+
+    const scoredSessions = await this.sessionsRepository
+      .createQueryBuilder('session')
+      .where('session.score_team0 IS NOT NULL AND session.score_team1 IS NOT NULL')
+      .andWhere("to_char(session.date::date, 'YYYY-MM') < :currentMonth", { currentMonth })
+      .getMany();
+    if (scoredSessions.length === 0) return new Map();
+
+    const [assignments, users] = await Promise.all([
+      this.teamAssignmentsRepository.find({
+        where: { trainingSessionId: In(scoredSessions.map((s) => s.id)) },
+      }),
+      this.usersRepository.find(),
+    ]);
+    const sessionById = new Map(scoredSessions.map((s) => [s.id, s]));
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    const byMonth = new Map<string, Map<string, number>>();
+    for (const assignment of assignments) {
+      if (!assignment.userId) continue; // guests earn nothing, same as getTrainingRanking
+      const session = sessionById.get(assignment.trainingSessionId);
+      if (!session) continue;
+      // A draw has no winning team — nobody's win count moves.
+      const winningTeam =
+        session.scoreTeam0! === session.scoreTeam1!
+          ? null
+          : session.scoreTeam0! > session.scoreTeam1!
+            ? 0
+            : 1;
+      if (winningTeam === null || assignment.teamIndex !== winningTeam) continue;
+      const month = session.date.slice(0, 7);
+      if (!eligibleMonths.has(month)) continue; // not enough trainings to judge fairly
+      const byUser = byMonth.get(month) ?? new Map<string, number>();
+      byUser.set(assignment.userId, (byUser.get(assignment.userId) ?? 0) + 1);
+      byMonth.set(month, byUser);
+    }
+
+    const result = new Map<string, StatTrophyCandidate[]>();
+    for (const [month, byUser] of byMonth) {
+      const list: StatTrophyCandidate[] = [...byUser.entries()].map(([userId, value]) => {
+        const user = userById.get(userId);
+        return { userId, firstName: user?.firstName ?? '', lastName: user?.lastName ?? '', value };
+      });
+      result.set(month, list);
+    }
+    return result;
+  }
+
+  /** Every past, fully-settled month this player (tied for) won the most training scrimmages
+   * — a raw win count, not the points/goal-difference-weighted scale TeamBalancingService's
+   * own cumulative "classement des entraînements" uses (see getTrainingWinCountsByMonth). */
+  async getMyTrainingChampionTrophies(userId: string): Promise<MonthlyStatTrophy[]> {
+    const byMonth = await this.getTrainingWinCountsByMonth();
+    const won: MonthlyStatTrophy[] = [];
+    for (const [month, list] of byMonth) {
+      const max = Math.max(...list.map((r) => r.value));
+      // Nobody actually won a scrimmage that month (never happened, or every session that
+      // month was a draw) — no trophy to hand out.
+      if (max <= 0) continue;
+      if (list.some((r) => r.userId === userId && r.value === max)) won.push({ month, value: max });
+    }
+    return won.sort((a, b) => (a.month < b.month ? 1 : -1));
+  }
+
+  /** The most recently settled month's training-scrimmage win-count champion(s) — for anyone
+   * to see, not just the winner. Null if no past month has a decisive (non-drawn) scrimmage
+   * on record yet. */
+  async getLastTrainingChampionWinner(): Promise<MonthlyStatTrophyWinner | null> {
+    const byMonth = await this.getTrainingWinCountsByMonth();
+    return latestWinner(byMonth);
   }
 
   async getAvailableSeasons(): Promise<{ seasons: string[]; current: string }> {

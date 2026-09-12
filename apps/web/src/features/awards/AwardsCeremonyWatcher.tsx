@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/lib/auth-store'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { hasSeenCeremony, markCeremonySeen } from '@/lib/awards-ceremony-seen'
+import { useCeremonyGateStore } from '@/lib/ceremony-gate'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
 import { AwardsCeremony } from './AwardsCeremony'
@@ -55,7 +56,7 @@ export function AwardsCeremonyWatcher() {
     allClosed &&
     season != null &&
     !dismissed &&
-    (replay || !hasSeenCeremony(user!.id, season))
+    (replay || !hasSeenCeremony('season-awards', user!.id, season))
 
   const teamStatsQuery = useQuery({
     queryKey: ['stats', 'team', season],
@@ -103,6 +104,17 @@ export function AwardsCeremonyWatcher() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ceremony, unseen, teamStatsQuery.data, playersQuery.data, playerStatsQuery.data, season])
 
+  // Only one full-screen ceremony overlay can ever be on screen — this always wins the gate
+  // over the monthly ceremony (see ceremony-gate.ts), so releasing on unmount is the only
+  // cleanup needed here.
+  const claimGate = useCeremonyGateStore((s) => s.claim)
+  const releaseGate = useCeremonyGateStore((s) => s.release)
+  useEffect(() => {
+    if (!ceremony) return
+    claimGate('season')
+    return () => releaseGate('season')
+  }, [ceremony, claimGate, releaseGate])
+
   if (!ceremony) return null
 
   return (
@@ -113,7 +125,7 @@ export function AwardsCeremonyWatcher() {
       roster={ceremony.roster}
       myStats={ceremony.myStats}
       onDone={() => {
-        if (!replay) markCeremonySeen(user!.id, ceremony.season)
+        if (!replay) markCeremonySeen('season-awards', user!.id, ceremony.season)
         setDismissed(true)
         setCeremony(null)
       }}

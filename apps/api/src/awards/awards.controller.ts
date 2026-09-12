@@ -19,6 +19,11 @@ export class AwardsController {
     return this.awardsService.findAll(currentUser.id);
   }
 
+  @Get('monthly')
+  findMonthly(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.awardsService.findMonthly(currentUser.id);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch('categories/:id')

@@ -136,17 +136,20 @@ export function MatchesPage() {
 
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [kickOffTime, setKickOffTime] = useState('')
   const [opponent, setOpponent] = useState('')
   const [homeAway, setHomeAway] = useState<MatchHomeAway>('HOME')
   const [venue, setVenue] = useState('')
 
   const createMutation = useMutation({
-    mutationFn: () => createMatch({ date, opponent, homeAway, venue: venue || undefined }),
+    mutationFn: () =>
+      createMatch({ date, kickOffTime: kickOffTime || undefined, opponent, homeAway, venue: venue || undefined }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matches'] })
       setOpen(false)
       setOpponent('')
       setVenue('')
+      setKickOffTime('')
     },
   })
 
@@ -185,6 +188,15 @@ export function MatchesPage() {
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     required
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="kickOffTime">Heure (optionnel)</Label>
+                  <Input
+                    id="kickOffTime"
+                    type="time"
+                    value={kickOffTime}
+                    onChange={(e) => setKickOffTime(e.target.value)}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -287,7 +299,8 @@ export function MatchesPage() {
                       </div>
                     </CardTitle>
                     <p className="text-muted-foreground text-sm capitalize">
-                      {formatDate(match.date)} ·{' '}
+                      {formatDate(match.date)}
+                      {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`} ·{' '}
                       {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
                     </p>
                   </CardHeader>

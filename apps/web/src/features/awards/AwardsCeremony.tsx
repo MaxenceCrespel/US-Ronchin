@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Crown, Flame, Repeat, Shield, Sparkles, Star, Target, Trophy, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,6 +6,13 @@ import { Confetti } from '@/components/Confetti'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { cn } from '@/lib/utils'
 import type { AwardCategory, PlayerStats, TeamStats } from '@/lib/types'
+
+// three.js + @react-three/fiber are a meaningful chunk of weight nothing else in the app
+// needs — this keeps them out of the main bundle entirely until a season ceremony actually
+// has a voted category to reveal (same reasoning as MonthlyTrophyReveal's own lazy import).
+const CategoryTrophyScene = lazy(() =>
+  import('./Trophy3D').then((m) => ({ default: m.CategoryTrophyScene })),
+)
 
 interface Props {
   season: string
@@ -20,7 +27,7 @@ interface Props {
   onDone: () => void
 }
 
-interface PodiumEntry {
+export interface PodiumEntry {
   firstName: string
   lastName: string
   value: number
@@ -41,9 +48,9 @@ const CURTAIN_DURATION_S = 1.1
 
 // The club's own blue/gold, gala-weighted toward the gold — this is US Ronchin's night,
 // not a generic awards show.
-const GALA_CONFETTI_COLORS = ['#f4b400', '#ffd75e', '#ffffff', '#0089cf', '#005b8a']
+export const GALA_CONFETTI_COLORS = ['#f4b400', '#ffd75e', '#ffffff', '#0089cf', '#005b8a']
 
-const SPRING_POP = { type: 'spring' as const, stiffness: 300, damping: 20 }
+export const SPRING_POP = { type: 'spring' as const, stiffness: 300, damping: 20 }
 
 /** French plural of a stat unit — a word ending in s/x/z ("fois") never takes an extra "s". */
 function pluralize(word: string, count: number): string {
@@ -60,7 +67,7 @@ function pluralize(word: string, count: number): string {
 /** Brushed-metal gold for headline words — a vertical gradient clipped to the text instead
  * of a flat fill with a glow, so it catches light like real gold leaf rather than looking
  * like a highlighter. */
-function GoldText({ children, className }: { children: ReactNode; className?: string }) {
+export function GoldText({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
       className={cn(
@@ -75,7 +82,7 @@ function GoldText({ children, className }: { children: ReactNode; className?: st
 
 /** The category / segment label — small, wide-tracked, gold, sitting on a thin rule that
  * runs out to either side. Replaces the old shouty uppercase-with-glow treatment. */
-function SectionLabel({ children }: { children: ReactNode }) {
+export function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <div className="flex w-full items-center justify-center gap-3">
       <span className="h-px max-w-16 flex-1 bg-gradient-to-r from-transparent to-[#f4b400]/60" />
@@ -87,271 +94,20 @@ function SectionLabel({ children }: { children: ReactNode }) {
   )
 }
 
-/** The winner card — a dark plaque with a hairline gold frame and a faint inner sheen, the
- * name engraved (a soft dark text-shadow) rather than glowing. Optional crown for a
- * single, definitive winner. */
-/** A diagonal specular highlight sweeping once across whatever it's layered on — the cheap,
- * convincing cue for "polished metal" that sells a card as a physical object catching the
- * stage light, not a flat UI panel. */
-function ShineSweep({ delay = 0.4 }: { delay?: number }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
-      <motion.div
-        className="absolute inset-y-0 w-1/3 -skew-x-12"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }}
-        initial={{ x: '-140%' }}
-        animate={{ x: '240%' }}
-        transition={{ duration: 0.85, delay, ease: 'easeInOut' }}
-      />
-    </div>
-  )
-}
-
-function PlaqueCard({
-  firstName,
-  lastName,
-  detail,
-  crown = false,
-  compact = false,
-  /** A 3D drop-and-settle entrance (tilted back on its top edge, falling flat into place
-   * under real perspective) instead of the plain scale/fade pop — used wherever the plaque
-   * itself is the whole show rather than something a curtain/flip/light already staged. */
-  tiltIn = false,
-  /** A specular sweep once the plaque has landed. */
-  shine = false,
-  /** Lets EngraveRevealVariant substitute its own letter-by-letter span for the plain name
-   * text — everything else about the plaque (frame, avatar, detail line) stays identical. */
-  nameNode,
-  /** Renders with no entrance animation of its own — for use as the face of a parent that
-   * already owns 100% of the reveal motion. */
-  staticCard = false,
-  /** False swaps the real avatar (initials, club-blue) for a plain "?" silhouette — the
-   * avatar gives the winner's identity away just as surely as the name does, so
-   * EngraveRevealVariant keeps this false while it's still carving the vote count or the
-   * runner-up fake-out, and only flips it true once the real name starts. */
-  avatarRevealed = true,
-}: {
-  firstName: string
-  lastName: string
-  detail?: string
-  crown?: boolean
-  compact?: boolean
-  tiltIn?: boolean
-  shine?: boolean
-  nameNode?: ReactNode
-  staticCard?: boolean
-  avatarRevealed?: boolean
-}) {
-  const card = (
-    <motion.div
-      className={cn(
-        'relative flex flex-col items-center gap-3 overflow-hidden rounded-lg border border-[#f4b400]/50 bg-gradient-to-b from-white/[0.07] to-white/[0.02] px-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_60px_-20px_rgba(0,0,0,0.9)]',
-        compact ? 'py-5' : 'py-7',
-      )}
-      style={tiltIn && !staticCard ? { transformStyle: 'preserve-3d' } : undefined}
-      initial={
-        staticCard
-          ? false
-          : tiltIn
-            ? { rotateX: -50, y: -24, opacity: 0, scale: 0.92 }
-            : { scale: 0.85, opacity: 0, y: 12 }
-      }
-      animate={
-        staticCard ? undefined : tiltIn ? { rotateX: 0, y: 0, opacity: 1, scale: 1 } : { scale: 1, opacity: 1, y: 0 }
-      }
-      transition={SPRING_POP}
-    >
-      <div className="relative">
-        {avatarRevealed ? (
-          <PlayerAvatar avatarUrl={null} firstName={firstName} lastName={lastName} size={compact ? 'lg' : 'xl'} />
-        ) : (
-          <span
-            className={cn(
-              'flex items-center justify-center rounded-full border-2 border-dashed border-[#f4b400]/40 text-[#f4b400]/60',
-              compact ? 'size-14 text-xl' : 'size-24 text-3xl',
-            )}
-          >
-            ?
-          </span>
-        )}
-        {crown && (
-          <motion.div
-            className="absolute -top-6 left-1/2 -translate-x-1/2"
-            initial={{ y: -18, opacity: 0, rotate: -12 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            transition={{ ...SPRING_POP, delay: 0.15 }}
-          >
-            <Crown className="size-7 fill-[#f4b400] text-[#f4b400]" />
-          </motion.div>
-        )}
-      </div>
-      <div>
-        <p
-          className={cn('font-semibold tracking-tight text-white', compact ? 'text-lg' : 'text-2xl')}
-          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
-        >
-          {nameNode ?? (
-            <>
-              {firstName} {lastName}
-            </>
-          )}
-        </p>
-        {detail && (
-          <>
-            <span className="mx-auto mt-2 block h-px w-10 bg-[#f4b400]/60" />
-            <p className="mt-2 text-sm text-[#f4b400]">{detail}</p>
-          </>
-        )}
-      </div>
-      {shine && <ShineSweep delay={tiltIn ? 0.5 : 0.35} />}
-    </motion.div>
-  )
-  return tiltIn && !staticCard ? <div style={{ perspective: 900 }}>{card}</div> : card
-}
-
-interface EngraveStage {
-  text: string
-  /** Ms to hold the fully-carved text before it's chiselled away and the next stage starts —
-   * omit on the final stage, which has nothing after it to erase for. */
-  holdMs?: number
-}
-
-/** The engraving reveal itself — each character of the current stage's text pops in, in
- * order, right behind a bright travelling scoring line (the "chisel"), instead of the whole
- * text just fading in — so the viewer actually watches it get carved. Slow enough to
- * actually be watched rather than blur past, and able to run through more than one stage:
- * carve, hold, scrape away, carve the next — see EngraveRevealVariant's "vote count →
- * fake-out runner-up → real winner" sequence. Calls `onDone` once the *last* stage lands. */
-function EngravedName({
-  stages,
-  active,
-  charMs = 85,
-  onStageChange,
-  onDone,
-}: {
-  stages: EngraveStage[]
-  active: boolean
-  charMs?: number
-  /** Fires with the new index every time the carved stage changes — lets
-   * EngraveRevealVariant know exactly when the real-name stage starts, so it can swap the
-   * masked avatar for the real one in lockstep with the name instead of a beat late. */
-  onStageChange?: (index: number) => void
-  onDone: () => void
-}) {
-  const [stageIndex, setStageIndex] = useState(0)
-  const stage = stages[stageIndex]
-  const isLast = stageIndex === stages.length - 1
-  const chars = useMemo(() => stage.text.split(''), [stage.text])
-  const carveMs = chars.length * charMs
-
-  useEffect(() => {
-    if (!active) return
-    const t = setTimeout(
-      () => {
-        if (isLast) onDone()
-        else setStageIndex((i) => i + 1)
-      },
-      carveMs + (isLast ? 260 : (stage.holdMs ?? 550)),
-    )
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, stageIndex])
-
-  useEffect(() => {
-    onStageChange?.(stageIndex)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stageIndex])
-
-  return (
-    <span className="relative inline-block">
-      {active && (
-        <motion.span
-          key={`chisel-${stageIndex}`}
-          className="pointer-events-none absolute top-0 bottom-0 w-[3px] rounded-full bg-[#fff4d6]"
-          style={{ boxShadow: '0 0 10px 3px rgba(244,180,0,0.85)' }}
-          initial={{ left: '0%', opacity: 0 }}
-          animate={{ left: '100%', opacity: [0, 1, 1, 0] }}
-          transition={{
-            duration: carveMs / 1000,
-            delay: stageIndex > 0 ? 0.24 : 0,
-            ease: 'linear',
-            times: [0, 0.04, 0.92, 1],
-          }}
-        />
-      )}
-      <AnimatePresence mode="wait">
-        {active && (
-          <motion.span
-            key={stageIndex}
-            className="inline-block"
-            exit={{ opacity: 0, scale: 0.7, filter: 'blur(3px)' }}
-            transition={{ duration: 0.22, ease: 'easeIn' }}
-          >
-            {chars.map((ch, i) => (
-              <motion.span
-                key={i}
-                className="inline-block"
-                style={{ textShadow: '0 1px 0 rgba(255,255,255,0.3), 0 -1px 1px rgba(0,0,0,0.7)' }}
-                initial={{ opacity: 0, y: -3, scale: 0.55 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ delay: (i * charMs) / 1000, duration: 0.18, ease: 'easeOut' }}
-              >
-                {ch === ' ' ? ' ' : ch}
-              </motion.span>
-            ))}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </span>
-  )
-}
-
-/** One converging-spotlight beat — two warm beams sweep in from the top corners and narrow
- * to the centre, capped by a soft flash. `onDone` fires on the flash, cueing the reveal. */
-function SpotlightBeat({ onDone }: { onDone: () => void }) {
-  return (
-    <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden">
-      <motion.div
-        className="absolute top-0 left-0 h-[80vh] w-44 origin-top-left"
-        style={{
-          background: 'linear-gradient(180deg, rgba(247,234,208,0.5), rgba(247,234,208,0) 80%)',
-          clipPath: 'polygon(0% 0%, 24% 0%, 100% 100%, 58% 100%)',
-        }}
-        initial={{ rotate: -60, opacity: 0 }}
-        animate={{ rotate: -14, opacity: 0.8 }}
-        transition={{ duration: 1.4, ease: [0.3, 0, 0.2, 1] }}
-      />
-      <motion.div
-        className="absolute top-0 right-0 h-[80vh] w-44 origin-top-right"
-        style={{
-          background: 'linear-gradient(180deg, rgba(247,234,208,0.5), rgba(247,234,208,0) 80%)',
-          clipPath: 'polygon(100% 0%, 76% 0%, 42% 100%, 100% 100%)',
-        }}
-        initial={{ rotate: 60, opacity: 0 }}
-        animate={{ rotate: 14, opacity: 0.8 }}
-        transition={{ duration: 1.4, ease: [0.3, 0, 0.2, 1] }}
-      />
-      <motion.div
-        className="absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#fff7e8]"
-        initial={{ opacity: 0, scale: 0.3 }}
-        animate={{ opacity: [0, 0, 0.9, 0], scale: [0.3, 0.3, 1.7, 2.4] }}
-        transition={{ duration: 1.9, times: [0, 0.72, 0.88, 1], ease: 'easeOut' }}
-        onAnimationComplete={onDone}
-      />
-    </div>
-  )
-}
 
 /* ------------------------------------------------------------------ *
- *  Voted-trophy reveal — five distinct mechanics (spotlight, curtain,  *
- *  flip, engrave, rise) so the run of categories doesn't play the      *
- *  same beat five times in a row; each still ends on the same plaque  *
- *  so the *result* always reads consistently, only the build differs. *
+ *  Voted-trophy reveal — a real 3D trophy per category (see           *
+ *  Trophy3D.tsx's CATEGORY_TROPHIES), not a flat plaque with an       *
+ *  animation flourish: the crown for "Joueur de la saison", the       *
+ *  butcher knife for "Boucher de l'équipe", a merguez for "Pire       *
+ *  joueur"... the variety comes from *which trophy* appears, which   *
+ *  is thematically meaningful, unlike five arbitrary reveal          *
+ *  mechanics repeating regardless of what the category actually is.  *
  * ------------------------------------------------------------------ */
 
 /** Fires `onRevealed` at most once — every variant below lands on its own timeline, this
  * just guards against a stray double-call (e.g. an interrupted effect re-running). */
-function useFireOnce(onRevealed: () => void) {
+export function useFireOnce(onRevealed: () => void) {
   const firedRef = useRef(false)
   return () => {
     if (firedRef.current) return
@@ -360,7 +116,7 @@ function useFireOnce(onRevealed: () => void) {
   }
 }
 
-function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show: boolean }) {
+export function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show: boolean }) {
   if (runners.length === 0) return null
   return (
     <AnimatePresence>
@@ -381,412 +137,84 @@ function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show: boolea
   )
 }
 
-interface RevealVariantProps {
+function CategoryTrophy3DReveal({
+  category,
+  winner,
+  onRevealed,
+}: {
+  category: AwardCategory
   winner: PodiumEntry
-  runners: PodiumEntry[]
   onRevealed: () => void
-}
-
-/** #1 — the converging-spotlight beat, capped by the plaque dropping into place under real
- * 3D perspective (tilted back on landing, not just scaling up) with a shine once it settles. */
-function SpotlightRevealVariant({ winner, runners, onRevealed }: RevealVariantProps) {
-  const [revealed, setRevealed] = useState(false)
-  const [showRunners, setShowRunners] = useState(false)
+}) {
+  const [spinning, setSpinning] = useState(false)
+  const [nameShown, setNameShown] = useState(false)
   const fireOnce = useFireOnce(onRevealed)
 
   useEffect(() => {
-    if (!revealed) return
-    const t1 = runners.length > 0 ? setTimeout(() => setShowRunners(true), 750) : undefined
-    const t2 = setTimeout(fireOnce, 550)
-    return () => {
-      if (t1) clearTimeout(t1)
-      clearTimeout(t2)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealed])
-
-  return (
-    <div className="flex min-h-52 flex-col items-center justify-center gap-4">
-      {!revealed && <SpotlightBeat onDone={() => setRevealed(true)} />}
-      {revealed ? (
-        <>
-          <PlaqueCard
-            firstName={winner.firstName}
-            lastName={winner.lastName}
-            detail={`${winner.value} ${pluralize('vote', winner.value)}`}
-            crown
-            tiltIn
-            shine
-          />
-          <RunnersUpList runners={runners} show={showRunners} />
-        </>
-      ) : (
-        <p className="animate-pulse text-[11px] tracking-[0.3em] text-white/35 uppercase">
-          Et le trophée revient à…
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** A dozen-odd gold shards, each flying in from a random offset and 3D angle under real
- * perspective, converging on the centre in one violent beat capped by a flash — replaces the
- * old mini velvet-curtain variant outright (explicit feedback: "le rideau c'est nul"), aiming
- * for a genuinely different, more physical "something is being forged right now" impact
- * rather than a doors-parting reveal. `onDone` fires on the flash. */
-function ForgeBeat({ onDone }: { onDone: () => void }) {
-  const shards = useMemo(
-    () =>
-      Array.from({ length: 16 }, () => ({
-        x: (Math.random() - 0.5) * 460,
-        y: (Math.random() - 0.5) * 340,
-        rotate: (Math.random() - 0.5) * 300,
-        rotateY: (Math.random() - 0.5) * 300,
-        delay: Math.random() * 0.3,
-        size: 12 + Math.random() * 26,
-      })),
-    [],
-  )
-
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center" style={{ perspective: 800 }}>
-      {shards.map((s, i) => (
-        <motion.div
-          key={i}
-          className="absolute rounded-[2px] border border-[#f4b400]/70 bg-gradient-to-br from-[#ffd75e]/85 to-[#f4b400]/35"
-          style={{ width: s.size, height: s.size, transformStyle: 'preserve-3d' }}
-          initial={{ x: s.x, y: s.y, rotate: s.rotate, rotateY: s.rotateY, opacity: 0, scale: 0.5 }}
-          animate={{
-            x: 0,
-            y: 0,
-            rotate: 0,
-            rotateY: 0,
-            opacity: [0, 1, 1, 0],
-            scale: [0.5, 1, 1, 0.6],
-          }}
-          transition={{ duration: 1, delay: s.delay, times: [0, 0.55, 0.8, 1], ease: [0.2, 0.8, 0.2, 1] }}
-        />
-      ))}
-      <motion.div
-        className="absolute size-20 rounded-full bg-[#fff7e8]"
-        initial={{ opacity: 0, scale: 0.25 }}
-        animate={{ opacity: [0, 0, 0.95, 0], scale: [0.25, 0.25, 2, 2.8] }}
-        transition={{ duration: 1.25, times: [0, 0.72, 0.86, 1], ease: 'easeOut' }}
-        onAnimationComplete={onDone}
-      />
-    </div>
-  )
-}
-
-/** #2 — the plaque is forged out of thin air: a burst of gold shards flies in from every
- * direction under real 3D depth and slams together into the winner's card, capped by a
- * flash — a full replacement for the earlier "mini curtain" mechanic, aiming for a genuine
- * "wahou" beat of its own rather than a gentler variant of #1's spotlight. */
-function ForgeRevealVariant({ winner, runners, onRevealed }: RevealVariantProps) {
-  const [revealed, setRevealed] = useState(false)
-  const [showRunners, setShowRunners] = useState(false)
-  const fireOnce = useFireOnce(onRevealed)
-
-  useEffect(() => {
-    if (!revealed) return
-    const t1 = runners.length > 0 ? setTimeout(() => setShowRunners(true), 750) : undefined
-    const t2 = setTimeout(fireOnce, 550)
-    return () => {
-      if (t1) clearTimeout(t1)
-      clearTimeout(t2)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealed])
-
-  return (
-    <div className="relative flex min-h-52 flex-col items-center justify-center gap-4">
-      {!revealed && <ForgeBeat onDone={() => setRevealed(true)} />}
-      {revealed ? (
-        <>
-          <PlaqueCard
-            firstName={winner.firstName}
-            lastName={winner.lastName}
-            detail={`${winner.value} ${pluralize('vote', winner.value)}`}
-            crown
-            tiltIn
-            shine
-          />
-          <RunnersUpList runners={runners} show={showRunners} />
-        </>
-      ) : (
-        <p className="animate-pulse text-[11px] tracking-[0.3em] text-white/35 uppercase">
-          Ça se forge…
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** #3 — a card flips in 3D from a "?" silhouette face to the winner's plaque, like a name
- * card turned over at the table — with a little hesitation wobble first (as if weighing the
- * decision) before it commits to the actual flip, and a shine once it lands face-up. */
-const FLIP_DURATION_S = 0.8
-
-/** #3 — a card flips in 3D from a "?" silhouette face to the winner's plaque, like a name
- * card turned over at the table — with a little hesitation wobble first (as if weighing the
- * decision) before it commits to the actual flip, and a shine once it lands face-up.
- *
- * This deliberately does NOT rely on CSS `backface-visibility` to hide the non-facing side —
- * an earlier version stacked both faces absolutely and let `backface-visibility: hidden` cull
- * whichever one was turned away, which is the textbook technique but turned out to render
- * see-through in practice: once the plaque underneath has its own rounded corners, shadow and
- * shine sweep, that combination is a known trigger for browsers/GPUs to stop culling the
- * hidden face correctly, so the front face kept bleeding through, mirrored, behind the back
- * one. Instead only ONE face is ever mounted, and it's swapped for the other at the exact
- * midpoint of the 0→180° rotation — the moment the card is edge-on and genuinely invisible
- * either way, so the swap itself can't be seen. The mounted face carries its own fixed
- * rotateY(180deg) once it's the back face, cancelling the parent's spin so it lands
- * right-side up — ordinary transform math, nothing that depends on a face-culling feature. */
-function FlipRevealVariant({ winner, runners, onRevealed }: RevealVariantProps) {
-  const [phase, setPhase] = useState<'idle' | 'wobble' | 'flip'>('idle')
-  const [showBack, setShowBack] = useState(false)
-  const [showRunners, setShowRunners] = useState(false)
-  const fireOnce = useFireOnce(onRevealed)
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setPhase('wobble'), 500)
-    const t2 = setTimeout(() => setPhase('flip'), 1500)
+    const t1 = setTimeout(() => setSpinning(true), 250)
+    const t2 = setTimeout(() => {
+      setNameShown(true)
+      fireOnce()
+    }, 2500)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    if (phase !== 'flip') return
-    // Swap faces at the halfway point of the rotation — both faces are edge-on and
-    // invisible there, so the content change is imperceptible.
-    const tSwap = setTimeout(() => setShowBack(true), (FLIP_DURATION_S * 1000) / 2)
-    const t1 = runners.length > 0 ? setTimeout(() => setShowRunners(true), 950) : undefined
-    const t2 = setTimeout(fireOnce, 800)
-    return () => {
-      clearTimeout(tSwap)
-      if (t1) clearTimeout(t1)
-      clearTimeout(t2)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
-
   return (
-    <div className="flex min-h-52 flex-col items-center justify-center gap-4">
-      <div style={{ perspective: 1200 }}>
-        <motion.div
-          className="relative w-64"
-          style={{ transformStyle: 'preserve-3d' }}
-          animate={
-            phase === 'flip'
-              ? { rotateY: 180, rotateX: 0 }
-              : phase === 'wobble'
-                ? { rotateY: [0, -14, 10, -7, 4, 0], rotateX: [0, 3, -2, 1, 0] }
-                : { rotateY: 0, rotateX: 0 }
-          }
-          transition={
-            phase === 'flip'
-              ? { duration: FLIP_DURATION_S, ease: [0.45, 0, 0.15, 1] }
-              : { duration: 0.95, ease: 'easeInOut' }
+    <div className="flex flex-col items-center gap-1">
+      <motion.div
+        className="h-64 w-64"
+        initial={{ opacity: 0, scale: 0.82, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.85, ease: [0.2, 0.8, 0.2, 1] }}
+      >
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <Trophy className="size-12 animate-pulse text-[#f4b400]/40" />
+            </div>
           }
         >
-          {!showBack ? (
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-[#f4b400]/40 bg-gradient-to-b from-white/[0.05] to-white/[0.01] px-8 py-7 text-center">
-              <span className="flex size-20 items-center justify-center rounded-full border-2 border-dashed border-[#f4b400]/40 text-3xl text-[#f4b400]/60">
-                ?
-              </span>
-              <p className="text-sm tracking-wide text-white/40">Qui est-ce…</p>
-            </div>
-          ) : (
-            <div style={{ transform: 'rotateY(180deg)' }}>
-              <PlaqueCard
-                firstName={winner.firstName}
-                lastName={winner.lastName}
-                detail={`${winner.value} ${pluralize('vote', winner.value)}`}
-                crown
-                compact
-                shine
-                staticCard
-              />
-            </div>
-          )}
-        </motion.div>
-      </div>
-      {phase !== 'flip' && (
-        <p className="animate-pulse text-[11px] tracking-[0.3em] text-white/35 uppercase">Suspense…</p>
-      )}
-      <RunnersUpList runners={runners} show={showRunners} />
-    </div>
-  )
-}
-
-/** #4 — the plaque sits ready with the avatar already in place, and the engraver works
- * through a little three-beat sequence right on the plaque itself: first the vote count gets
- * carved in, then — a wink at the room — the start of the *runner-up*'s name, held just long
- * enough to read as a genuine fake-out, then scraped away and re-carved with the real
- * winner. Only single-candidate categories skip straight to the real name. The crown and
- * frame drop in with a 3D tilt first, so there's a beat of "something is about to happen"
- * before the engraving itself starts. */
-function EngraveRevealVariant({ winner, runners, onRevealed }: RevealVariantProps) {
-  const [engraving, setEngraving] = useState(false)
-  const [carved, setCarved] = useState(false)
-  const [showRunners, setShowRunners] = useState(false)
-  const fireOnce = useFireOnce(onRevealed)
-  const runnerUp = runners[0]
-
-  const stages: EngraveStage[] = useMemo(() => {
-    const list: EngraveStage[] = [{ text: `${winner.value} ${pluralize('vote', winner.value)}`, holdMs: 650 }]
-    if (runnerUp) {
-      const teaseLen = Math.min(4, runnerUp.firstName.length)
-      list.push({ text: `${runnerUp.firstName.slice(0, teaseLen)}…`, holdMs: 500 })
-    }
-    list.push({ text: `${winner.firstName} ${winner.lastName}` })
-    return list
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  const finalStage = stages.length - 1
-  // The avatar (initials, real colour) gives the winner away just as much as the name does —
-  // stays masked behind a "?" silhouette through the vote-count and runner-up fake-out
-  // stages, and only reveals in lockstep with the real name's stage starting, not a beat
-  // after — matches the wink-then-payoff timing of the text itself.
-  const [identityStage, setIdentityStage] = useState(0)
-  const identityRevealed = identityStage >= finalStage
-
-  useEffect(() => {
-    const t = setTimeout(() => setEngraving(true), 750)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    if (!carved) return
-    const t1 = runners.length > 0 ? setTimeout(() => setShowRunners(true), 550) : undefined
-    const t2 = setTimeout(fireOnce, 450)
-    return () => {
-      if (t1) clearTimeout(t1)
-      clearTimeout(t2)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carved])
-
-  return (
-    <div className="flex min-h-52 flex-col items-center justify-center gap-4">
-      <PlaqueCard
-        firstName={winner.firstName}
-        lastName={winner.lastName}
-        detail={carved ? `${winner.value} ${pluralize('vote', winner.value)}` : undefined}
-        crown
-        compact
-        tiltIn
-        shine={carved}
-        avatarRevealed={identityRevealed}
-        nameNode={
-          <EngravedName
-            stages={stages}
-            active={engraving}
-            charMs={85}
-            onStageChange={setIdentityStage}
-            onDone={() => setCarved(true)}
+          <CategoryTrophyScene
+            categoryKey={category.key}
+            spinning={spinning}
+            period={category.season ?? undefined}
+            className="size-full"
           />
-        }
-      />
-      {!engraving && (
-        <p className="animate-pulse text-[11px] tracking-[0.3em] text-white/35 uppercase">
-          La plaque est posée…
-        </p>
-      )}
-      <RunnersUpList runners={runners} show={showRunners} />
-    </div>
-  )
-}
-
-/** #5 — a converging shaft of light rises from the floor under real perspective, and the
- * plaque tilts up out of it into full view (rotating in on the X axis, as though it's being
- * raised toward the viewer rather than just sliding up), like a trophy lifted onto a lit
- * pedestal. */
-function RiseRevealVariant({ winner, runners, onRevealed }: RevealVariantProps) {
-  const [risen, setRisen] = useState(false)
-  const [showRunners, setShowRunners] = useState(false)
-  const fireOnce = useFireOnce(onRevealed)
-
-  useEffect(() => {
-    const t = setTimeout(() => setRisen(true), 1000)
-    return () => clearTimeout(t)
-  }, [])
-
-  useEffect(() => {
-    if (!risen) return
-    const t1 = runners.length > 0 ? setTimeout(() => setShowRunners(true), 950) : undefined
-    const t2 = setTimeout(fireOnce, 750)
-    return () => {
-      if (t1) clearTimeout(t1)
-      clearTimeout(t2)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [risen])
-
-  return (
-    <div
-      className="relative flex min-h-52 flex-col items-center justify-center gap-4 overflow-hidden"
-      style={{ perspective: 700 }}
-    >
-      <motion.div
-        className="pointer-events-none absolute bottom-0 left-1/2 w-48 -translate-x-1/2"
-        style={{
-          background: 'linear-gradient(to top, rgba(244,180,0,0.4), transparent)',
-          clipPath: 'polygon(38% 100%, 62% 100%, 100% 0%, 0% 0%)',
-        }}
-        initial={{ height: 0, opacity: 0 }}
-        animate={{ height: risen ? 280 : 0, opacity: risen ? 1 : 0 }}
-        transition={{ duration: 1.1, ease: 'easeOut' }}
-      />
-      <motion.div
-        style={{ transformStyle: 'preserve-3d' }}
-        initial={{ y: 46, opacity: 0, rotateX: 35, scale: 0.85 }}
-        animate={{
-          y: risen ? 0 : 46,
-          opacity: risen ? 1 : 0,
-          rotateX: risen ? 0 : 35,
-          scale: risen ? 1 : 0.85,
-        }}
-        transition={SPRING_POP}
-      >
-        <PlaqueCard
-          firstName={winner.firstName}
-          lastName={winner.lastName}
-          detail={`${winner.value} ${pluralize('vote', winner.value)}`}
-          crown
-          compact
-          shine={risen}
-        />
+        </Suspense>
       </motion.div>
-      {!risen && (
-        <p className="animate-pulse text-[11px] tracking-[0.3em] text-white/35 uppercase">
-          La lumière se lève…
-        </p>
-      )}
-      <RunnersUpList runners={runners} show={showRunners} />
+      <AnimatePresence>
+        {nameShown && (
+          <motion.div
+            className="flex flex-col items-center gap-1"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+          >
+            <p
+              className="text-2xl font-semibold tracking-tight text-white"
+              style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
+            >
+              {winner.firstName} {winner.lastName}
+            </p>
+            <p className="text-sm text-[#f4b400]">
+              {winner.value} {pluralize('vote', winner.value)}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
-
-// As many variants as there are fixed award categories (see fixed-categories.ts on the API
-// side) — keyed off each category's position, so one ceremony never repeats a mechanic.
-const CATEGORY_REVEAL_VARIANTS = [
-  SpotlightRevealVariant,
-  ForgeRevealVariant,
-  FlipRevealVariant,
-  EngraveRevealVariant,
-  RiseRevealVariant,
-]
 
 function CategoryReveal({
   category,
-  index,
   onRevealed,
 }: {
   category: AwardCategory
-  index: number
   onRevealed: () => void
 }) {
   const ranked = useMemo(
@@ -814,15 +242,15 @@ function CategoryReveal({
     )
   }
 
-  const Variant = CATEGORY_REVEAL_VARIANTS[index % CATEGORY_REVEAL_VARIANTS.length]
-
   return (
     <div className="flex flex-col items-center gap-6">
       <SectionLabel>{category.title}</SectionLabel>
-      <Variant winner={ranked[0]} runners={ranked.slice(1)} onRevealed={onRevealed} />
+      <CategoryTrophy3DReveal category={category} winner={ranked[0]} onRevealed={onRevealed} />
+      <RunnersUpList runners={ranked.slice(1)} show />
     </div>
   )
 }
+
 
 /* ------------------------------------------------------------------ *
  *  Factual-stat podium — three lit tiers, built 3rd → 2nd → 1st.      *
@@ -1710,7 +1138,7 @@ export function AwardsCeremony({ season, categories, teamStats, myStats, onDone 
               )}
 
               {step.kind === 'category' && (
-                <CategoryReveal category={step.category} index={step.index} onRevealed={fireBurst} />
+                <CategoryReveal category={step.category} onRevealed={fireBurst} />
               )}
 
               {step.kind === 'rewindIntro' && <RewindIntroCard firstName={myStats?.firstName ?? ''} />}

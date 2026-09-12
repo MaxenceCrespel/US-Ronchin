@@ -236,6 +236,39 @@ export interface MonthlyChallenges {
   mostPresentPlayers: MonthlyChallengeEntry[]
 }
 
+/** One past, fully-settled month the current player topped a stat-based monthly ranking —
+ * GET /stats/my-attendance-trophies ("Assidu du mois") or
+ * /stats/my-training-champion-trophies (most scrimmage points). No vote behind these, unlike
+ * "Joueur du mois" — the winner is just whoever the numbers say, so there's no AwardCategory
+ * row; `value` is the presence count or points that won that month. */
+export interface MonthlyStatTrophy {
+  month: string
+  value: number
+}
+
+/** A stat trophy's winner(s) for the most recently settled month — "who actually won", for
+ * anyone to see, not "did I win" (see MonthlyStatTrophy above). GET
+ * /stats/last-attendance-trophy-winner or /stats/last-training-champion-winner. */
+export interface MonthlyStatTrophyWinner {
+  month: string
+  value: number
+  winners: { userId: string; firstName: string; lastName: string }[]
+}
+
+/** One recent confirmed match's revealed trophy winner(s) — GET
+ * /matches/recent-trophy-winners. `null` for a kind still gated (vote not revealed yet) or
+ * with nothing to show (no defender played that match). */
+export interface MatchTrophyWinners {
+  matchId: string
+  date: string
+  opponent: string
+  homeAway: MatchHomeAway
+  scoreHome: number | null
+  scoreAway: number | null
+  motmWinners: { userId: string; firstName: string; lastName: string }[] | null
+  defenseBossWinners: { userId: string; firstName: string; lastName: string }[] | null
+}
+
 export type BadgeCategory =
   | 'GOALS'
   | 'ASSISTS'
@@ -484,6 +517,32 @@ export interface AwardCategory {
   myVoteUserId: string | null
   totalVotes: number
   results: AwardResultEntry[] | null
+}
+
+/** GET /awards/monthly — the month's fixed categories ("Joueur du mois" today, though the
+ * shape stays a list in case a genuinely new monthly category shows up later), same shape as
+ * AwardCategory (they *are* one each, just keyed differently with a shared "YYYY-MM" season).
+ * `current` is however many of this month's votes are still open; `history` is every past
+ * month's closed rows, most recent first, the trophy case's data source. "Homme du match" and
+ * "Patron de la défense" are voted per match, not here — see MatchTrophyEntry below. */
+export interface MonthlyAward {
+  current: AwardCategory[]
+  history: AwardCategory[]
+}
+
+/** GET /matches/my-trophies — every match the current player has actually won "Homme du
+ * match" or "Patron de la défense" in, for their personal trophy case. `votes` is how many of
+ * that match's votes went to them specifically (not the winning total, in a tie those are the
+ * same number, but this is always this player's own count). */
+export interface MatchTrophyEntry {
+  matchId: string
+  kind: 'motm' | 'defense_boss'
+  date: string
+  opponent: string
+  homeAway: MatchHomeAway
+  scoreHome: number | null
+  scoreAway: number | null
+  votes: number
 }
 
 /** One row of the training-scrimmage ranking (GET /training-ranking) — points from

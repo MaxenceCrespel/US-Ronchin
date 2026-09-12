@@ -20,6 +20,7 @@ import { PlayersPage } from '@/features/players/PlayersPage'
 import { MatchesPage } from '@/features/matches/MatchesPage'
 import { MatchDetailPage } from '@/features/matches/MatchDetailPage'
 import { StatsPage } from '@/features/stats/StatsPage'
+import { TrophyCasePage } from '@/features/awards/TrophyCasePage'
 import { ImportMatchPdfPage } from '@/features/pdf-import/ImportMatchPdfPage'
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/edit" element={<EditProfilePage />} />
           <Route path="/profile/badges" element={<BadgesPage />} />
+          <Route path="/profile/trophies" element={<TrophyCasePage />} />
           <Route path="/profile/notifications" element={<NotificationsPage />} />
           <Route path="/profile/password" element={<PasswordPage />} />
 

@@ -29,6 +29,7 @@ import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
 import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
+import { MonthlyAwardCard } from '@/features/awards/MonthlyAwardCard'
 import { StandingsCard } from '@/features/standings/StandingsCard'
 import { fetchMatches } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
@@ -463,6 +464,7 @@ export function StatsPage() {
 
         {myStats && (
           <TabsContent value="mine" className="flex flex-col gap-4">
+            <MonthlyAwardCard />
             <MonthlyChallengesCard />
             <MyStatsCard stats={myStats} />
             {user && (

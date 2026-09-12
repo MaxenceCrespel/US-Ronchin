@@ -1,10 +1,22 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AwardCategory } from './entities/award-category.entity';
 import { AwardVote } from './entities/award-vote.entity';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { getCurrentSeasonLabel } from '../stats/season.util';
+import { MONTHLY_AWARD_KEYS } from './monthly-award.constant';
+import { monthLabelDisplay } from './month.util';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+
+/** The `season` column doubles as a season label ("2026-2027") for the 5 end-of-season
+ * categories and a month label ("2026-09") for the monthly ones — this is the one place that
+ * needs to tell which kind of period it's looking at, to phrase the "results are in" push
+ * appropriately. A season label always has two 4-digit years; a month label one 4-digit year
+ * and a 2-digit month. */
+function isSeasonLabel(period: string): boolean {
+  return /^\d{4}-\d{4}$/.test(period);
+}
 
 export interface AwardResultEntry {
   userId: string;
@@ -42,6 +54,7 @@ export class AwardsService {
     private readonly votesRepository: Repository<AwardVote>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   /** Only this season's categories — AwardsScheduler opens a fresh row per fixed key every
@@ -56,42 +69,75 @@ export class AwardsService {
       this.usersRepository.find(),
     ]);
 
-    return categories.map((category) => {
-      const categoryVotes = votes.filter((v) => v.categoryId === category.id);
-      const myVote = categoryVotes.find((v) => v.voterId === currentUserId);
+    return categories.map((category) => this.buildResponse(category, votes, users, currentUserId));
+  }
 
-      let results: AwardResultEntry[] | null = null;
-      if (!category.isActive) {
-        const counts = new Map<string, number>();
-        for (const vote of categoryVotes) {
-          counts.set(vote.votedForId, (counts.get(vote.votedForId) ?? 0) + 1);
-        }
-        results = [...counts.entries()]
-          .map(([userId, count]) => {
-            const user = users.find((u) => u.id === userId);
-            return {
-              userId,
-              firstName: user?.firstName ?? '?',
-              lastName: user?.lastName ?? '',
-              votes: count,
-            };
-          })
-          .sort((a, b) => b.votes - a.votes);
-      }
+  /** The month's fixed categories ("Joueur du mois") — same category/vote mechanism as the
+   * season awards (see
+   * FIXED_MONTHLY_AWARD_CATEGORIES, opened/closed together every month by
+   * MonthlyAwardScheduler), just scoped by a "YYYY-MM" month instead of a season. `current`
+   * is however many of this month's rows are still open (several at once, normally — they
+   * all open and close together); `history` is every past month's closed rows, most recent
+   * first, each carrying its winner once closed — the trophy case's data source. */
+  async findMonthly(
+    currentUserId: string,
+  ): Promise<{ current: AwardCategoryResponse[]; history: AwardCategoryResponse[] }> {
+    const [categories, users] = await Promise.all([
+      this.categoriesRepository.find({ where: { key: In(MONTHLY_AWARD_KEYS) }, order: { season: 'DESC' } }),
+      this.usersRepository.find(),
+    ]);
+    if (categories.length === 0) return { current: [], history: [] };
 
-      return {
-        id: category.id,
-        key: category.key,
-        title: category.title,
-        season: category.season,
-        isActive: category.isActive,
-        closedAt: category.closedAt,
-        createdAt: category.createdAt,
-        myVoteUserId: myVote?.votedForId ?? null,
-        totalVotes: categoryVotes.length,
-        results,
-      };
+    const votes = await this.votesRepository.find({
+      where: categories.map((c) => ({ categoryId: c.id })),
     });
+
+    const responses = categories.map((category) => this.buildResponse(category, votes, users, currentUserId));
+    const current = responses.filter((r) => r.isActive);
+    const history = responses.filter((r) => !r.isActive);
+    return { current, history };
+  }
+
+  private buildResponse(
+    category: AwardCategory,
+    votes: AwardVote[],
+    users: User[],
+    currentUserId: string,
+  ): AwardCategoryResponse {
+    const categoryVotes = votes.filter((v) => v.categoryId === category.id);
+    const myVote = categoryVotes.find((v) => v.voterId === currentUserId);
+
+    let results: AwardResultEntry[] | null = null;
+    if (!category.isActive) {
+      const counts = new Map<string, number>();
+      for (const vote of categoryVotes) {
+        counts.set(vote.votedForId, (counts.get(vote.votedForId) ?? 0) + 1);
+      }
+      results = [...counts.entries()]
+        .map(([userId, count]) => {
+          const user = users.find((u) => u.id === userId);
+          return {
+            userId,
+            firstName: user?.firstName ?? '?',
+            lastName: user?.lastName ?? '',
+            votes: count,
+          };
+        })
+        .sort((a, b) => b.votes - a.votes);
+    }
+
+    return {
+      id: category.id,
+      key: category.key,
+      title: category.title,
+      season: category.season,
+      isActive: category.isActive,
+      closedAt: category.closedAt,
+      createdAt: category.createdAt,
+      myVoteUserId: myVote?.votedForId ?? null,
+      totalVotes: categoryVotes.length,
+      results,
+    };
   }
 
   async findCategoryById(id: string): Promise<AwardCategory> {
@@ -162,5 +208,20 @@ export class AwardsService {
       category.closedAt = now;
     }
     await this.categoriesRepository.save(activeCategories);
+
+    const recipientIds = roster.map((p) => p.id);
+    if (isSeasonLabel(season)) {
+      await this.pushNotificationsService.sendToUsers(recipientIds, {
+        title: 'Trophées de la saison dévoilés',
+        body: `Les résultats des trophées de fin de saison ${season} sont prêts — viens découvrir qui a gagné !`,
+        url: '/',
+      });
+    } else {
+      await this.pushNotificationsService.sendToUsers(recipientIds, {
+        title: 'Joueur du mois dévoilé',
+        body: `Viens découvrir si tu as été élu Joueur du mois de ${monthLabelDisplay(season)} !`,
+        url: '/',
+      });
+    }
   }
 }

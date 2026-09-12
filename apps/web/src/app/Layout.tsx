@@ -11,7 +11,11 @@ import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
 import { AwardsCeremonyWatcher } from '@/features/awards/AwardsCeremonyWatcher'
+import { MonthlyTrophyUnlockWatcher } from '@/features/awards/MonthlyTrophyUnlockWatcher'
+import { MatchTrophyUnlockWatcher } from '@/features/matches/MatchTrophyUnlockWatcher'
+import { TrophySnapshotHost } from '@/features/awards/TrophySnapshot'
 import { OnboardingTour } from '@/components/OnboardingTour'
+import { TrophyFeatureTour } from '@/components/TrophyFeatureTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
 
@@ -56,7 +60,11 @@ export function Layout() {
       <BadgeUnlockWatcher />
       <MandatoryVotePopup />
       <AwardsCeremonyWatcher />
+      <MonthlyTrophyUnlockWatcher />
+      <MatchTrophyUnlockWatcher />
+      <TrophySnapshotHost />
       <OnboardingTour />
+      <TrophyFeatureTour />
 
       {sidebarOpen && (
         <div

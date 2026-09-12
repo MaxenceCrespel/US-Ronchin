@@ -38,6 +38,16 @@ export class MatchesController {
     return this.matchesService.findAll();
   }
 
+  @Get('my-trophies')
+  getMyMatchTrophies(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.matchesService.getMyMatchTrophies(currentUser.id);
+  }
+
+  @Get('recent-trophy-winners')
+  getRecentMatchTrophyWinners() {
+    return this.matchesService.getRecentMatchTrophyWinners();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.matchesService.findById(id);

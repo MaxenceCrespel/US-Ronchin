@@ -1,8 +1,13 @@
 import { apiClient } from '@/lib/api-client'
-import type { AwardCategory } from '@/lib/types'
+import type { AwardCategory, MonthlyAward } from '@/lib/types'
 
 export async function fetchAwardCategories(): Promise<AwardCategory[]> {
   const { data } = await apiClient.get<AwardCategory[]>('/awards/categories')
+  return data
+}
+
+export async function fetchMonthlyAward(): Promise<MonthlyAward> {
+  const { data } = await apiClient.get<MonthlyAward>('/awards/monthly')
   return data
 }
 
