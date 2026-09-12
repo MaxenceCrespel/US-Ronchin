@@ -45,6 +45,7 @@ function buildWin(params: {
   return {
     id,
     categoryKey,
+    month,
     label,
     period: monthLabelDisplay(month).toUpperCase(),
     headline,

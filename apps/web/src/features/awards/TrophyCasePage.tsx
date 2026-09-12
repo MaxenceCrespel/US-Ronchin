@@ -31,6 +31,9 @@ interface WonTrophy {
   metric: string
   period?: string
   detail: string
+  /** "2026-09" — only present on monthly wins, used to filter/sort by season before display;
+   * stripped off before a trophy actually reaches a shelf (see monthlyWon below). */
+  month?: string
 }
 
 // Always at least this many shelf slots, filled or not — a single trophy sitting alone in an
@@ -391,8 +394,10 @@ export function TrophyCasePage() {
 
   // "Joueur du mois" (voted) plus the two auto-computed stat trophies (no vote behind them,
   // just whoever the numbers say — see stats.service.ts) all share this one shelf: they're
-  // all monthly, just with different sources feeding the same WonTrophy shape.
-  const votedMonthlyWon: WonTrophy[] = (monthlyQuery.data?.history ?? [])
+  // all monthly, just with different sources feeding the same WonTrophy shape. `month` is
+  // required here (unlike on WonTrophy itself) so the season filter/sort below can rely on it
+  // before it gets stripped off ahead of display.
+  const votedMonthlyWon: (WonTrophy & { month: string })[] = (monthlyQuery.data?.history ?? [])
     .filter((c) => c.results && c.results[0]?.userId === user?.id)
     .map((c) => ({
       id: c.id,
@@ -424,7 +429,9 @@ export function TrophyCasePage() {
     month: t.month,
   }))
 
-  const monthlyWon: WonTrophy[] = [...votedMonthlyWon, ...attendanceWon, ...trainingChampionWon]
+  const monthlyWon: WonTrophy[] = ([...votedMonthlyWon, ...attendanceWon, ...trainingChampionWon] as (WonTrophy & {
+    month: string
+  })[])
     .filter((t) => !!currentSeason && isMonthInSeason(t.month, currentSeason))
     // oldest first, grouped by category — the shelf reads as a timeline within each
     // category rather than interleaving three different trophies month by month.

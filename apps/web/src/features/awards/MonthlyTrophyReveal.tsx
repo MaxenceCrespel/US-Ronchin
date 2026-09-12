@@ -14,6 +14,8 @@ const CategoryTrophyScene = lazy(() =>
 export interface MonthlyTrophyWin {
   id: string
   categoryKey: string
+  /** "2026-09" — the raw month label, used to dedupe/identify this win (see monthly-trophy-seen.ts). */
+  month: string
   /** Eyebrow label above the trophy — the category name, e.g. "Joueur du mois". */
   label: string
   /** "SEPTEMBRE 2026" — engraved on the plaque, same as the trophy case's own month wins. */
