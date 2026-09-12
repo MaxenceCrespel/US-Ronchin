@@ -57,6 +57,7 @@ import { VoteProgress } from './VoteProgress'
 import type {
   AttendanceStatus,
   GoalType,
+  Match,
   MatchEventType,
   MatchHomeAway,
 } from '@/lib/types'
@@ -286,6 +287,27 @@ function RatingSlider({
   )
 }
 
+/** One line per fact instead of a single run-on "date · heure · compétition · Domicile · lieu
+ * · pelouse" sentence — that used to wrap wherever the browser felt like mid-phrase, unreadable
+ * once a scraped FFF venue address made the string long. Each fact now gets its own line and
+ * wraps on its own terms, so a phone-width column stays scannable. */
+function MatchMetaLines({ match }: { match: Match }) {
+  return (
+    <CardDescription className="flex flex-col gap-1.5">
+      <span className="text-foreground/90 text-sm font-semibold capitalize">
+        {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
+        {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`}
+      </span>
+      {match.competition && <span>{match.competition}</span>}
+      <span>
+        {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
+        {match.venue && ` · ${match.venue}`}
+      </span>
+      {match.surface && <span>{match.surface}</span>}
+    </CardDescription>
+  )
+}
+
 export function MatchDetailPage() {
   const { id } = useParams<{ id: string }>()
   const matchId = id!
@@ -321,6 +343,7 @@ export function MatchDetailPage() {
   const [editKickOffTime, setEditKickOffTime] = useState('')
   const [editHomeAway, setEditHomeAway] = useState<MatchHomeAway>('HOME')
   const [editVenue, setEditVenue] = useState('')
+  const [editSurface, setEditSurface] = useState<string>('unspecified')
 
   useEffect(() => {
     if (matchQuery.data) {
@@ -329,6 +352,7 @@ export function MatchDetailPage() {
       setEditKickOffTime(matchQuery.data.kickOffTime?.slice(0, 5) ?? '')
       setEditHomeAway(matchQuery.data.homeAway)
       setEditVenue(matchQuery.data.venue ?? '')
+      setEditSurface(matchQuery.data.surface ?? 'unspecified')
     }
   }, [matchQuery.data])
 
@@ -340,6 +364,7 @@ export function MatchDetailPage() {
         kickOffTime: editKickOffTime || undefined,
         homeAway: editHomeAway,
         venue: editVenue || undefined,
+        surface: editSurface === 'unspecified' ? undefined : editSurface,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['match', matchId] })
@@ -845,14 +870,7 @@ export function MatchDetailPage() {
               )}
             </div>
           </CardTitle>
-          <CardDescription className="capitalize">
-            {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
-            {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`}
-            {match.competition && ` · ${match.competition}`}
-            {' · '}
-            {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
-            {match.venue && ` · ${match.venue}`}
-          </CardDescription>
+          <MatchMetaLines match={match} />
         </CardHeader>
         {editingMatch && (
           <CardContent>
@@ -913,6 +931,19 @@ export function MatchDetailPage() {
                   value={editVenue}
                   onChange={(e) => setEditVenue(e.target.value)}
                 />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label>Type de pelouse (optionnel)</Label>
+                <Select value={editSurface} onValueChange={setEditSurface}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unspecified">Non précisé</SelectItem>
+                    <SelectItem value="Pelouse Naturelle">Naturelle</SelectItem>
+                    <SelectItem value="Synthétique">Synthétique</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2 sm:col-span-2">
                 <Button type="submit" size="sm" disabled={updateMatchMutation.isPending}>
@@ -2000,14 +2031,7 @@ export function MatchDetailPage() {
             {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
           </Badge>
         </CardTitle>
-        <CardDescription className="capitalize">
-          {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
-          {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`}
-          {match.competition && ` · ${match.competition}`}
-          {' · '}
-          {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
-          {match.venue && ` · ${match.venue}`}
-        </CardDescription>
+        <MatchMetaLines match={match} />
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <p className="flex items-center gap-3 text-3xl font-bold">

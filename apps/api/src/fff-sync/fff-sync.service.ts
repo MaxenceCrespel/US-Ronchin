@@ -51,16 +51,27 @@ export class FffSyncService {
           existing.kickOffTime = scraped.kickOffTime;
           existing.opponent = scraped.opponent;
           existing.homeAway = scraped.homeAway as Match['homeAway'];
-          existing.venue = scraped.venue ?? existing.venue;
           existing.competition = scraped.competition ?? existing.competition;
           if (scraped.played) {
             existing.scoreHome = scraped.scoreHome;
             existing.scoreAway = scraped.scoreAway;
             existing.status = 'PLAYED' as Match['status'];
           }
+          // The calendar list never carries a venue or surface at all (see scrapeVenue's own
+          // doc comment) — only fetch them, a whole extra page load, the first time this match
+          // is missing either, not on every weekly resync of values that never change
+          // mid-season.
+          if ((!existing.venue || !existing.surface) && scraped.matchDetailUrl) {
+            const detail = await this.scraperService.scrapeVenue(scraped.matchDetailUrl);
+            existing.venue = detail?.venue ?? existing.venue;
+            existing.surface = detail?.surface ?? existing.surface;
+          }
           await this.matchesRepository.save(existing);
           updated += 1;
         } else {
+          const detail = scraped.matchDetailUrl
+            ? await this.scraperService.scrapeVenue(scraped.matchDetailUrl)
+            : null;
           const match = this.matchesRepository.create({
             source: MatchSource.OFFICIAL_FFF,
             fffMatchId: scraped.fffMatchId,
@@ -68,7 +79,8 @@ export class FffSyncService {
             kickOffTime: scraped.kickOffTime,
             opponent: scraped.opponent,
             homeAway: scraped.homeAway as Match['homeAway'],
-            venue: scraped.venue,
+            venue: detail?.venue ?? scraped.venue,
+            surface: detail?.surface ?? null,
             competition: scraped.competition,
             scoreHome: scraped.played ? scraped.scoreHome : null,
             scoreAway: scraped.played ? scraped.scoreAway : null,

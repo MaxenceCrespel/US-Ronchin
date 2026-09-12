@@ -53,6 +53,12 @@ export class Match {
   @Column({ type: 'varchar', nullable: true })
   venue: string | null;
 
+  /** e.g. "Pelouse Naturelle"/"Pelouse Synthétique" — only ever known for an OFFICIAL_FFF
+   * match (see FffScraperService.scrapeVenue), scraped from the same match-detail page as the
+   * venue itself; a friendly match has nowhere to source this from, so it just stays null. */
+  @Column({ type: 'varchar', nullable: true })
+  surface: string | null;
+
   @Column({ name: 'score_home', type: 'int', nullable: true })
   scoreHome: number | null;
 

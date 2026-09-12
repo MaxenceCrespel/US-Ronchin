@@ -26,6 +26,10 @@ export class CreateMatchDto {
   venue?: string;
 
   @IsOptional()
+  @IsString()
+  surface?: string;
+
+  @IsOptional()
   @IsEnum(MatchSource)
   source?: MatchSource;
 

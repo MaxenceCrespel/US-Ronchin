@@ -158,6 +158,9 @@ export interface Match {
   homeAway: MatchHomeAway
   competition: string | null
   venue: string | null
+  /** e.g. "Pelouse Naturelle"/"Pelouse Synthétique" — only ever known for an OFFICIAL_FFF
+   * match, scraped alongside the venue itself; null for a friendly. */
+  surface: string | null
   scoreHome: number | null
   scoreAway: number | null
   status: MatchStatus

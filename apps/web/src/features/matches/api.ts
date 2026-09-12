@@ -46,6 +46,7 @@ export interface CreateMatchInput {
   homeAway: MatchHomeAway
   competition?: string
   venue?: string
+  surface?: string
   source?: MatchSource
   fffMatchId?: string
 }
@@ -62,6 +63,7 @@ export interface UpdateMatchInput {
   homeAway?: MatchHomeAway
   competition?: string
   venue?: string
+  surface?: string
   scoreHome?: number
   scoreAway?: number
   status?: MatchStatus

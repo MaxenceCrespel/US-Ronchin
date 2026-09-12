@@ -1,6 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Trophy } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useQuery } from '@tanstack/react-query'
+import { Trophy } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -13,12 +12,14 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
-import { fetchStandings, fetchStandingsLogs, syncStandings } from './api'
+import { fetchStandings, fetchStandingsLogs } from './api'
 
+// Read-only status now — the sync itself fires automatically (saving the FFF URL in
+// Paramètres, and every Monday via fff-weekly-sync.scheduler.ts), so there's nothing left to
+// manually trigger from here.
 export function StandingsCard() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
-  const queryClient = useQueryClient()
 
   const standingsQuery = useQuery({ queryKey: ['standings'], queryFn: fetchStandings })
   const logsQuery = useQuery({
@@ -27,36 +28,15 @@ export function StandingsCard() {
     enabled: isCoach,
   })
 
-  const syncMutation = useMutation({
-    mutationFn: syncStandings,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['standings'] })
-      queryClient.invalidateQueries({ queryKey: ['standings-logs'] })
-    },
-  })
-
   const lastLog = logsQuery.data?.[0]
   const standings = standingsQuery.data ?? []
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-          <span className="flex items-center gap-2">
-            <Trophy className="text-club-gold size-4" />
-            Classement du championnat
-          </span>
-          {isCoach && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={syncMutation.isPending}
-              onClick={() => syncMutation.mutate()}
-            >
-              <RefreshCw className={syncMutation.isPending ? 'size-4 animate-spin' : 'size-4'} />
-              Synchroniser
-            </Button>
-          )}
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Trophy className="text-club-gold size-4" />
+          Classement du championnat
         </CardTitle>
         {isCoach && lastLog && (
           <CardDescription className="text-xs">

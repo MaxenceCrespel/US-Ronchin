@@ -464,8 +464,6 @@ export function StatsPage() {
 
         {myStats && (
           <TabsContent value="mine" className="flex flex-col gap-4">
-            <MonthlyAwardCard />
-            <MonthlyChallengesCard />
             <MyStatsCard stats={myStats} />
             {user && (
               <Card>
@@ -492,6 +490,8 @@ export function StatsPage() {
         </TabsContent>
 
         <TabsContent value="team" className="flex flex-col gap-4">
+          <MonthlyAwardCard />
+          <MonthlyChallengesCard />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Leaderboard
               title="Meilleurs buteurs"

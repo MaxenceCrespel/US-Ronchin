@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarX2, ChevronLeft, ChevronRight, FileUp, RefreshCw } from 'lucide-react'
+import { CalendarX2, ChevronLeft, ChevronRight, FileUp } from 'lucide-react'
 import { addMonths, format, isSameMonth, startOfMonth, subMonths } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -34,7 +34,7 @@ import {
   MATCH_CATEGORY_LABELS,
 } from '@/lib/match-category'
 import { createMatch, fetchMatchAttendance, fetchMatches, fetchMotm } from './api'
-import { fetchFffSyncLogs, runFffSync } from '@/features/settings/api'
+import { fetchFffSyncLogs } from '@/features/settings/api'
 import { VoteProgress } from './VoteProgress'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
 
@@ -47,46 +47,25 @@ function formatDate(date: string) {
   })
 }
 
+// Read-only status now — the sync itself fires automatically (saving the FFF URL in
+// Paramètres, and every Monday via fff-weekly-sync.scheduler.ts), so there's nothing left to
+// manually trigger from here.
 function FffSyncStatus() {
-  const queryClient = useQueryClient()
   const logsQuery = useQuery({
     queryKey: ['fff-sync-logs'],
     queryFn: () => fetchFffSyncLogs(1),
   })
 
-  const syncMutation = useMutation({
-    mutationFn: runFffSync,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fff-sync-logs'] })
-      queryClient.invalidateQueries({ queryKey: ['matches'] })
-    },
-  })
-
   const lastLog = logsQuery.data?.[0]
+  if (!lastLog) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={syncMutation.isPending}
-        onClick={() => syncMutation.mutate()}
-      >
-        <RefreshCw className={syncMutation.isPending ? 'size-4 animate-spin' : 'size-4'} />
-        Synchroniser le calendrier FFF
-      </Button>
-      {syncMutation.isError && (
-        <span className="text-destructive text-xs">Échec du déclenchement de la synchro.</span>
-      )}
-      {!syncMutation.isPending && lastLog && (
-        <span className="text-muted-foreground text-xs">
-          Dernière synchro : {new Date(lastLog.runAt).toLocaleString('fr-FR')} —{' '}
-          {lastLog.status === 'SUCCESS'
-            ? `${lastLog.matchesCreated} créés, ${lastLog.matchesUpdated} mis à jour`
-            : `échec (${lastLog.errorMessage})`}
-        </span>
-      )}
-    </div>
+    <span className="text-muted-foreground text-xs">
+      Dernière synchro FFF : {new Date(lastLog.runAt).toLocaleString('fr-FR')} —{' '}
+      {lastLog.status === 'SUCCESS'
+        ? `${lastLog.matchesCreated} créés, ${lastLog.matchesUpdated} mis à jour`
+        : `échec (${lastLog.errorMessage})`}
+    </span>
   )
 }
 
@@ -97,14 +76,21 @@ export function MatchesPage() {
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
 
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()))
+  // `fetchMatches` returns rows in whatever order the DB/scraper happened to create or update
+  // them in (e.g. a resync touches whichever matches FFF listed that day, not in date order) —
+  // sorting here is what actually puts them on the calendar in the order they'll be played.
+  const sortKey = (m: { date: string; kickOffTime: string | null }) => `${m.date}T${m.kickOffTime ?? '00:00'}`
   const monthMatches = useMemo(() => {
-    return (matchesQuery.data ?? []).filter((m) =>
-      isSameMonth(new Date(`${m.date}T00:00:00`), selectedMonth),
-    )
+    return (matchesQuery.data ?? [])
+      .filter((m) => isSameMonth(new Date(`${m.date}T00:00:00`), selectedMonth))
+      .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
   }, [matchesQuery.data, selectedMonth])
 
+  // Soonest-first for what's coming up; most-recent-first for what's already been played —
+  // same convention as a real fixture list, and why these are sorted separately rather than
+  // just splitting the single chronological `monthMatches` array in two.
   const playedMonthMatches = useMemo(
-    () => monthMatches.filter((m) => m.status === 'PLAYED'),
+    () => monthMatches.filter((m) => m.status === 'PLAYED').slice().reverse(),
     [monthMatches],
   )
   // One MOTM lookup per played match this month — bounded to a handful of cards, cheap
@@ -140,18 +126,108 @@ export function MatchesPage() {
   const [opponent, setOpponent] = useState('')
   const [homeAway, setHomeAway] = useState<MatchHomeAway>('HOME')
   const [venue, setVenue] = useState('')
+  // A friendly match has nowhere for the scraper to source this from (it's only ever known
+  // for an OFFICIAL_FFF match, scraped from FFF's own match-detail page) — a manual field here
+  // is the only way it ever gets set for one.
+  const [surface, setSurface] = useState<string>('unspecified')
 
   const createMutation = useMutation({
     mutationFn: () =>
-      createMatch({ date, kickOffTime: kickOffTime || undefined, opponent, homeAway, venue: venue || undefined }),
+      createMatch({
+        date,
+        kickOffTime: kickOffTime || undefined,
+        opponent,
+        homeAway,
+        venue: venue || undefined,
+        surface: surface === 'unspecified' ? undefined : surface,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['matches'] })
       setOpen(false)
       setOpponent('')
       setVenue('')
       setKickOffTime('')
+      setSurface('unspecified')
     },
   })
+
+  function renderMatchCard(match: (typeof monthMatches)[number]) {
+    const category = getMatchCategory(match)
+    return (
+      <Link key={match.id} to={`/matches/${match.id}`}>
+        <Card
+          className={cn(
+            'border-l-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+            MATCH_CATEGORY_BORDER[category],
+          )}
+        >
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <span>⚽ vs {match.opponent}</span>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline">{MATCH_CATEGORY_LABELS[category]}</Badge>
+                <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
+                  {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
+                </Badge>
+              </div>
+            </CardTitle>
+            <p className="text-muted-foreground text-sm capitalize">
+              {formatDate(match.date)}
+              {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`} ·{' '}
+              {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
+            </p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {match.status === 'PLAYED' ? (
+              <p className="animate-pop-in flex items-center gap-2 text-2xl font-semibold">
+                {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
+                <MatchResultBadge match={match} />
+              </p>
+            ) : (
+              <>
+                <p className="text-muted-foreground text-sm">{match.venue ?? 'Lieu à définir'}</p>
+                {(() => {
+                  const attendance = attendanceByMatchId.get(match.id)
+                  if (!attendance) return null
+                  const presentCount = attendance.filter((a) => a.status === 'PRESENT').length
+                  const guestTotal = attendance.reduce((sum, a) => sum + a.guestCount, 0)
+                  if (presentCount === 0 && guestTotal === 0) return null
+                  return (
+                    <p className="text-muted-foreground text-xs">
+                      {presentCount} joueur{presentCount > 1 ? 's' : ''}
+                      {guestTotal > 0 && (
+                        <>
+                          {' '}
+                          + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
+                        </>
+                      )}
+                      {' = '}
+                      <strong className="text-foreground">
+                        {presentCount + guestTotal} sur le terrain
+                      </strong>
+                    </p>
+                  )
+                })()}
+              </>
+            )}
+            {(() => {
+              const motm = motmByMatchId.get(match.id)
+              if (!motm || motm.revealed || motm.totalPlayers === 0) return null
+              return (
+                <VoteProgress
+                  totalVotes={motm.totalVotes}
+                  totalPlayers={motm.totalPlayers}
+                  votingClosesAt={motm.votingClosesAt}
+                  barClassName={MATCH_CATEGORY_FILL[category]}
+                  compact
+                />
+              )
+            })()}
+          </CardContent>
+        </Card>
+      </Link>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -227,6 +303,19 @@ export function MatchesPage() {
                   <Label htmlFor="venue">Lieu (optionnel)</Label>
                   <Input id="venue" value={venue} onChange={(e) => setVenue(e.target.value)} />
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Type de pelouse (optionnel)</Label>
+                  <Select value={surface} onValueChange={setSurface}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unspecified">Non précisé</SelectItem>
+                      <SelectItem value="Pelouse Naturelle">Naturelle</SelectItem>
+                      <SelectItem value="Synthétique">Synthétique</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button type="submit" disabled={createMutation.isPending}>
                   {createMutation.isPending ? 'Création...' : 'Créer le match'}
                 </Button>
@@ -277,87 +366,28 @@ export function MatchesPage() {
           Aucun match ce mois-ci.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {monthMatches.map((match) => {
-            const category = getMatchCategory(match)
-            return (
-              <Link key={match.id} to={`/matches/${match.id}`}>
-                <Card
-                  className={cn(
-                    'border-l-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-                    MATCH_CATEGORY_BORDER[category],
-                  )}
-                >
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between gap-2 text-base">
-                      <span>⚽ vs {match.opponent}</span>
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="outline">{MATCH_CATEGORY_LABELS[category]}</Badge>
-                        <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
-                          {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
-                        </Badge>
-                      </div>
-                    </CardTitle>
-                    <p className="text-muted-foreground text-sm capitalize">
-                      {formatDate(match.date)}
-                      {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`} ·{' '}
-                      {match.homeAway === 'HOME' ? 'Domicile' : 'Extérieur'}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-3">
-                    {match.status === 'PLAYED' ? (
-                      <p className="animate-pop-in flex items-center gap-2 text-2xl font-semibold">
-                        {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
-                        <MatchResultBadge match={match} />
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-muted-foreground text-sm">
-                          {match.venue ?? 'Lieu à définir'}
-                        </p>
-                        {(() => {
-                          const attendance = attendanceByMatchId.get(match.id)
-                          if (!attendance) return null
-                          const presentCount = attendance.filter((a) => a.status === 'PRESENT').length
-                          const guestTotal = attendance.reduce((sum, a) => sum + a.guestCount, 0)
-                          if (presentCount === 0 && guestTotal === 0) return null
-                          return (
-                            <p className="text-muted-foreground text-xs">
-                              {presentCount} joueur{presentCount > 1 ? 's' : ''}
-                              {guestTotal > 0 && (
-                                <>
-                                  {' '}
-                                  + {guestTotal} invité{guestTotal > 1 ? 's' : ''}
-                                </>
-                              )}
-                              {' = '}
-                              <strong className="text-foreground">
-                                {presentCount + guestTotal} sur le terrain
-                              </strong>
-                            </p>
-                          )
-                        })()}
-                      </>
-                    )}
-                    {(() => {
-                      const motm = motmByMatchId.get(match.id)
-                      if (!motm || motm.revealed || motm.totalPlayers === 0) return null
-                      return (
-                        <VoteProgress
-                          totalVotes={motm.totalVotes}
-                          totalPlayers={motm.totalPlayers}
-                          votingClosesAt={motm.votingClosesAt}
-                          barClassName={MATCH_CATEGORY_FILL[category]}
-                          compact
-                        />
-                      )
-                    })()}
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
+        <>
+          {upcomingMonthMatches.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+                À venir
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {upcomingMonthMatches.map((match) => renderMatchCard(match))}
+              </div>
+            </div>
+          )}
+          {playedMonthMatches.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+                Joués
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {playedMonthMatches.map((match) => renderMatchCard(match))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

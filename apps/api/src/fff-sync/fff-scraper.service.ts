@@ -8,9 +8,24 @@ import type { ScrapedStanding } from './scraped-standing';
 
 chromium.use(StealthPlugin());
 
-function deriveStandingsUrl(teamUrl: string): string | null {
+// The configured setting only needs to be the team's base page
+// (".../equipe/{code}") — whatever tab the coach happened to copy the link from
+// (/resultat-calendrier, /statistiques, /saison, /classement, or no suffix at all) is stripped
+// back down to that base here, then the specific tab each scraper actually needs is appended,
+// rather than requiring the coach to paste one exact URL shape.
+function deriveBaseUrl(teamUrl: string): string | null {
   const match = /^(https?:\/\/.+\/equipe\/[^/]+)(?:\/.*)?$/.exec(teamUrl.replace(/\/$/, ''));
-  return match ? `${match[1]}/classement` : null;
+  return match ? match[1] : null;
+}
+
+function deriveMatchesUrl(teamUrl: string): string | null {
+  const base = deriveBaseUrl(teamUrl);
+  return base ? `${base}/resultat-calendrier` : null;
+}
+
+function deriveStandingsUrl(teamUrl: string): string | null {
+  const base = deriveBaseUrl(teamUrl);
+  return base ? `${base}/classement` : null;
 }
 
 // Real DOM structure confirmed by rendering an actual epreuves.fff.fr team
@@ -105,7 +120,14 @@ interface RawMatchBlock {
 export class FffScraperService {
   private readonly logger = new Logger(FffScraperService.name);
 
-  async scrapeMatches(teamUrl: string): Promise<ScrapedMatch[]> {
+  async scrapeMatches(configuredUrl: string): Promise<ScrapedMatch[]> {
+    const teamUrl = deriveMatchesUrl(configuredUrl);
+    if (!teamUrl) {
+      throw new Error(
+        "Impossible d'extraire la page de l'équipe à partir de l'URL FFF configurée — " +
+          "elle doit ressembler à https://epreuves.fff.fr/competition/club/{id}-{slug}/equipe/{code}.",
+      );
+    }
     // A real Chrome binary piloted by Playwright still got a hard 403 from
     // Incapsula even though the exact same URL loads fine in a manually
     // driven Chrome tab — that isolates the block to CDP-automation
@@ -210,6 +232,80 @@ export class FffScraperService {
   }
 
   /**
+   * The venue ("stade") — and the pitch surface alongside it — is never exposed on the
+   * calendar list this file otherwise scrapes — confirmed live: `.schedule-match`/`.info-score`
+   * blocks carry the date, teams, competition and score, nothing about where it's played. It
+   * only shows up on each match's own detail page (".../competition/match/{id}-{slug}/match",
+   * exactly `ScrapedMatch.matchDetailUrl`), and even there it isn't in the visible DOM text
+   * either — Angular Universal serializes its API responses into a
+   * `<script id="ng-state" type="application/json">` blob for hydration, and that's genuinely
+   * the cleanest way to read it: `analog_GET|/api/data/matches/{id}` →
+   * `body.donneesFormatees.stade` → `{ nom, adresse: string[], surface }` (all confirmed live
+   * against a real Ronchin fixture — see the match this was built for:
+   * https://epreuves.fff.fr/competition/match/79429367-o-hemois-u-s-ronchin/match). Called
+   * lazily by FffSyncService, only for a match that doesn't already have a venue/surface —
+   * every match needs its own full page load, and most matches keep the same venue and surface
+   * all season, so this would otherwise re-scrape the same unchanging answer every week.
+   */
+  async scrapeVenue(matchDetailUrl: string): Promise<{ venue: string; surface: string | null } | null> {
+    const browser = await chromium.launch({
+      channel: 'chrome',
+      args: ['--disable-blink-features=AutomationControlled'],
+    });
+    try {
+      const context = await browser.newContext({
+        locale: 'fr-FR',
+        timezoneId: 'Europe/Paris',
+        viewport: { width: 1366, height: 900 },
+        extraHTTPHeaders: {
+          'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+      });
+      const page = await context.newPage();
+
+      const response = await page.goto(matchDetailUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      if (!response || !response.ok()) return null;
+      await this.dismissCookieBanner(page);
+      await page.waitForTimeout(1500);
+
+      const raw = await page.$eval('#ng-state', (el) => el.textContent ?? '').catch(() => null);
+      if (!raw) return null;
+
+      let state: Record<string, unknown>;
+      try {
+        state = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+
+      const matchKey = Object.keys(state).find((k) => /^analog_GET\|\/api\/data\/matches\/\d+$/.test(k));
+      if (!matchKey) return null;
+
+      const stade = (state[matchKey] as any)?.body?.donneesFormatees?.stade as
+        | { nom?: string; adresse?: string[]; surface?: string }
+        | undefined;
+      if (!stade?.nom) return null;
+
+      // FFF stores this shouting-caps ("STADE GÉRARD DUBUS 1", "59510 HEM", "PELOUSE
+      // SYNTHÉTIQUE") — title-case it so it reads like the rest of the app's text instead of
+      // looking like an error state.
+      const titleCase = (text: string) =>
+        text.toLowerCase().replace(/(^|[\s-])\p{L}/gu, (c) => c.toUpperCase());
+      const name = titleCase(stade.nom);
+      const address = (stade.adresse ?? []).map(titleCase).join(', ');
+      return {
+        venue: address ? `${name} — ${address}` : name,
+        surface: stade.surface ? titleCase(stade.surface) : null,
+      };
+    } catch (error) {
+      this.logger.warn(`Échec du scraping du lieu (${matchDetailUrl}): ${error instanceof Error ? error.message : error}`);
+      return null;
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /**
    * Scrapes the standings ("classement") table for the poule the configured team
    * plays in. The team calendar page links to it as "Voir le classement détaillé"
    * — confirmed real href: ".../equipe/{code}/classement" (same base path as the
@@ -301,6 +397,27 @@ export class FffScraperService {
     }
   }
 
+  /** The nav buttons render with a zero-size bounding box on this site (confirmed live: CSS
+   * reports `visibility: visible`/`opacity: 1` but `getBoundingClientRect()` is all zeros —
+   * likely the icon inside taking a beat to size itself under automation). Playwright's normal
+   * `.click()` refuses to click something with an empty box and silently times out, which the
+   * caller used to swallow (`.catch(() => undefined)`) — so every "next/previous month" click
+   * was a no-op, and the whole forward/backward pagination loop below just re-read the site's
+   * default month over and over instead of ever actually walking the calendar (this is why a
+   * sync could leave every scraped match on the same date/month — not a date-parsing bug, a
+   * navigation one). `force: true` skips Playwright's actionability checks (visibility/size/
+   * stability) and clicks anyway; a raw in-page `el.click()` is the fallback if even that fails
+   * for some other reason, since it bypasses Playwright's checks entirely. */
+  private async clickNavButton(page: Page, selector: string): Promise<void> {
+    const button = await page.$(selector);
+    if (!button) return;
+    try {
+      await button.click({ timeout: 2000, force: true });
+    } catch {
+      await button.evaluate((el) => (el as HTMLButtonElement).click()).catch(() => undefined);
+    }
+  }
+
   private async goToNextMonth(page: Page): Promise<boolean> {
     const button = await page.$(NEXT_BUTTON_SELECTOR);
     if (!button) return false;
@@ -308,7 +425,7 @@ export class FffScraperService {
     const disabled = await button.evaluate((el) => (el as HTMLButtonElement).disabled).catch(() => true);
     if (disabled) return false;
 
-    await button.click({ timeout: 2000 }).catch(() => undefined);
+    await this.clickNavButton(page, NEXT_BUTTON_SELECTOR);
     return true;
   }
 
@@ -319,7 +436,7 @@ export class FffScraperService {
     const disabled = await button.evaluate((el) => (el as HTMLButtonElement).disabled).catch(() => true);
     if (disabled) return false;
 
-    await button.click({ timeout: 2000 }).catch(() => undefined);
+    await this.clickNavButton(page, PREV_BUTTON_SELECTOR);
     return true;
   }
 
@@ -359,7 +476,14 @@ export class FffScraperService {
           : null
       : null;
 
-    const opponent = isHome === null ? block.awayName || block.homeName : isHome ? block.awayName : block.homeName;
+    // Once pagination actually walks the calendar (see clickNavButton), this widget turns out
+    // to list the WHOLE poule's fixtures for a given month, not just our team's — a block
+    // where neither side is us is some other club's match entirely, not "our match, opponent
+    // unknown". Silently guessing an opponent from it flooded the app with fixtures we're not
+    // even part of (this is what the isHome === null fallback used to do here).
+    if (isHome === null) return null;
+
+    const opponent = isHome ? block.awayName : block.homeName;
     if (!opponent) return null;
 
     const fffMatchId = /\/competition\/match\/(\d+)/.exec(block.matchHref ?? '')?.[1] ?? null;
@@ -382,6 +506,7 @@ export class FffScraperService {
       scoreHome,
       scoreAway,
       played,
+      matchDetailUrl: block.matchHref ? `https://epreuves.fff.fr${block.matchHref}/match` : null,
     };
   }
 

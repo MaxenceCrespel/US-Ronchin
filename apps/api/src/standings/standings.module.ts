@@ -6,6 +6,7 @@ import { StandingsService } from './standings.service';
 import { StandingsController } from './standings.controller';
 import { SettingsModule } from '../settings/settings.module';
 import { FffSyncModule } from '../fff-sync/fff-sync.module';
+import { FffWeeklySyncScheduler } from './fff-weekly-sync.scheduler';
 
 @Module({
   imports: [
@@ -14,6 +15,6 @@ import { FffSyncModule } from '../fff-sync/fff-sync.module';
     FffSyncModule,
   ],
   controllers: [StandingsController],
-  providers: [StandingsService],
+  providers: [StandingsService, FffWeeklySyncScheduler],
 })
 export class StandingsModule {}
