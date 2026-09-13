@@ -16,6 +16,7 @@ import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
+import { UpdateMatchEventDto } from './dto/update-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
 import {
@@ -291,6 +292,16 @@ export class MatchesService {
       throw new NotFoundException('Événement introuvable');
     }
     await this.eventsRepository.delete(eventId);
+  }
+
+  /** Minute only, added after the fact — see UpdateMatchEventDto's own doc comment. */
+  async updateEvent(matchId: string, eventId: string, dto: UpdateMatchEventDto): Promise<MatchEvent> {
+    const event = await this.eventsRepository.findOne({ where: { id: eventId, matchId } });
+    if (!event) {
+      throw new NotFoundException('Événement introuvable');
+    }
+    event.minute = dto.minute ?? null;
+    return this.eventsRepository.save(event);
   }
 
   getRatings(matchId: string): Promise<PlayerRating[]> {

@@ -21,6 +21,7 @@ import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
 import { LinkCompositionGuestDto } from './dto/link-composition-guest.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
+import { UpdateMatchEventDto } from './dto/update-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
 import { SubmitRatingsDto } from './dto/submit-ratings.dto';
 import { VoteMotmDto } from './dto/vote-motm.dto';
@@ -123,6 +124,17 @@ export class MatchesController {
   @Delete(':id/events/:eventId')
   deleteEvent(@Param('id') id: string, @Param('eventId') eventId: string) {
     return this.matchesService.deleteEvent(id, eventId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Patch(':id/events/:eventId')
+  updateEvent(
+    @Param('id') id: string,
+    @Param('eventId') eventId: string,
+    @Body() dto: UpdateMatchEventDto,
+  ) {
+    return this.matchesService.updateEvent(id, eventId, dto);
   }
 
   @UseGuards(RolesGuard)

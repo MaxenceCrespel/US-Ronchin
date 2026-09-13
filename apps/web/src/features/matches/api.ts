@@ -143,6 +143,16 @@ export async function deleteEvent(matchId: string, eventId: string): Promise<voi
   await apiClient.delete(`/matches/${matchId}/events/${eventId}`)
 }
 
+/** Minute only, added after the fact — see the backend's UpdateMatchEventDto. */
+export async function updateEventMinute(
+  matchId: string,
+  eventId: string,
+  minute: number | null,
+): Promise<MatchEvent> {
+  const { data } = await apiClient.patch<MatchEvent>(`/matches/${matchId}/events/${eventId}`, { minute })
+  return data
+}
+
 export async function fetchMyRatings(matchId: string): Promise<PlayerRating[]> {
   const { data } = await apiClient.get<PlayerRating[]>(`/matches/${matchId}/ratings/me`)
   return data

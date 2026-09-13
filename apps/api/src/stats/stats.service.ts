@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { PlayerPosition, User } from '../users/entities/user.entity';
 import { Match, MatchHomeAway, MatchStatus } from '../matches/entities/match.entity';
-import { MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
+import { GoalType, MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
@@ -33,6 +33,7 @@ const TRAINING_RANKING_WEIGHT = 20; // scrimmage results — see trainingRanking
 const DISCIPLINE_CAP = 10; // max deduction, however many cards
 const YELLOW_CARD_PENALTY = 2;
 const RED_CARD_PENALTY = 5;
+const OWN_GOAL_PENALTY = 5; // as costly as a red card — it directly hands the opponent a goal
 const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half as much
 const RATING_CONFIDENCE_PRIOR_WEIGHT = 3; // pseudo-count pulling a thin sample toward neutral
 const RATING_NEUTRAL = 5; // midpoint of the 0-10 scale, the confidence prior's target
@@ -391,8 +392,19 @@ export class StatsService {
 
     return users.map((user) => {
       const matchesPlayed = compositions.filter((c) => c.userId === user.id).length;
+      // A CSC is not a positive contribution — excluded from the goal tally, counted
+      // separately, and turned into a discipline-style penalty on the skill score below.
       const goals = events.filter(
-        (e) => e.type === MatchEventType.GOAL && e.userId === user.id,
+        (e) =>
+          e.type === MatchEventType.GOAL &&
+          e.goalType !== GoalType.OWN_GOAL &&
+          e.userId === user.id,
+      ).length;
+      const ownGoals = events.filter(
+        (e) =>
+          e.type === MatchEventType.GOAL &&
+          e.goalType === GoalType.OWN_GOAL &&
+          e.userId === user.id,
       ).length;
       const assists = events.filter(
         (e) => e.type === MatchEventType.GOAL && e.assistUserId === user.id,
@@ -487,7 +499,9 @@ export class StatsService {
         }
 
         const disciplinePenalty = Math.min(
-          (yellowCards * YELLOW_CARD_PENALTY + redCards * RED_CARD_PENALTY) /
+          (yellowCards * YELLOW_CARD_PENALTY +
+            redCards * RED_CARD_PENALTY +
+            ownGoals * OWN_GOAL_PENALTY) /
             Math.max(matchesPlayed, 1),
           DISCIPLINE_CAP,
         );
@@ -529,6 +543,7 @@ export class StatsService {
         lastName: user.lastName,
         matchesPlayed,
         goals,
+        ownGoals,
         assists,
         yellowCards,
         redCards,
@@ -679,6 +694,9 @@ export class StatsService {
       .innerJoin('event.match', 'match')
       .innerJoin('event.user', 'user')
       .where('event.type = :type', { type: MatchEventType.GOAL })
+      // A CSC shouldn't make anyone "buteur du mois" — IS DISTINCT FROM also excludes it
+      // correctly when goalType is null (a plain goal with no type recorded).
+      .andWhere('event.goalType IS DISTINCT FROM :ownGoal', { ownGoal: GoalType.OWN_GOAL })
       .andWhere('match.date BETWEEN :start AND :end', { start: monthStart, end: monthEnd })
       .select('event.userId', 'userId')
       .addSelect('user.firstName', 'firstName')

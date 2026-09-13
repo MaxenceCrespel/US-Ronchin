@@ -239,7 +239,10 @@ export class BadgesService {
       const goalTypeCountsInSeason = new Map<GoalType, number>();
       for (const event of eventsAsActor) {
         if (event.type === MatchEventType.GOAL) {
-          goalsByMatch.set(event.matchId, (goalsByMatch.get(event.matchId) ?? 0) + 1);
+          // A CSC isn't a scoring feat — never counted toward hat-trick/poker.
+          if (event.goalType !== GoalType.OWN_GOAL) {
+            goalsByMatch.set(event.matchId, (goalsByMatch.get(event.matchId) ?? 0) + 1);
+          }
           if (event.goalType && event.match && isInSeason(event.match.date, seasonBounds)) {
             goalTypeCountsInSeason.set(
               event.goalType,
@@ -401,7 +404,11 @@ export class BadgesService {
         (m.homeAway === 'HOME' ? m.scoreHome > m.scoreAway : m.scoreAway > m.scoreHome);
       const birthdayGoalCount = me?.birthDate
         ? eventsAsActor.filter(
-            (e) => e.type === MatchEventType.GOAL && e.match && isNearBirthday(e.match.date, me.birthDate!),
+            (e) =>
+              e.type === MatchEventType.GOAL &&
+              e.goalType !== GoalType.OWN_GOAL &&
+              e.match &&
+              isNearBirthday(e.match.date, me.birthDate!),
           ).length
         : 0;
       const hasBirthdayGoal = birthdayGoalCount > 0;
@@ -417,7 +424,7 @@ export class BadgesService {
       // uninterrupted by a goal, across matches.
       const contributions = [
         ...eventsAsActor
-          .filter((e) => e.type === MatchEventType.GOAL && e.match)
+          .filter((e) => e.type === MatchEventType.GOAL && e.goalType !== GoalType.OWN_GOAL && e.match)
           .map((e) => ({ date: e.match!.date, minute: e.minute ?? 0, type: 'GOAL' as const })),
         ...eventsAsAssist
           .filter((e) => e.match)

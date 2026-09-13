@@ -15,6 +15,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  Volleyball,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -41,7 +42,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
@@ -85,6 +85,7 @@ import {
   setComposition,
   setMyMatchAttendance,
   submitRatings,
+  updateEventMinute,
   updateMatch,
   voteDefenseBoss,
   voteMotm,
@@ -157,6 +158,24 @@ const EVENT_LABELS: Record<MatchEventType, string> = {
   GOAL: 'But',
   YELLOW_CARD: 'Carton jaune',
   RED_CARD: 'Carton rouge',
+}
+
+// A CSC isn't a MatchEventType of its own on the backend — it's still a GOAL event with
+// goalType OWN_GOAL — but it gets its own top-level button in the entry flow instead of
+// being buried behind "But" → "type de but", since a coach shouldn't have to think of an
+// own goal as a special case of scoring.
+type EventFlowType = MatchEventType | 'OWN_GOAL'
+
+const EVENT_TYPE_BUTTONS: { type: EventFlowType; label: string }[] = [
+  { type: 'GOAL', label: 'But' },
+  { type: 'YELLOW_CARD', label: 'Carton jaune' },
+  { type: 'RED_CARD', label: 'Carton rouge' },
+  { type: 'OWN_GOAL', label: 'CSC' },
+]
+
+// Same ball as a regular goal, just red — a CSC is still a goal, only a bad one.
+function OwnGoalIcon({ size = 'md' }: { size?: 'sm' | 'md' }) {
+  return <Volleyball className={cn('text-red-600', size === 'sm' ? 'size-3.5' : 'size-5')} />
 }
 
 const GOAL_TYPE_LABELS: Record<GoalType, string> = {
@@ -359,7 +378,7 @@ function PresenceSegmented({
             type="button"
             onClick={() => onChange(presenceFromStatus(status))}
             className={cn(
-              'rounded-md border px-2 py-1 text-xs font-medium transition-colors',
+              'flex-1 rounded-md border px-1.5 py-1.5 text-xs font-medium transition-colors',
               selected
                 ? status === 'TITULAIRE'
                   ? 'bg-club-blue border-club-blue text-white'
@@ -659,65 +678,159 @@ export function MatchDetailPage() {
   // Only players actually on the match sheet can have scored/been carded — falls back to
   // the full roster if the composition hasn't been entered yet. Guests (no account) show up
   // by name too, so the coach doesn't have to retype them via "Autre" each time.
+  // A spectator came to watch, not to play — never a scorer/carded candidate, same rule as
+  // MOTM/patron de la défense/notes (see MatchComposition.isSpectator's own doc comment).
   const eventPlayerPool: { id: string; firstName: string; lastName: string; isGuest: boolean }[] =
     compositionQuery.data && compositionQuery.data.length > 0
-      ? compositionQuery.data.map((entry) =>
-          entry.user
-            ? {
-                id: entry.user.id,
-                firstName: entry.user.firstName,
-                lastName: entry.user.lastName,
-                isGuest: false,
-              }
-            : {
-                id: entry.id,
-                firstName: entry.guestFirstName ?? '',
-                lastName: entry.guestLastName ?? '',
-                isGuest: true,
-              },
-        )
+      ? compositionQuery.data
+          .filter((entry) => !entry.isSpectator)
+          .map((entry) =>
+            entry.user
+              ? {
+                  id: entry.user.id,
+                  firstName: entry.user.firstName,
+                  lastName: entry.user.lastName,
+                  isGuest: false,
+                }
+              : {
+                  id: entry.id,
+                  firstName: entry.guestFirstName ?? '',
+                  lastName: entry.guestLastName ?? '',
+                  isGuest: true,
+                },
+          )
       : (playersQuery.data ?? [])
           .filter((p) => isRosterPlayer(p))
           .map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, isGuest: false }))
 
   const OTHER_SCORER = '__other__'
-  const [eventType, setEventType] = useState<MatchEventType>('GOAL')
+  // Tap the event type, then tap the player — no dropdowns, no minute up front (it used to be
+  // required before anything else could be logged; now it's an optional add-on from the event
+  // list itself, see the minute-editing state further down). A goal walks through two more
+  // quick, skippable taps (passeur, type de but) instead of asking for everything at once.
+  const [eventType, setEventType] = useState<EventFlowType>('GOAL')
+  const [eventFlowStep, setEventFlowStep] = useState<'scorer' | 'assist' | 'goalType'>('scorer')
   const [eventUserId, setEventUserId] = useState('')
   const [eventScorerName, setEventScorerName] = useState('')
-  const [eventAssistUserId, setEventAssistUserId] = useState('')
-  const [eventMinute, setEventMinute] = useState('')
-  const [eventGoalType, setEventGoalType] = useState<GoalType | ''>('')
+  const [showOtherScorerInput, setShowOtherScorerInput] = useState(false)
+
+  function resetEventFlow() {
+    setEventFlowStep('scorer')
+    setEventUserId('')
+    setEventScorerName('')
+    setShowOtherScorerInput(false)
+  }
+
+  function selectEventType(type: EventFlowType) {
+    setEventType(type)
+    resetEventFlow()
+  }
 
   const addEventMutation = useMutation({
-    mutationFn: () => {
-      const selected = eventPlayerPool.find((p) => p.id === eventUserId)
-      return addEvent(matchId, {
-        type: eventType,
-        userId: eventUserId !== OTHER_SCORER && !selected?.isGuest ? eventUserId : undefined,
-        scorerName:
-          eventUserId === OTHER_SCORER
-            ? eventScorerName.trim()
-            : selected?.isGuest
-              ? `${selected.firstName} ${selected.lastName}`.trim()
-              : undefined,
-        assistUserId: eventType === 'GOAL' && eventAssistUserId ? eventAssistUserId : undefined,
-        minute: eventMinute ? Number(eventMinute) : undefined,
-        goalType: eventType === 'GOAL' && eventGoalType ? eventGoalType : undefined,
-      })
-    },
+    mutationFn: (vars: {
+      type: MatchEventType
+      userId?: string
+      scorerName?: string
+      assistUserId?: string
+      goalType?: GoalType
+    }) =>
+      addEvent(matchId, {
+        type: vars.type,
+        userId: vars.userId,
+        scorerName: vars.scorerName,
+        assistUserId: vars.assistUserId,
+        goalType: vars.goalType,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events', matchId] })
-      setEventUserId('')
-      setEventScorerName('')
-      setEventAssistUserId('')
-      setEventMinute('')
-      setEventGoalType('')
+      resetEventFlow()
     },
   })
+
+  // A second yellow for the same player this match is a red, not a second yellow — the coach
+  // shouldn't have to remember that rule and switch the type themselves.
+  function alreadyHasYellow(userId: string | undefined, scorerName: string | undefined): boolean {
+    return (eventsQuery.data ?? []).some(
+      (e) =>
+        e.type === 'YELLOW_CARD' &&
+        ((userId && e.userId === userId) || (!userId && scorerName && e.scorerName === scorerName)),
+    )
+  }
+
+  // Stashed between the assist and goalType flow steps — both need the same scorer identity,
+  // and neither can rely on the eventUserId/eventScorerName state alone once OTHER_SCORER text
+  // input has already been cleared for the next entry.
+  const pendingGoalScorerRef = useRef<{ userId?: string; scorerName?: string; assistUserId?: string } | null>(null)
+
+  function pickScorer(pool: { id: string; firstName: string; lastName: string; isGuest: boolean }) {
+    const userId = pool.isGuest ? undefined : pool.id
+    const scorerName = pool.isGuest ? `${pool.firstName} ${pool.lastName}`.trim() : undefined
+    if (eventType === 'GOAL') {
+      setEventUserId(pool.id)
+      setEventFlowStep('assist')
+      return
+    }
+    if (eventType === 'OWN_GOAL') {
+      addEventMutation.mutate({ type: 'GOAL', userId, scorerName, goalType: 'OWN_GOAL' })
+      return
+    }
+    const effectiveType: MatchEventType =
+      eventType === 'YELLOW_CARD' && alreadyHasYellow(userId, scorerName) ? 'RED_CARD' : eventType
+    addEventMutation.mutate({ type: effectiveType, userId, scorerName })
+  }
+
+  function confirmOtherScorer() {
+    const name = eventScorerName.trim()
+    if (!name) return
+    if (eventType === 'GOAL') {
+      setEventUserId(OTHER_SCORER)
+      setEventFlowStep('assist')
+      return
+    }
+    if (eventType === 'OWN_GOAL') {
+      addEventMutation.mutate({ type: 'GOAL', scorerName: name, goalType: 'OWN_GOAL' })
+      return
+    }
+    const effectiveType: MatchEventType =
+      eventType === 'YELLOW_CARD' && alreadyHasYellow(undefined, name) ? 'RED_CARD' : eventType
+    addEventMutation.mutate({ type: effectiveType, scorerName: name })
+  }
+
+  function pickAssist(assistUserId?: string) {
+    const selected = eventPlayerPool.find((p) => p.id === eventUserId)
+    const userId = eventUserId !== OTHER_SCORER && !selected?.isGuest ? eventUserId : undefined
+    const scorerName =
+      eventUserId === OTHER_SCORER
+        ? eventScorerName.trim()
+        : selected?.isGuest
+          ? `${selected.firstName} ${selected.lastName}`.trim()
+          : undefined
+    pendingGoalScorerRef.current = { userId, scorerName, assistUserId }
+    setEventFlowStep('goalType')
+  }
+
+  function pickGoalType(goalType?: GoalType) {
+    const pending = pendingGoalScorerRef.current
+    if (!pending) return
+    addEventMutation.mutate({ type: 'GOAL', ...pending, goalType })
+  }
 
   const deleteEventMutation = useMutation({
     mutationFn: (eventId: string) => deleteEvent(matchId, eventId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['events', matchId] }),
+  })
+
+  // Minute, added after the fact from the event list — see updateEventMinute's own doc
+  // comment for why it's no longer asked up front.
+  const [editingMinuteEventId, setEditingMinuteEventId] = useState<string | null>(null)
+  const [minuteDraft, setMinuteDraft] = useState('')
+  const updateMinuteMutation = useMutation({
+    mutationFn: (vars: { eventId: string; minute: number | null }) =>
+      updateEventMinute(matchId, vars.eventId, vars.minute),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events', matchId] })
+      setEditingMinuteEventId(null)
+    },
   })
 
   const myRatingsQuery = useQuery({
@@ -851,7 +964,8 @@ export function MatchDetailPage() {
     // up against their composition row (see guestStatsKey below).
     for (const event of eventsQuery.data ?? []) {
       const scorerKey = event.userId ?? (event.scorerName ? `name:${event.scorerName}` : null)
-      if (event.type === 'GOAL') {
+      // A CSC is not a positive contribution — it must never inflate the scorer's goal tally.
+      if (event.type === 'GOAL' && event.goalType !== 'OWN_GOAL') {
         if (scorerKey) bump(scorerKey, 'goals')
         if (event.assistUserId) bump(event.assistUserId, 'assists')
       } else if (event.type === 'YELLOW_CARD') {
@@ -1216,88 +1330,82 @@ export function MatchDetailPage() {
           <CardDescription>Choisis le statut de chaque joueur pour ce match.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Joueur</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Note</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {playersQuery.data
-                ?.filter((p) => isRosterPlayer(p))
-                // Whoever already answered "Présent" on the attendance poll is overwhelmingly
-                // who actually played — surfacing them first saves scrolling/hunting through
-                // the full roster to tick off the handful who didn't show, or did but skipped
-                // the poll.
-                .slice()
-                .sort((a, b) => {
-                  const aPresent = presentUserIds.has(a.id) ? 0 : 1
-                  const bPresent = presentUserIds.has(b.id) ? 0 : 1
-                  return aPresent - bPresent
-                })
-                .map((player) => {
-                  const state = selectedPlayers[player.id] ?? ABSENT_PRESENCE
-                  return (
-                    <TableRow key={player.id}>
-                      <TableCell>
-                        {player.firstName} {player.lastName}
-                      </TableCell>
-                      <TableCell>
-                        <PresenceSegmented
-                          value={state}
-                          onChange={(next) =>
-                            setSelectedPlayers((prev) => ({ ...prev, [player.id]: next }))
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {(state.played || state.spectator) && (
-                          <Input
-                            className="h-8 w-40 text-xs"
-                            placeholder="ex: licence de Quentin"
-                            value={playerNotes[player.id] ?? ''}
-                            onChange={(e) =>
-                              setPlayerNotes((prev) => ({ ...prev, [player.id]: e.target.value }))
-                            }
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              {Object.entries(guests).map(([key, guest]) => {
-                const state = selectedPlayers[key] ?? ABSENT_PRESENCE
+          {/* A real <table> forces every column to a fixed width across the whole row, so on
+              a phone the 4-way status control and the note field just get pushed off-screen
+              instead of wrapping — confirmed live at 390px, "Rempl."/"Spect." sat entirely
+              outside the viewport with no visual sign anything was cut off. Stacked rows (name
+              on its own line, buttons wrapping freely underneath) is what the design mockup
+              actually used, and is the only layout that can't overflow horizontally no matter
+              how long a name or how cramped the screen is. */}
+          <div className="flex flex-col divide-y">
+            {playersQuery.data
+              ?.filter((p) => isRosterPlayer(p))
+              // Whoever already answered "Présent" on the attendance poll is overwhelmingly
+              // who actually played — surfacing them first saves scrolling/hunting through
+              // the full roster to tick off the handful who didn't show, or did but skipped
+              // the poll.
+              .slice()
+              .sort((a, b) => {
+                const aPresent = presentUserIds.has(a.id) ? 0 : 1
+                const bPresent = presentUserIds.has(b.id) ? 0 : 1
+                return aPresent - bPresent
+              })
+              .map((player) => {
+                const state = selectedPlayers[player.id] ?? ABSENT_PRESENCE
                 return (
-                  <TableRow key={key}>
-                    <TableCell>
-                      {guest.firstName} {guest.lastName}
-                      <span className="text-muted-foreground ml-1.5 text-xs">(non inscrit)</span>
-                    </TableCell>
-                    <TableCell>
-                      <PresenceSegmented
-                        value={state}
-                        onChange={(next) => setSelectedPlayers((prev) => ({ ...prev, [key]: next }))}
+                  <div key={player.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                    <p className="text-sm font-medium">
+                      {player.firstName} {player.lastName}
+                    </p>
+                    <PresenceSegmented
+                      value={state}
+                      onChange={(next) =>
+                        setSelectedPlayers((prev) => ({ ...prev, [player.id]: next }))
+                      }
+                    />
+                    {(state.played || state.spectator) && (
+                      <Input
+                        className="h-8 max-w-xs text-xs"
+                        placeholder="ex: licence de Quentin"
+                        value={playerNotes[player.id] ?? ''}
+                        onChange={(e) =>
+                          setPlayerNotes((prev) => ({ ...prev, [player.id]: e.target.value }))
+                        }
                       />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-7"
-                        onClick={() => removeGuest(key)}
-                        aria-label="Retirer ce joueur"
-                      >
-                        <X className="size-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                    )}
+                  </div>
                 )
               })}
-            </TableBody>
-          </Table>
+            {Object.entries(guests).map(([key, guest]) => {
+              const state = selectedPlayers[key] ?? ABSENT_PRESENCE
+              return (
+                <div key={key} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      {guest.firstName} {guest.lastName}
+                      <span className="text-muted-foreground ml-1.5 text-xs font-normal">
+                        (non inscrit)
+                      </span>
+                    </p>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-7 shrink-0"
+                      onClick={() => removeGuest(key)}
+                      aria-label="Retirer ce joueur"
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                  <PresenceSegmented
+                    value={state}
+                    onChange={(next) => setSelectedPlayers((prev) => ({ ...prev, [key]: next }))}
+                  />
+                </div>
+              )
+            })}
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Input
@@ -1508,108 +1616,138 @@ export function MatchDetailPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {editable && (
-            <form
-              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-              onSubmit={(e) => {
-                e.preventDefault()
-                const canSubmit =
-                  eventUserId && (eventUserId !== OTHER_SCORER || eventScorerName.trim())
-                if (canSubmit) addEventMutation.mutate()
-              }}
-            >
-              <Select value={eventType} onValueChange={(v) => setEventType(v as MatchEventType)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(EVENT_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                {EVENT_TYPE_BUTTONS.map(({ type, label }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => selectEventType(type)}
+                    className={cn(
+                      'flex flex-1 flex-col items-center gap-1 rounded-xl border px-2 py-3 text-sm font-medium transition-colors',
+                      eventType === type
+                        ? type === 'GOAL'
+                          ? 'border-amber-600 bg-amber-50 text-amber-700'
+                          : type === 'YELLOW_CARD'
+                            ? 'border-yellow-500 bg-yellow-50 text-yellow-700'
+                            : 'border-red-600 bg-red-50 text-red-700'
+                        : 'border-input text-muted-foreground bg-transparent hover:bg-accent',
+                    )}
+                  >
+                    {type === 'OWN_GOAL' ? (
+                      <OwnGoalIcon />
+                    ) : (
+                      <span className="text-xl">
+                        {type === 'GOAL' ? '⚽' : type === 'YELLOW_CARD' ? '🟨' : '🟥'}
+                      </span>
+                    )}
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-              <Select value={eventUserId} onValueChange={setEventUserId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Joueur" />
-                </SelectTrigger>
-                <SelectContent>
-                  {eventPlayerPool.map((player) => (
-                    <SelectItem key={player.id} value={player.id}>
-                      {player.firstName} {player.lastName}
-                      {player.isGuest && ' (non inscrit)'}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value={OTHER_SCORER}>Autre (pas encore inscrit)</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {eventUserId === OTHER_SCORER && (
-                <Input
-                  placeholder="Nom du joueur"
-                  value={eventScorerName}
-                  onChange={(e) => setEventScorerName(e.target.value)}
-                  className="col-span-2 sm:col-span-1"
-                />
-              )}
-
-              {eventType === 'GOAL' && (
-                <Select value={eventAssistUserId} onValueChange={setEventAssistUserId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Passeur (optionnel)" />
-                  </SelectTrigger>
-                  <SelectContent>
+              {eventFlowStep === 'assist' ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">🅰️ Qui a fait la passe ? (optionnel)</p>
+                  <div className="flex flex-wrap gap-2">
                     {eventPlayerPool
                       .filter((p) => p.id !== eventUserId && !p.isGuest)
                       .map((player) => (
-                        <SelectItem key={player.id} value={player.id}>
+                        <button
+                          key={player.id}
+                          type="button"
+                          onClick={() => pickAssist(player.id)}
+                          className="border-input hover:bg-accent flex items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-1.5 text-sm font-medium"
+                        >
+                          <PlayerAvatar firstName={player.firstName} lastName={player.lastName} size="sm" />
                           {player.firstName} {player.lastName}
-                        </SelectItem>
+                        </button>
                       ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              {eventType === 'GOAL' && (
-                <Select
-                  value={eventGoalType}
-                  onValueChange={(v) => setEventGoalType(v as GoalType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Type de but (optionnel)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(GOAL_TYPE_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
+                    <button
+                      type="button"
+                      onClick={() => pickAssist(undefined)}
+                      className="text-muted-foreground hover:bg-accent rounded-full border border-dashed px-3 py-1.5 text-sm"
+                    >
+                      Sans passe
+                    </button>
+                  </div>
+                </div>
+              ) : eventFlowStep === 'goalType' ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">Type de but (optionnel)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.entries(GOAL_TYPE_LABELS) as [GoalType, string][]).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => pickGoalType(value)}
+                        className="border-input hover:bg-accent rounded-full border px-3 py-1.5 text-sm font-medium"
+                      >
                         {label}
-                      </SelectItem>
+                      </button>
                     ))}
-                  </SelectContent>
-                </Select>
+                    <button
+                      type="button"
+                      onClick={() => pickGoalType(undefined)}
+                      className="text-muted-foreground hover:bg-accent rounded-full border border-dashed px-3 py-1.5 text-sm"
+                    >
+                      Peu importe
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm font-medium">
+                    {eventType === 'GOAL'
+                      ? '⚽ Qui a marqué ?'
+                      : eventType === 'YELLOW_CARD'
+                        ? '🟨 Qui prend le carton ?'
+                        : eventType === 'RED_CARD'
+                          ? '🟥 Qui prend le carton ?'
+                          : '🔴 Qui a marqué contre son camp ?'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {eventPlayerPool.map((player) => (
+                      <button
+                        key={player.id}
+                        type="button"
+                        onClick={() => pickScorer(player)}
+                        className="border-input hover:bg-accent flex items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-1.5 text-sm font-medium"
+                      >
+                        <PlayerAvatar firstName={player.firstName} lastName={player.lastName} size="sm" />
+                        {player.firstName} {player.lastName}
+                        {player.isGuest && (
+                          <span className="text-muted-foreground text-xs">(non inscrit)</span>
+                        )}
+                      </button>
+                    ))}
+                    {showOtherScorerInput ? (
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          autoFocus
+                          placeholder="Nom du joueur"
+                          value={eventScorerName}
+                          onChange={(e) => setEventScorerName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && confirmOtherScorer()}
+                          className="h-9 w-40"
+                        />
+                        <Button size="sm" disabled={!eventScorerName.trim()} onClick={confirmOtherScorer}>
+                          OK
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowOtherScorerInput(true)}
+                        className="text-muted-foreground hover:bg-accent rounded-full border border-dashed px-3 py-1.5 text-sm"
+                      >
+                        + Joueur non inscrit
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
-
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Minute"
-                  min={0}
-                  max={130}
-                  value={eventMinute}
-                  onChange={(e) => setEventMinute(e.target.value)}
-                />
-                <Button
-                  type="submit"
-                  disabled={
-                    !eventUserId ||
-                    (eventUserId === OTHER_SCORER && !eventScorerName.trim()) ||
-                    addEventMutation.isPending
-                  }
-                >
-                  Ajouter
-                </Button>
-              </div>
-            </form>
+            </div>
           )}
 
           <div className="flex flex-col gap-2">
@@ -1619,7 +1757,54 @@ export function MatchDetailPage() {
                 className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
               >
                 <span>
-                  {event.minute != null ? `${event.minute}' — ` : ''}
+                  {editable ? (
+                    editingMinuteEventId === event.id ? (
+                      <span className="mr-1 inline-flex items-center gap-1">
+                        <Input
+                          autoFocus
+                          type="number"
+                          min={0}
+                          max={130}
+                          value={minuteDraft}
+                          onChange={(e) => setMinuteDraft(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === 'Enter' &&
+                            updateMinuteMutation.mutate({
+                              eventId: event.id,
+                              minute: minuteDraft ? Number(minuteDraft) : null,
+                            })
+                          }
+                          className="h-6 w-14 px-1 text-xs"
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-xs"
+                          onClick={() =>
+                            updateMinuteMutation.mutate({
+                              eventId: event.id,
+                              minute: minuteDraft ? Number(minuteDraft) : null,
+                            })
+                          }
+                        >
+                          OK
+                        </Button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMinuteEventId(event.id)
+                          setMinuteDraft(event.minute != null ? String(event.minute) : '')
+                        }}
+                        className="text-muted-foreground hover:text-foreground mr-1 border-b border-dashed text-xs"
+                      >
+                        {event.minute != null ? `${event.minute}'` : '+ minute'}
+                      </button>
+                    )
+                  ) : (
+                    event.minute != null && `${event.minute}' — `
+                  )}
                   <strong>{EVENT_LABELS[event.type]}</strong> —{' '}
                   {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
                   {event.goalType && <> ({GOAL_TYPE_LABELS[event.goalType]})</>}
@@ -2152,11 +2337,15 @@ export function MatchDetailPage() {
                       {event.minute}'
                     </span>
                   )}
-                  {event.type === 'GOAL' && <span>⚽</span>}
+                  {event.type === 'GOAL' && event.goalType === 'OWN_GOAL' && <OwnGoalIcon size="sm" />}
+                  {event.type === 'GOAL' && event.goalType !== 'OWN_GOAL' && <span>⚽</span>}
                   {event.type === 'YELLOW_CARD' && <span>🟨</span>}
                   {event.type === 'RED_CARD' && <span>🟥</span>}
                   <span>
                     {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
+                    {event.goalType === 'OWN_GOAL' && (
+                      <span className="text-muted-foreground text-xs"> (CSC)</span>
+                    )}
                   </span>
                   {event.assistUser && (
                     <span className="text-muted-foreground flex items-center gap-1">

@@ -213,6 +213,7 @@ export interface PlayerStats {
   lastName: string
   matchesPlayed: number
   goals: number
+  ownGoals: number
   assists: number
   yellowCards: number
   redCards: number
