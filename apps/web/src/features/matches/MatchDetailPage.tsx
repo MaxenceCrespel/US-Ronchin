@@ -15,7 +15,6 @@ import {
   Trash2,
   UserPlus,
   Users,
-  Volleyball,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -173,9 +172,32 @@ const EVENT_TYPE_BUTTONS: { type: EventFlowType; label: string }[] = [
   { type: 'OWN_GOAL', label: 'CSC' },
 ]
 
-// Same ball as a regular goal, just red — a CSC is still a goal, only a bad one.
+// A soccer ball (circle + classic center pentagon), not lucide's Volleyball — same shape as
+// a regular goal's ball, just red, since a CSC is still a goal, only a bad one.
 function OwnGoalIcon({ size = 'md' }: { size?: 'sm' | 'md' }) {
-  return <Volleyball className={cn('text-red-600', size === 'sm' ? 'size-3.5' : 'size-5')} />
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={cn('text-red-600', size === 'sm' ? 'size-3.5' : 'size-5')}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9.5" />
+      <polygon
+        points="12,8.5 15.33,10.92 14.06,14.83 9.94,14.83 8.67,10.92"
+        fill="currentColor"
+        stroke="none"
+      />
+      <line x1="12" y1="8.5" x2="12" y2="3" />
+      <line x1="15.33" y1="10.92" x2="20.56" y2="9.22" />
+      <line x1="14.06" y1="14.83" x2="17.29" y2="19.28" />
+      <line x1="9.94" y1="14.83" x2="6.71" y2="19.28" />
+      <line x1="8.67" y1="10.92" x2="3.44" y2="9.22" />
+    </svg>
+  )
 }
 
 const GOAL_TYPE_LABELS: Record<GoalType, string> = {
