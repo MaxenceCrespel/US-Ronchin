@@ -321,7 +321,11 @@ function RatingSlider({
       value={displayed}
       onChange={(e) => onChange(Number(e.target.value))}
       style={{ accentColor: ratingColor(displayed) }}
-      className="h-2 w-full cursor-pointer"
+      // The default browser thumb is small and easy to miss on a phone — resizing it via
+      // these pseudo-elements works without needing appearance:none, so accent-color above
+      // still colors the thumb/filled track exactly as before, just at a size that's
+      // actually easy to grab and drag with a thumb (the finger kind).
+      className="h-3 w-full cursor-pointer [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-7 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7"
       aria-label="Note du joueur"
     />
   )
@@ -952,7 +956,8 @@ export function MatchDetailPage() {
 
   const [defenseBossSelection, setDefenseBossSelection] = useState('')
   const defenseBossMutation = useMutation({
-    mutationFn: (votedForId: string) => voteDefenseBoss(matchId, votedForId),
+    // Omitting votedForId casts a "vote blanc" — see voteDefenseBoss's own doc comment.
+    mutationFn: (votedForId?: string) => voteDefenseBoss(matchId, votedForId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['defense-boss', matchId] }),
   })
 
@@ -1994,7 +1999,11 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  const defenders = teammates.filter((entry) => entry.position === 'DEFENDER')
+  // A defender or the goalkeeper, not a spectator — see MatchesService.isDefenseBossEligible's
+  // own doc comment for why this can't capture a positional switch mid-match.
+  const defenseBossCandidates = teammates.filter(
+    (entry) => entry.position === 'DEFENDER' || entry.position === 'GOALKEEPER',
+  )
   const defenseBossCard = resultConfirmed && hasComposition && defenseBossApplies && (
         <Card>
           <CardHeader>
@@ -2017,58 +2026,76 @@ export function MatchDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {defenseBossQuery.data?.revealed ? (
-              defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
-                <ul className="flex flex-col gap-2">
-                  {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
-                      tie for 2nd/3rd place doesn't spill the list past 3 names. */}
-                  {defenseBossQuery.data.results.slice(0, 3).map((r, index) => (
-                    <li
-                      key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="flex items-center gap-2">
-                        {r.votes === defenseBossQuery.data!.results![0].votes && (
-                          <Shield className="text-club-blue size-4" />
-                        )}
-                        {r.firstName} {r.lastName}
-                      </span>
-                      <Badge variant="secondary">{r.votes} vote(s)</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
-              )
+              <>
+                {defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
+                  <ul className="flex flex-col gap-2">
+                    {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
+                        tie for 2nd/3rd place doesn't spill the list past 3 names. */}
+                    {defenseBossQuery.data.results.slice(0, 3).map((r, index) => (
+                      <li
+                        key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <span className="flex items-center gap-2">
+                          {r.votes === defenseBossQuery.data!.results![0].votes && (
+                            <Shield className="text-club-blue size-4" />
+                          )}
+                          {r.firstName} {r.lastName}
+                        </span>
+                        <Badge variant="secondary">{r.votes} vote(s)</Badge>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
+                )}
+                {defenseBossQuery.data.blankVotes > 0 && (
+                  <p className="text-muted-foreground text-xs">
+                    {defenseBossQuery.data.blankVotes} vote{defenseBossQuery.data.blankVotes > 1 ? 's' : ''} blanc
+                    {defenseBossQuery.data.blankVotes > 1 ? 's' : ''}.
+                  </p>
+                )}
+              </>
             ) : iPlayed ? (
-              defenseBossQuery.data?.myVoteCompositionId ? (
-                <div className="flex items-center gap-3">
-                  {(() => {
-                    const voted = defenders.find(
-                      (t) => t.id === defenseBossQuery.data?.myVoteCompositionId,
-                    )
-                    return voted ? (
-                      <PlayerAvatar
-                        avatarUrl={voted.user?.avatarUrl}
-                        firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
-                        lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
-                        shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
-                        size="lg"
-                        className="border-club-blue ring-club-blue/40 border-2 ring-4"
-                      />
-                    ) : null
-                  })()}
+              defenseBossQuery.data?.myVoteCompositionId || defenseBossQuery.data?.myVoteIsBlank ? (
+                defenseBossQuery.data.myVoteIsBlank ? (
                   <p className="text-sm">
-                    <span className="font-medium">Vote enregistré</span>
+                    <span className="font-medium">Vote blanc enregistré</span>
                     <br />
                     <span className="text-muted-foreground text-xs">
                       Définitif — impossible de le modifier.
                     </span>
                   </p>
-                </div>
-              ) : defenders.length > 0 ? (
+                ) : (
+                  <div className="flex items-center gap-3">
+                    {(() => {
+                      const voted = defenseBossCandidates.find(
+                        (t) => t.id === defenseBossQuery.data?.myVoteCompositionId,
+                      )
+                      return voted ? (
+                        <PlayerAvatar
+                          avatarUrl={voted.user?.avatarUrl}
+                          firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
+                          lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
+                          shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
+                          size="lg"
+                          className="border-club-blue ring-club-blue/40 border-2 ring-4"
+                        />
+                      ) : null
+                    })()}
+                    <p className="text-sm">
+                      <span className="font-medium">Vote enregistré</span>
+                      <br />
+                      <span className="text-muted-foreground text-xs">
+                        Définitif — impossible de le modifier.
+                      </span>
+                    </p>
+                  </div>
+                )
+              ) : defenseBossCandidates.length > 0 ? (
                 <>
                   <div className="flex flex-wrap gap-3">
-                    {defenders.map((entry) => {
+                    {defenseBossCandidates.map((entry) => {
                       const selected = defenseBossSelection === entry.id
                       return (
                         <button
@@ -2097,13 +2124,21 @@ export function MatchDetailPage() {
                       )
                     })}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       size="sm"
                       disabled={!defenseBossSelection || defenseBossMutation.isPending}
                       onClick={() => defenseBossMutation.mutate(defenseBossSelection)}
                     >
                       Voter
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={defenseBossMutation.isPending}
+                      onClick={() => defenseBossMutation.mutate(undefined)}
+                    >
+                      Vote blanc
                     </Button>
                     <span className="text-muted-foreground text-xs">
                       Ton vote sera définitif.
@@ -2112,7 +2147,7 @@ export function MatchDetailPage() {
                 </>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  Aucun défenseur n'a joué ce match.
+                  Aucun défenseur ou gardien n'a joué ce match.
                 </p>
               )
             ) : (

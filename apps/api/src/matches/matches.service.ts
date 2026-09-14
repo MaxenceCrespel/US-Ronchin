@@ -67,12 +67,18 @@ export interface DefenseBossResultEntry {
 
 export interface DefenseBossResponse {
   myVoteCompositionId: string | null;
+  /** True once this voter has cast a vote with no target ("vote blanc") — distinct from
+   * `myVoteCompositionId === null`, which alone would be indistinguishable from "hasn't
+   * voted yet" and let the frontend show the voting form again after a blank vote. */
+  myVoteIsBlank: boolean;
   revealed: boolean;
   totalVotes: number;
+  /** Votes cast with no target — counted in totalVotes but never in `results`. */
+  blankVotes: number;
   totalPlayers: number;
   /** When the 24h reveal window closes — null until the first vote is cast. */
   votingClosesAt: string | null;
-  /** False when no defender played this match — the vote step doesn't apply. */
+  /** False when nobody played this match at all — the vote step doesn't apply. */
   hasEligibleTargets: boolean;
   results: DefenseBossResultEntry[] | null;
 }
@@ -676,6 +682,17 @@ export class MatchesService {
     await this.motmVotesRepository.save(vote);
   }
 
+  /** Candidate for "patron de la défense" — a defender or the goalkeeper, not a spectator.
+   * `position` is fixed for the whole match (a starter's pitch placement, or null for a
+   * substitute never placed there), so this can't capture someone who switched positions
+   * mid-match, but there's no clean way to track that automatically. */
+  private isDefenseBossEligible(entry: MatchComposition): boolean {
+    return (
+      (entry.position === PlayerPosition.DEFENDER || entry.position === PlayerPosition.GOALKEEPER) &&
+      !entry.isSpectator
+    );
+  }
+
   async getDefenseBoss(matchId: string, currentUserId: string): Promise<DefenseBossResponse> {
     const [match, composition, votes] = await Promise.all([
       this.findById(matchId),
@@ -687,8 +704,10 @@ export class MatchesService {
     if (match.resultConfirmedAt === null) {
       return {
         myVoteCompositionId: null,
+        myVoteIsBlank: false,
         revealed: false,
         totalVotes: 0,
+        blankVotes: 0,
         totalPlayers: 0,
         votingClosesAt: null,
         hasEligibleTargets: true,
@@ -700,9 +719,7 @@ export class MatchesService {
     // gates when results get revealed.
     const totalPlayers = composition.filter((c) => c.userId).length;
     const totalVotes = votes.length;
-    const hasEligibleTargets = composition.some(
-      (c) => c.position === PlayerPosition.DEFENDER && !c.isSpectator,
-    );
+    const hasEligibleTargets = composition.some((c) => this.isDefenseBossEligible(c));
     const revealed = isMotmRevealed(votes, totalPlayers);
     const first = firstVoteAt(votes);
     const votingClosesAt = first ? new Date(first.getTime() + MOTM_REVEAL_DELAY_MS).toISOString() : null;
@@ -712,6 +729,9 @@ export class MatchesService {
     );
     const voteTarget = (v: MatchDefenseBossVote) =>
       v.votedForGuestId ? compositionById.get(v.votedForGuestId) : compositionByUserId.get(v.votedForId!);
+    // "Vote blanc" — cast on purpose with no target, not the same as "hasn't voted".
+    const isBlank = (v: MatchDefenseBossVote) => !v.votedForId && !v.votedForGuestId;
+    const blankVotes = votes.filter(isBlank).length;
 
     let results: DefenseBossResultEntry[] | null = null;
     if (revealed) {
@@ -738,8 +758,10 @@ export class MatchesService {
     const myVote = votes.find((v) => v.voterId === currentUserId);
     return {
       myVoteCompositionId: myVote ? (voteTarget(myVote)?.id ?? null) : null,
+      myVoteIsBlank: myVote ? isBlank(myVote) : false,
       revealed,
       totalVotes,
+      blankVotes,
       totalPlayers,
       votingClosesAt,
       hasEligibleTargets,
@@ -750,16 +772,24 @@ export class MatchesService {
   async voteDefenseBoss(
     matchId: string,
     voterId: string,
-    votedForCompositionId: string,
+    votedForCompositionId: string | undefined,
   ): Promise<void> {
     const composition = await this.compositionsRepository.find({ where: { matchId } });
     const composedUserIds = new Set(composition.map((entry) => entry.userId));
     if (!composedUserIds.has(voterId)) {
       throw new BadRequestException('Seuls les joueurs ayant participé au match peuvent voter');
     }
-    const target = composition.find((entry) => entry.id === votedForCompositionId);
-    if (!target || target.position !== PlayerPosition.DEFENDER || target.isSpectator) {
-      throw new BadRequestException('Seul un défenseur du match peut être élu patron de la défense');
+
+    // No target at all is a deliberate "vote blanc", not a validation failure — everyone
+    // else still needs a real, valid target.
+    let target: MatchComposition | undefined;
+    if (votedForCompositionId !== undefined) {
+      target = composition.find((entry) => entry.id === votedForCompositionId);
+      if (!target || !this.isDefenseBossEligible(target)) {
+        throw new BadRequestException(
+          'Seul un défenseur ou le gardien du match peut être élu patron de la défense',
+        );
+      }
     }
 
     const { revealed } = await this.getDefenseBoss(matchId, voterId);
@@ -774,8 +804,8 @@ export class MatchesService {
     const vote = this.defenseBossVotesRepository.create({
       matchId,
       voterId,
-      votedForId: target.userId ?? null,
-      votedForGuestId: target.userId ? null : target.id,
+      votedForId: target?.userId ?? null,
+      votedForGuestId: target && !target.userId ? target.id : null,
     });
     await this.defenseBossVotesRepository.save(vote);
   }

@@ -230,6 +230,7 @@ export async function fetchDefenseBoss(matchId: string): Promise<DefenseBossResp
   return data
 }
 
-export async function voteDefenseBoss(matchId: string, votedForId: string): Promise<void> {
+/** Omit votedForId entirely for a "vote blanc" (deliberate abstention). */
+export async function voteDefenseBoss(matchId: string, votedForId?: string): Promise<void> {
   await apiClient.put(`/matches/${matchId}/defense-boss`, { votedForId })
 }

@@ -389,8 +389,13 @@ export interface DefenseBossResultEntry {
 
 export interface DefenseBossResponse {
   myVoteCompositionId: string | null
+  /** True once this voter has cast a "vote blanc" — distinct from myVoteCompositionId being
+   * null, which alone can't tell a blank vote apart from not having voted yet. */
+  myVoteIsBlank: boolean
   revealed: boolean
   totalVotes: number
+  /** Votes cast with no target — counted in totalVotes but never in results. */
+  blankVotes: number
   totalPlayers: number
   votingClosesAt: string | null
   hasEligibleTargets: boolean
