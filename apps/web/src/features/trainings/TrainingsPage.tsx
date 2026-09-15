@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   addWeeks,
@@ -886,18 +886,32 @@ function ManageSessionDialog({
     },
   })
 
-  // One click does both: reconcile the pre-match split against the real pointage (drop
-  // no-shows, add anyone present but not already listed), then move on to the score. No
-  // separate "confirm" step gating whether you're allowed to add someone first — adding
-  // happens while adjusting, validating is what closes the step out.
+  // Reconciles the pre-match split against the real pointage (drops no-shows, adds anyone
+  // present but not already listed) — run automatically the moment the Équipes step opens
+  // (see the effect below), not gated behind a button click. Requiring a click just to make
+  // the list match reality was exactly the confusing part: a coach who'd just pointed
+  // someone present still saw them missing until they hit "Valider". Now that button only
+  // ever moves you on to the score.
   const confirmTeamsMutation = useMutation({
     mutationFn: () => confirmFinalTeams(sessionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
-      setStep(3)
     },
   })
+  // Fires once per entry into step 2 (reset whenever the coach steps away), so returning to
+  // Pointage to fix someone and coming back re-reconciles instead of showing a stale list.
+  const reconciledOnEntryRef = useRef(false)
+  useEffect(() => {
+    if (step !== 2) {
+      reconciledOnEntryRef.current = false
+      return
+    }
+    if (reconciledOnEntryRef.current) return
+    reconciledOnEntryRef.current = true
+    if ((teamsQuery.data?.length ?? 0) > 0) confirmTeamsMutation.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
 
   const [scoreInput0, setScoreInput0] = useState(scoreTeam0 !== null ? String(scoreTeam0) : '')
   const [scoreInput1, setScoreInput1] = useState(scoreTeam1 !== null ? String(scoreTeam1) : '')
@@ -1126,10 +1140,15 @@ function ManageSessionDialog({
             ) : (
               <>
                 <p className="text-muted-foreground text-xs">
-                  Équipes générées automatiquement avant le coup d'envoi. Ajuste-les si besoin —
-                  déplace, retire, ajoute quelqu'un qui n'était pas prévu — puis valide en bas
-                  pour passer au score.
+                  Réconciliées automatiquement avec le pointage réel — qui a dit présent mais
+                  n'est pas venu est retiré, qui est venu sans être prévu est ajouté.
+                  Ajuste-les si besoin — déplace, retire, ajoute quelqu'un qui n'était pas prévu.
                 </p>
+                {confirmTeamsMutation.isError && (
+                  <p className="text-destructive text-xs">
+                    Échec de la mise à jour des équipes — réessaie ou vérifie ta connexion.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {Array.from({ length: teamCount }).map((_, teamIndex) => (
                     <div
@@ -1338,10 +1357,10 @@ function ManageSessionDialog({
               type="button"
               size="sm"
               className="gap-1"
-              disabled={teams.length === 0 || confirmTeamsMutation.isPending}
-              onClick={() => confirmTeamsMutation.mutate()}
+              disabled={teams.length === 0}
+              onClick={() => setStep(3)}
             >
-              {confirmTeamsMutation.isPending ? 'Validation...' : 'Valider les équipes'}
+              Passer au score
               <ChevronRight className="size-3.5" />
             </Button>
           )}
