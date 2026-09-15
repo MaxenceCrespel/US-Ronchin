@@ -293,7 +293,7 @@ export class TeamBalancingService {
     await this.assignmentsRepository.save(entities);
 
     // Invite everyone present to come see which team they landed on — covers both the
-    // scheduler's auto-generation (30 min before kickoff) and a coach re-generating by hand.
+    // scheduler's auto-generation (1h30 before kickoff) and a coach re-generating by hand.
     await this.pushNotificationsService.sendToUsers(presentUserIds, {
       title: 'Équipes prêtes !',
       body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
@@ -510,11 +510,24 @@ export class TeamBalancingService {
     return this.getTeams(sessionId);
   }
 
-  /** Coach removes one specific guest from a team — e.g. they said they'd bring a +1 who
-   * ends up not coming. Deletes the team slot immediately (unlike a real player's "retirer",
-   * which only flips their status and waits for the next Régénérer/Confirmer) and cleans up
-   * the source AttendanceGuest so a later regeneration doesn't just recreate the slot. */
-  async removeGuestFromTeam(
+  /** Drops one assignment from the team — a guest who ends up not coming, or a player who
+   * said "Présent" but isn't actually there. Deliberately leaves the player's declared
+   * `status` untouched: this is about who's on the pitch right now, not a correction to
+   * their declaration — they said they'd come and didn't, which is exactly what the "Beau
+   * Parleur" badge rewards catching (declared PRESENT, actual ABSENT) once pointage réel
+   * confirms it. Overwriting `status` here would erase that mismatch before it's ever
+   * recorded. Instead, this sets `actualStatus` to ABSENT — effectively an early, one-person
+   * pointage réel, recorded the moment the coach notices — which both keeps the mismatch
+   * intact for the badge AND, critically, is what generateTeams' presentAttendances filter
+   * checks first: without it, a straight "Régénérer" right after would read the still-PRESENT
+   * `status`, find nothing telling it otherwise, and put the very person just removed right
+   * back on a team. For a guest (no actualStatus to set), cleans up the source
+   * AttendanceGuest and decrements confirmedGuestCount too — not just guestCount — since
+   * that's what generateTeams' guest loop actually counts against.
+   * confirmFinalTeams (the post-training reconciliation) reads the same actualStatus, so a
+   * removal made here needs no separate handling once the session's over — it already
+   * looks exactly like a real no-show. */
+  async removeFromTeam(
     sessionId: string,
     assignmentId: string,
   ): Promise<TrainingTeamAssignment[]> {
@@ -524,13 +537,15 @@ export class TeamBalancingService {
     if (!assignment) {
       throw new NotFoundException('Affectation introuvable');
     }
-    if (assignment.userId) {
-      throw new BadRequestException(
-        "Ce n'est pas un invité — utilise le pointage réel pour un joueur.",
-      );
-    }
 
     await this.assignmentsRepository.delete(assignment.id);
+
+    if (assignment.userId) {
+      await this.attendancesRepository.update(
+        { trainingSessionId: sessionId, userId: assignment.userId },
+        { actualStatus: AttendanceStatus.ABSENT },
+      );
+    }
 
     if (assignment.attendanceGuestId) {
       const guest = await this.attendanceGuestsRepository.findOne({
@@ -538,9 +553,10 @@ export class TeamBalancingService {
       });
       if (guest) {
         await this.attendanceGuestsRepository.delete(guest.id);
+        await this.attendancesRepository.decrement({ id: guest.attendanceId }, 'guestCount', 1);
         await this.attendancesRepository.decrement(
           { id: guest.attendanceId },
-          'guestCount',
+          'confirmedGuestCount',
           1,
         );
       }
@@ -645,12 +661,12 @@ export class TeamBalancingService {
     for (const session of candidateSessions) {
       const sessionDateTime = parisWallTimeToDate(session.date, session.startTime);
       const diffMinutes = (sessionDateTime.getTime() - now.getTime()) / 60000;
-      // A single-minute window (diffMinutes > 29 && <= 30) meant one missed cron tick —
+      // A single-minute window (diffMinutes > 89 && <= 90) meant one missed cron tick —
       // an API restart/deploy right at that moment, most often — permanently skipped the
       // session, since the window would never come back around. Widen it into a catch-up
-      // range instead: fire any time from 30 minutes out through 3 hours after kickoff,
+      // range instead: fire any time from 1h30 out through 3 hours after kickoff,
       // relying on the alreadyGenerated check below for idempotency rather than exact timing.
-      if (diffMinutes <= 30 && diffMinutes > -180) {
+      if (diffMinutes <= 90 && diffMinutes > -180) {
         const alreadyGenerated = await this.hasTeams(session.id);
         if (!alreadyGenerated) {
           sessionsNeedingTeams.push(session);

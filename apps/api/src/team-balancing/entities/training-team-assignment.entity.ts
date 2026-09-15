@@ -43,7 +43,7 @@ export class TrainingTeamAssignment {
 
   /** Traces a guest slot back to the AttendanceGuest it came from — null for real players.
    * Lets the coach remove one specific guest from a team (see
-   * TeamBalancingService.removeGuestFromTeam): the assignment alone doesn't say which
+   * TeamBalancingService.removeFromTeam): the assignment alone doesn't say which
    * player invited them or which of that player's guests this is, so without this the
    * removal would have no source record to clean up. SET NULL rather than CASCADE so
    * deleting the source guest elsewhere doesn't silently vanish a team's history. */

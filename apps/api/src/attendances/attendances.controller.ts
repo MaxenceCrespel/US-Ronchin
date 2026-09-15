@@ -39,7 +39,7 @@ export class AttendancesController {
   }
 
   // Coach correcting a mistaken declaration ("said Present, isn't coming after all") —
-  // distinct from setMine (self-service, locked 30 min before kickoff) and from
+  // distinct from setMine (self-service, locked 1h30 before kickoff) and from
   // validate/actual (the post-hoc real-attendance record). This edits the same declared
   // status that team generation reads from, specifically so the coach can fix it and then
   // regenerate — bypasses the lock entirely since fixing it before regenerating is the

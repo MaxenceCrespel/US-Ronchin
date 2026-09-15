@@ -80,13 +80,13 @@ export class AttendancesService {
       where: { trainingSessionId, userId },
     });
 
-    // Locked from 30 min before kickoff — the same moment the teams get auto-generated
+    // Locked from 1h30 before kickoff — the same moment the teams get auto-generated
     // from declared presence, a late status flip would desync the teams from who's
     // actually shown up. A last-minute +1 doesn't have that problem the same way — it
     // doesn't change who the coach thinks is coming, just adds a body — so it's still
     // allowed past the lock as long as the status itself isn't changing; the coach can
     // regenerate teams afterwards to fold the guest in.
-    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime() - 30 * 60_000;
+    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime() - 90 * 60_000;
     const statusChanged = !attendance || attendance.status !== status;
     if (!bypassLock && Date.now() >= lockAt && statusChanged) {
       throw new BadRequestException(

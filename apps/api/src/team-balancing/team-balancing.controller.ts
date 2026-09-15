@@ -100,16 +100,17 @@ export class TeamBalancingController {
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 
-  // Removes one guest slot immediately (not a full regenerate) — e.g. a declared +1 who
-  // ends up not coming. Real players use the pointage réel + confirm flow instead.
+  // Drops one assignment immediately (not a full regenerate) — a declared +1 who ends up
+  // not coming, or a player who said "Présent" but isn't there. Doesn't touch the player's
+  // declared status either way — see TeamBalancingService.removeFromTeam.
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Delete(':assignmentId')
-  async removeGuest(
+  async remove(
     @Param('sessionId') sessionId: string,
     @Param('assignmentId') assignmentId: string,
   ) {
-    const teams = await this.teamBalancingService.removeGuestFromTeam(sessionId, assignmentId);
+    const teams = await this.teamBalancingService.removeFromTeam(sessionId, assignmentId);
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 

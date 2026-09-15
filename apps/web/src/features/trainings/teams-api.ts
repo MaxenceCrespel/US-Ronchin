@@ -29,9 +29,12 @@ export async function confirmFinalTeams(sessionId: string): Promise<TrainingTeam
   return data
 }
 
-/** Removes one guest slot immediately — unlike a real player, a guest has no status to flip
- * and wait for the next Régénérer/Confirmer, so this takes effect right away. */
-export async function removeGuestFromTeam(
+/** Drops one assignment from the team immediately — a guest who ends up not coming, or a
+ * player who said "Présent" but isn't there. Doesn't touch the player's declared status
+ * (the mismatch is what the "Beau Parleur" badge is for) — instead records it as an early
+ * pointage réel (actualStatus: ABSENT), so a later "Régénérer" doesn't just put them right
+ * back on a team. See the backend service for the full reasoning. */
+export async function removeFromTeam(
   sessionId: string,
   assignmentId: string,
 ): Promise<TrainingTeamAssignment[]> {

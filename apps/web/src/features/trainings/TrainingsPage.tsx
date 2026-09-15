@@ -55,6 +55,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
@@ -71,7 +72,6 @@ import type {
 import { isRosterPlayer } from '@/lib/roster'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import {
-  coachSetAttendance,
   createTraining,
   deleteSession,
   deleteTraining,
@@ -92,7 +92,7 @@ import {
   fetchTeams,
   generateTeams,
   moveTeamPlayer,
-  removeGuestFromTeam,
+  removeFromTeam,
 } from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
@@ -168,6 +168,7 @@ function ManageTrainingsDialog() {
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = useState('')
   const [maxPresentPlayers, setMaxPresentPlayers] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState<{ id: string; title: string } | null>(null)
 
   function resetForm() {
     setEditingId(null)
@@ -237,10 +238,12 @@ function ManageTrainingsDialog() {
       queryClient.invalidateQueries({ queryKey: ['trainings'] })
       queryClient.invalidateQueries({ queryKey: ['training-sessions'] })
       if (editingId) resetForm()
+      setConfirmingDelete(null)
     },
   })
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-tour="trainings-manage">
@@ -466,11 +469,7 @@ function ManageTrainingsDialog() {
                     size="sm"
                     variant="destructive"
                     disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (confirm(`Supprimer l'entraînement « ${training.title} » ?`)) {
-                        deleteMutation.mutate(training.id)
-                      }
-                    }}
+                    onClick={() => setConfirmingDelete({ id: training.id, title: training.title })}
                   >
                     Supprimer
                   </Button>
@@ -481,243 +480,70 @@ function ManageTrainingsDialog() {
         </div>
       </DialogContent>
     </Dialog>
+    <ConfirmDialog
+      open={confirmingDelete !== null}
+      onOpenChange={(next) => !next && setConfirmingDelete(null)}
+      title="Supprimer cet entraînement ?"
+      description={confirmingDelete ? `« ${confirmingDelete.title} » — toutes ses séances passées et à venir seront supprimées.` : undefined}
+      confirmLabel="Supprimer"
+      destructive
+      isPending={deleteMutation.isPending}
+      onConfirm={() => confirmingDelete && deleteMutation.mutate(confirmingDelete.id)}
+    />
+    </>
   )
 }
 
+/** Read-only — editing (move/remove/walk-in/régénérer/score) lives entirely in
+ * ManageSessionDialog now. Just reflects the current state for whoever's looking,
+ * coach included, without a second, competing set of edit controls on the card itself. */
 function TeamsSection({
   sessionId,
-  isCoach,
   scoreTeam0,
   scoreTeam1,
 }: {
   sessionId: string
-  isCoach: boolean
   scoreTeam0: number | null
   scoreTeam1: number | null
 }) {
-  const queryClient = useQueryClient()
   const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
-  const [scoreInput0, setScoreInput0] = useState(scoreTeam0 !== null ? String(scoreTeam0) : '')
-  const [scoreInput1, setScoreInput1] = useState(scoreTeam1 !== null ? String(scoreTeam1) : '')
-
-  const scoreMutation = useMutation({
-    mutationFn: () =>
-      updateSession(sessionId, {
-        scoreTeam0: Number(scoreInput0),
-        scoreTeam1: Number(scoreInput1),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['training-sessions'] })
-      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
-    },
-  })
-
-  const generateMutation = useMutation({
-    mutationFn: () => generateTeams(sessionId, 2),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
-  })
-
-  const deleteTeamsMutation = useMutation({
-    mutationFn: () => deleteTeams(sessionId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
-  })
-
-  const moveMutation = useMutation({
-    mutationFn: ({ assignmentId, teamIndex }: { assignmentId: string; teamIndex: number }) =>
-      moveTeamPlayer(sessionId, assignmentId, teamIndex),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
-  })
-
-  // Corrects a declared "Présent" that turned out wrong (said they'd come, didn't) so a
-  // follow-up "Régénérer" reflects it — bypasses the lock entirely, coach-only.
-  const removeMutation = useMutation({
-    mutationFn: (userId: string) => coachSetAttendance(sessionId, userId, 'ABSENT'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
-    },
-  })
-
-  // Guests have no status to flip — this removes the slot (and its source AttendanceGuest)
-  // outright, so it takes effect immediately instead of waiting for the next
-  // Régénérer/Confirmer like the real-player "retirer" above.
-  const removeGuestMutation = useMutation({
-    mutationFn: (assignmentId: string) => removeGuestFromTeam(sessionId, assignmentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
-    },
-  })
-
   const teams = teamsQuery.data ?? []
-  // Fixed at TEAM_LABELS.length (generateTeams always creates exactly 2 teams,
-  // see the call above) rather than derived from which teamIndex values are
-  // currently present — otherwise moving every player out of a team makes it
-  // vanish from the assignment rows, and with it the column/drop-target to
-  // move anyone back into it.
-  const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
 
-  if (teams.length === 0 && !isCoach) return null
+  if (teams.length === 0) return null
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
-          Équipes {teams.length > 0 ? '' : "(générées 30 min avant le coup d'envoi)"}
-        </p>
-        {isCoach && (
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 px-2 text-xs"
-              disabled={generateMutation.isPending}
-              onClick={() => generateMutation.mutate()}
-            >
-              <Shuffle className="size-3.5" />
-              {teams.length > 0 ? 'Régénérer' : 'Générer maintenant'}
-            </Button>
-            {teams.length > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive h-8 gap-1.5 px-2 text-xs"
-                disabled={deleteTeamsMutation.isPending}
-                onClick={() => {
-                  if (confirm('Supprimer les équipes de cette séance ? Retour à « pas encore générées ».')) {
-                    deleteTeamsMutation.mutate()
-                  }
-                }}
-              >
-                <Trash2 className="size-3.5" />
-                Supprimer
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-      {generateMutation.isError && (
-        <p className="text-destructive text-xs">
-          Aucun joueur « Présent » pour générer des équipes.
-        </p>
-      )}
-      {teams.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          {Array.from({ length: teamCount }).map((_, teamIndex) => (
-            <div
-              key={teamIndex}
-              className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
-            >
-              <p className="mb-1.5 text-sm font-semibold">{TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}</p>
-              <ul className="flex flex-col gap-1">
-                {teams
-                  .filter((t) => t.teamIndex === teamIndex)
-                  .map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
-                      <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
-                        {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
-                        {!t.user && t.guestPosition && (
-                          <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
-                        )}
-                      </span>
-                      {isCoach && (
-                        <span className="flex shrink-0 items-center gap-1">
-                          <button
-                            type="button"
-                            title="Déplacer dans l'autre équipe"
-                            aria-label="Déplacer dans l'autre équipe"
-                            className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
-                            onClick={() =>
-                              moveMutation.mutate({
-                                assignmentId: t.id,
-                                teamIndex: (teamIndex + 1) % teamCount,
-                              })
-                            }
-                          >
-                            <ArrowRightLeft className="size-3.5" />
-                          </button>
-                          {t.user ? (
-                            <button
-                              type="button"
-                              title="Ne vient finalement pas"
-                              aria-label="Ne vient finalement pas"
-                              disabled={removeMutation.isPending}
-                              className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
-                              onClick={() => {
-                                if (
-                                  confirm(
-                                    `${t.user!.firstName} ne vient finalement pas — le marquer absent ?`,
-                                  )
-                                ) {
-                                  removeMutation.mutate(t.user!.id)
-                                }
-                              }}
-                            >
-                              <UserMinus className="size-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              title="Retirer cet invité"
-                              aria-label="Retirer cet invité"
-                              disabled={removeGuestMutation.isPending}
-                              className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
-                              onClick={() => {
-                                if (confirm(`Retirer ${t.guestLabel} de l'équipe ?`)) {
-                                  removeGuestMutation.mutate(t.id)
-                                }
-                              }}
-                            >
-                              <UserMinus className="size-3.5" />
-                            </button>
-                          )}
-                        </span>
+      <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Équipes</p>
+      <div className="grid grid-cols-2 gap-2">
+        {TEAM_LABELS.map((label, teamIndex) => (
+          <div
+            key={teamIndex}
+            className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+          >
+            <p className="mb-1.5 text-sm font-semibold">{label}</p>
+            <ul className="flex flex-col gap-1">
+              {teams
+                .filter((t) => t.teamIndex === teamIndex)
+                .map((t) => (
+                  <li key={t.id} className="truncate py-0.5 text-xs">
+                    <span className={cn(!t.user && 'text-muted-foreground italic')}>
+                      {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
+                      {!t.user && t.guestPosition && (
+                        <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
                       )}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-      {teams.length > 0 && (
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {scoreTeam0 !== null && scoreTeam1 !== null && (
         <div className="flex items-center gap-2 text-xs">
           <Trophy className="text-muted-foreground size-3.5 shrink-0" />
-          {isCoach ? (
-            <>
-              <Input
-                type="number"
-                min={0}
-                value={scoreInput0}
-                onChange={(e) => setScoreInput0(e.target.value)}
-                className="h-7 w-14 px-2 text-center"
-                placeholder="—"
-                aria-label={`Score ${TEAM_LABELS[0]}`}
-              />
-              <span className="text-muted-foreground">–</span>
-              <Input
-                type="number"
-                min={0}
-                value={scoreInput1}
-                onChange={(e) => setScoreInput1(e.target.value)}
-                className="h-7 w-14 px-2 text-center"
-                placeholder="—"
-                aria-label={`Score ${TEAM_LABELS[1]}`}
-              />
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs"
-                disabled={scoreInput0 === '' || scoreInput1 === '' || scoreMutation.isPending}
-                onClick={() => scoreMutation.mutate()}
-              >
-                {scoreMutation.isPending ? 'Enregistrement...' : 'Enregistrer le score'}
-              </Button>
-            </>
-          ) : scoreTeam0 !== null && scoreTeam1 !== null ? (
-            <span className="text-muted-foreground">
-              Score : {TEAM_LABELS[0]} {scoreTeam0} – {scoreTeam1} {TEAM_LABELS[1]}
-            </span>
-          ) : null}
+          <span className="text-muted-foreground">
+            Score : {TEAM_LABELS[0]} {scoreTeam0} – {scoreTeam1} {TEAM_LABELS[1]}
+          </span>
         </div>
       )}
     </div>
@@ -800,48 +626,241 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
 /** Post-training coach checklist, in its own dialog rather than a cramped inline panel —
  * gives the list room to breathe (avatars, full names, bigger tap targets) and a "Tout
  * présent" bulk action, since most sessions the whole declared list actually did show up. */
-function CoachValidationDialog({
+type ManageSessionStep = 1 | 2 | 3
+
+const MANAGE_STEP_LABELS: Record<ManageSessionStep, string> = {
+  1: 'Pointage',
+  2: 'Équipes',
+  3: 'Score',
+}
+
+/** Shown once, before any team exists yet — a single confirm-and-go dialog, since there's
+ * nothing to configure beyond "do it now" (team count is fixed at 2, see TEAM_LABELS).
+ * Once teams exist, SessionCard swaps this out for AdjustTeamsDialog below. */
+function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
+  const [open, setOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const generateMutation = useMutation({
+    mutationFn: () => generateTeams(sessionId, 2),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      setOpen(false)
+    },
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+          <Shuffle className="size-3.5" />
+          Générer les équipes
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Générer les équipes</DialogTitle>
+        </DialogHeader>
+        <p className="text-muted-foreground text-xs">
+          Répartit tous les joueurs actuellement « Présent » en deux équipes équilibrées. Tu
+          pourras encore les ajuster (déplacer quelqu'un, tout régénérer) avant le coup d'envoi.
+        </p>
+        <Button type="button" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
+          <Shuffle className="size-3.5" />
+          {generateMutation.isPending ? 'Génération...' : 'Générer maintenant'}
+        </Button>
+        {generateMutation.isError && (
+          <p className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Once teams exist and before the session has ended: move people between teams (arriving
+ * late, sorting out who gets which chasuble color), drop someone who said "Présent" but
+ * isn't actually there, or régénérer from scratch — all available right up until the
+ * session ends, since a coach arriving at training needs the full toolkit, not just a
+ * preview. No walk-in here: adding someone unplanned is a post-training correction against
+ * actual attendance, which doesn't exist yet — see ManageSessionDialog below, once the
+ * session has ended, for that plus pointage and score. */
+function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
+  const [open, setOpen] = useState(false)
+  const queryClient = useQueryClient()
+  const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
+  const generateMutation = useMutation({
+    mutationFn: () => generateTeams(sessionId, 2),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
+  })
+  const moveMutation = useMutation({
+    mutationFn: ({ assignmentId, teamIndex }: { assignmentId: string; teamIndex: number }) =>
+      moveTeamPlayer(sessionId, assignmentId, teamIndex),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
+  })
+  const [confirmingRemove, setConfirmingRemove] = useState<{ assignmentId: string; label: string } | null>(null)
+  // Just drops the assignment — doesn't touch the player's declared status (see
+  // TeamBalancingService.removeFromTeam for why that matters).
+  const removeMutation = useMutation({
+    mutationFn: (assignmentId: string) => removeFromTeam(sessionId, assignmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+      setConfirmingRemove(null)
+    },
+  })
+
+  const teams = teamsQuery.data ?? []
+  const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+          <ArrowRightLeft className="size-3.5" />
+          Modifier les équipes
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Équipes</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-2">
+          {TEAM_LABELS.map((label, teamIndex) => (
+            <div key={teamIndex} className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
+              <p className="mb-1.5 text-sm font-semibold">{label}</p>
+              <ul className="flex flex-col gap-1">
+                {teams
+                  .filter((t) => t.teamIndex === teamIndex)
+                  .map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
+                      <span className="truncate">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          title="Déplacer dans l'autre équipe"
+                          aria-label="Déplacer dans l'autre équipe"
+                          className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                          onClick={() => moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })}
+                        >
+                          <ArrowRightLeft className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
+                          aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
+                          disabled={removeMutation.isPending}
+                          className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                          onClick={() =>
+                            setConfirmingRemove({
+                              assignmentId: t.id,
+                              label: t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel!,
+                            })
+                          }
+                        >
+                          <UserMinus className="size-3.5" />
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="gap-1.5 self-start text-xs"
+          disabled={generateMutation.isPending}
+          onClick={() => generateMutation.mutate()}
+        >
+          <Shuffle className="size-3.5" />
+          {generateMutation.isPending ? 'Régénération...' : 'Tout régénérer'}
+        </Button>
+        <Button type="button" variant="secondary" className="mt-1" onClick={() => setOpen(false)}>
+          Fermer
+        </Button>
+      </DialogContent>
+    </Dialog>
+    <ConfirmDialog
+      open={confirmingRemove !== null}
+      onOpenChange={(next) => !next && setConfirmingRemove(null)}
+      title="Retirer de l'équipe ?"
+      description={confirmingRemove ? `${confirmingRemove.label} sera retiré de l'équipe.` : undefined}
+      confirmLabel="Retirer"
+      destructive
+      isPending={removeMutation.isPending}
+      onConfirm={() => confirmingRemove && removeMutation.mutate(confirmingRemove.assignmentId)}
+    />
+    </>
+  )
+}
+
+/** Post-training coach flow: pointage réel, then reconciling the pre-generated teams
+ * against who actually showed up, then the score — in that order, as three steps of one
+ * dialog instead of a separate pointage dialog plus an always-open teams/score card
+ * underneath it. Only ever rendered once the session has ended (see SessionCard) — before
+ * that, GenerateTeamsDialog / AdjustTeamsDialog above are what a coach needs. */
+function ManageSessionDialog({
   sessionId,
   attendances,
+  scoreTeam0,
+  scoreTeam1,
 }: {
   sessionId: string
   attendances: Attendance[]
+  scoreTeam0: number | null
+  scoreTeam1: number | null
 }) {
   const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<ManageSessionStep>(1)
   const queryClient = useQueryClient()
   const currentUser = useAuthStore((s) => s.user)
-  // Not gated on `open` (unlike most on-demand dialog queries elsewhere in this file) —
-  // the trigger button needs the roster to show its "X/Y pointés" progress before the
-  // coach ever opens it. React Query dedupes this against any other ['players'] fetch
-  // already in flight for the page, so it's not an extra request per card in practice.
+
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
+  const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
 
   const validateMutation = useMutation({
     mutationFn: ({ userId, status }: { userId: string; status: AttendanceStatus }) =>
       validateAttendance(sessionId, userId, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] }),
   })
 
   const bulkPresentMutation = useMutation({
     mutationFn: (userIds: string[]) =>
       Promise.all(userIds.map((userId) => validateAttendance(sessionId, userId, 'PRESENT'))),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] }),
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: () => generateTeams(sessionId, 2),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
+  })
+
+  const [confirmingDeleteTeams, setConfirmingDeleteTeams] = useState(false)
+  const deleteTeamsMutation = useMutation({
+    mutationFn: () => deleteTeams(sessionId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      setConfirmingDeleteTeams(false)
     },
   })
 
-  // Shares its cache with TeamsSection's identical query key — just here to know whether
-  // teams exist yet, so "Confirmer l'équipe finale" only shows once there's something to
-  // reconcile against.
-  const teamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
+  const moveMutation = useMutation({
+    mutationFn: ({ assignmentId, teamIndex }: { assignmentId: string; teamIndex: number }) =>
+      moveTeamPlayer(sessionId, assignmentId, teamIndex),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teams', sessionId] }),
+  })
 
-  const confirmTeamsMutation = useMutation({
-    mutationFn: () => confirmFinalTeams(sessionId),
+  const [confirmingRemove, setConfirmingRemove] = useState<{ assignmentId: string; label: string } | null>(null)
+  // Just drops the assignment — doesn't touch the player's declared status (see
+  // TeamBalancingService.removeFromTeam for why that matters).
+  const removeMutation = useMutation({
+    mutationFn: (assignmentId: string) => removeFromTeam(sessionId, assignmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
-      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+      setConfirmingRemove(null)
     },
   })
 
@@ -867,6 +886,30 @@ function CoachValidationDialog({
     },
   })
 
+  // One click does both: reconcile the pre-match split against the real pointage (drop
+  // no-shows, add anyone present but not already listed), then move on to the score. No
+  // separate "confirm" step gating whether you're allowed to add someone first — adding
+  // happens while adjusting, validating is what closes the step out.
+  const confirmTeamsMutation = useMutation({
+    mutationFn: () => confirmFinalTeams(sessionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+      setStep(3)
+    },
+  })
+
+  const [scoreInput0, setScoreInput0] = useState(scoreTeam0 !== null ? String(scoreTeam0) : '')
+  const [scoreInput1, setScoreInput1] = useState(scoreTeam1 !== null ? String(scoreTeam1) : '')
+  const scoreMutation = useMutation({
+    mutationFn: () =>
+      updateSession(sessionId, { scoreTeam0: Number(scoreInput0), scoreTeam1: Number(scoreInput1) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['training-sessions'] })
+      queryClient.invalidateQueries({ queryKey: ['training-ranking'] })
+    },
+  })
+
   // A non-playing coach isn't a "roster player" and would otherwise never see themselves
   // here — but a coach who actually attended still needs to be able to point themselves.
   const rosterPlayers = (playersQuery.data ?? []).filter((p) => isRosterPlayer(p))
@@ -874,27 +917,58 @@ function CoachValidationDialog({
   const players =
     me && !rosterPlayers.some((p) => p.id === me.id) ? [me, ...rosterPlayers] : rosterPlayers
 
-  const actualByUserId = new Map(
-    attendances.map((a) => [a.userId, a.actualStatus ?? null] as const),
-  )
+  const actualByUserId = new Map(attendances.map((a) => [a.userId, a.actualStatus ?? null] as const))
   const pointedCount = players.filter((p) => actualByUserId.get(p.id)).length
   const allPointed = players.length > 0 && pointedCount === players.length
   const unpointedIds = players.filter((p) => !actualByUserId.get(p.id)).map((p) => p.id)
 
+  const teams = teamsQuery.data ?? []
+  const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
+
+  // The stepper is a guide, not a lock: teams can (and normally do) get built well before
+  // kickoff, completely independent of pointage réel, which only exists once training has
+  // actually happened — so unlike step 3 (no score without teams), step 2 is never gated
+  // on step 1 being done.
+  function canGoStep(target: ManageSessionStep) {
+    if (target === 3) return teams.length > 0
+    return true
+  }
+
+  function openDialog() {
+    setStep(!allPointed ? 1 : teams.length === 0 ? 2 : 3)
+    setOpen(true)
+  }
+
+  const statusLine = !allPointed
+    ? { label: 'Pointage à faire', small: `${pointedCount}/${players.length} pointés` }
+    : teams.length === 0
+      ? { label: 'Pointage terminé', small: 'équipe à valider' }
+      : scoreTeam0 === null || scoreTeam1 === null
+        ? { label: 'Équipe prête', small: 'score à saisir' }
+        : { label: 'Séance traitée', small: 'tout est à jour' }
+  const fullyDone = allPointed && teams.length > 0 && scoreTeam0 !== null && scoreTeam1 !== null
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) openDialog()
+        else setOpen(false)
+      }}
+    >
       <DialogTrigger asChild>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className={cn(
-            'h-8 justify-start gap-2 text-xs',
-            allPointed ? 'border-emerald-500/40 text-emerald-700' : '',
-          )}
+          className={cn('h-9 justify-start gap-2 text-xs', fullyDone && 'border-emerald-500/40 text-emerald-700')}
         >
           <ClipboardCheck className="size-3.5" />
-          Pointage réel
+          <span className="flex flex-col items-start leading-tight">
+            <span className="font-semibold">Gérer la séance</span>
+            <span className="text-[10px] opacity-70">{statusLine.label} · {statusLine.small}</span>
+          </span>
           {players.length > 0 && (
             <Badge variant={allPointed ? 'default' : 'secondary'} className="ml-auto">
               {pointedCount}/{players.length}
@@ -904,190 +978,402 @@ function CoachValidationDialog({
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Pointage réel</DialogTitle>
+          <DialogTitle>Gérer la séance</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
-          {allPointed && (teamsQuery.data?.length ?? 0) > 0 && (
-            <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
-              <p className="text-muted-foreground text-xs">
-                Pointage terminé — confirme l'équipe finale pour retirer les absents de
-                dernière minute et ajouter ceux qui sont venus sans être prévus.
-              </p>
+        <div className="flex items-center gap-1">
+          {([1, 2, 3] as ManageSessionStep[]).map((s, i) => {
+            // A green check means that step's own task is actually done, not just "you've
+            // clicked past it" — the tabs are freely navigable, so position alone would be
+            // misleading (e.g. jumping to "Équipes" before pointage is finished).
+            const done = s === 1 ? allPointed : s === 2 ? teams.length > 0 : scoreTeam0 !== null && scoreTeam1 !== null
+            return (
+              <div key={s} className="flex flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={!canGoStep(s)}
+                  onClick={() => canGoStep(s) && setStep(s)}
+                  className={cn(
+                    'flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-bold transition-colors',
+                    s === step
+                      ? 'border-club-blue bg-club-blue text-white'
+                      : done
+                        ? 'border-emerald-500 bg-emerald-500 text-white'
+                        : 'text-muted-foreground border-border',
+                  )}
+                >
+                  {done && s !== step ? '✓' : s}
+                </button>
+                <span className={cn('text-[10.5px] font-semibold', s === step ? 'text-foreground' : 'text-muted-foreground')}>
+                  {MANAGE_STEP_LABELS[s]}
+                </span>
+                {i < 2 && <div className={cn('h-0.5 flex-1', done ? 'bg-emerald-500' : 'bg-border')} />}
+              </div>
+            )
+          })}
+        </div>
+
+        {step === 1 && (
+          <div className="flex flex-col gap-3">
+            <div
+              className={cn(
+                'flex items-center gap-2 rounded-md border p-2 text-xs',
+                allPointed ? 'border-emerald-500/30 bg-emerald-50' : 'border-club-blue/30 bg-accent',
+              )}
+            >
+              <span className={cn('text-base font-bold', allPointed ? 'text-emerald-700' : 'text-club-blue')}>
+                {pointedCount}/{players.length}
+              </span>
+              <span className="text-muted-foreground">
+                {allPointed
+                  ? 'Tout le monde est pointé.'
+                  : `joueurs pointés, ${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''}.`}
+              </span>
+            </div>
+            {unpointedIds.length > 0 && (
               <Button
                 type="button"
                 size="sm"
                 variant="secondary"
                 className="gap-1.5 self-start"
-                disabled={confirmTeamsMutation.isPending}
-                onClick={() => confirmTeamsMutation.mutate()}
+                disabled={bulkPresentMutation.isPending}
+                onClick={() => bulkPresentMutation.mutate(unpointedIds)}
               >
                 <CheckCheck className="size-3.5" />
-                {confirmTeamsMutation.isPending
-                  ? 'Confirmation...'
-                  : "Confirmer l'équipe finale"}
+                {bulkPresentMutation.isPending
+                  ? 'Enregistrement...'
+                  : `Tout présent (${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''})`}
               </Button>
-              {confirmTeamsMutation.isSuccess && (
-                <p className="text-xs text-emerald-600">Équipes mises à jour ✓</p>
-              )}
+            )}
+            <div className="flex flex-col divide-y">
+              {players.map((player) => {
+                const declared = attendances.find((a) => a.userId === player.id)
+                const actual = declared?.actualStatus ?? null
+                const mismatch = declared?.status && actual && declared.status !== actual
+
+                return (
+                  <div key={player.id} className="flex items-center justify-between gap-2 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PlayerAvatar
+                        firstName={player.firstName}
+                        lastName={player.lastName}
+                        avatarUrl={player.avatarUrl}
+                        size="sm"
+                      />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-sm font-medium">
+                          {player.firstName} {player.lastName}
+                        </span>
+                        {declared?.status && (
+                          <span className={cn('text-muted-foreground text-xs', mismatch && 'text-amber-600')}>
+                            Déclaré {ATTENDANCE_STATUS_LABELS[declared.status].toLowerCase()}
+                            {mismatch && ' — à vérifier'}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        disabled={validateMutation.isPending || bulkPresentMutation.isPending}
+                        onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
+                        className={cn(
+                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          actual === 'PRESENT'
+                            ? 'border-emerald-500 bg-emerald-500 text-white'
+                            : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
+                        )}
+                        aria-label="Marquer présent"
+                      >
+                        <Check className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={validateMutation.isPending || bulkPresentMutation.isPending}
+                        onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
+                        className={cn(
+                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          actual === 'ABSENT'
+                            ? 'border-destructive bg-destructive text-white'
+                            : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
+                        )}
+                        aria-label="Marquer absent"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          )}
-          {(teamsQuery.data?.length ?? 0) > 0 && (
-            <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
-              {!walkInOpen ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 self-start text-xs"
-                  onClick={() => setWalkInOpen(true)}
-                >
-                  <UserPlus className="size-3.5" />
-                  Ajouter quelqu'un qui n'était pas prévu
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="flex flex-col gap-3">
+            {teams.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-md border border-dashed p-4 text-center">
+                <p className="text-muted-foreground text-xs">
+                  Pas d'équipe générée avant le coup d'envoi.
+                </p>
+                <Button type="button" size="sm" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
+                  <Shuffle className="size-3.5" />
+                  Générer maintenant
                 </Button>
-              ) : (
-                <>
-                  <p className="text-muted-foreground text-xs">
-                    Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
-                    directement à l'équipe la moins fournie.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Input
-                      placeholder="Prénom"
-                      className="h-7 w-24 text-xs"
-                      value={walkInFirstName}
-                      onChange={(e) => setWalkInFirstName(e.target.value)}
-                    />
-                    <Input
-                      placeholder="Nom (optionnel)"
-                      className="h-7 w-28 text-xs"
-                      value={walkInLastName}
-                      onChange={(e) => setWalkInLastName(e.target.value)}
-                    />
-                    <Select
-                      value={walkInPosition}
-                      onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}
+                {generateMutation.isError && (
+                  <p className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
+                )}
+              </div>
+            ) : (
+              <>
+                <p className="text-muted-foreground text-xs">
+                  Équipes générées automatiquement avant le coup d'envoi. Ajuste-les si besoin —
+                  déplace, retire, ajoute quelqu'un qui n'était pas prévu — puis valide en bas
+                  pour passer au score.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {Array.from({ length: teamCount }).map((_, teamIndex) => (
+                    <div
+                      key={teamIndex}
+                      className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
                     >
-                      <SelectTrigger className="h-7 w-32 text-xs">
-                        <SelectValue placeholder="Poste (optionnel)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={walkInMutation.isPending || !walkInFirstName.trim()}
-                      onClick={() => walkInMutation.mutate()}
-                    >
-                      {walkInMutation.isPending ? 'Ajout...' : 'Ajouter'}
-                    </Button>
+                      <p className="mb-1.5 text-sm font-semibold">
+                        {TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}
+                      </p>
+                      <ul className="flex flex-col gap-1">
+                        {teams
+                          .filter((t) => t.teamIndex === teamIndex)
+                          .map((t) => (
+                            <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
+                              <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
+                                {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
+                                {!t.user && t.guestPosition && (
+                                  <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
+                                )}
+                              </span>
+                              <span className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  title="Déplacer dans l'autre équipe"
+                                  aria-label="Déplacer dans l'autre équipe"
+                                  className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                                  onClick={() =>
+                                    moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })
+                                  }
+                                >
+                                  <ArrowRightLeft className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
+                                  aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
+                                  disabled={removeMutation.isPending}
+                                  className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                                  onClick={() =>
+                                    setConfirmingRemove({
+                                      assignmentId: t.id,
+                                      label: t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel!,
+                                    })
+                                  }
+                                >
+                                  <UserMinus className="size-3.5" />
+                                </button>
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+                  {!walkInOpen ? (
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => setWalkInOpen(false)}
+                      className="gap-1.5 self-start text-xs"
+                      onClick={() => setWalkInOpen(true)}
                     >
-                      Annuler
+                      <UserPlus className="size-3.5" />
+                      Ajouter quelqu'un qui n'était pas prévu
                     </Button>
-                  </div>
-                  {walkInMutation.isError && (
-                    <p className="text-destructive text-xs">Échec — réessaie.</p>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground text-xs">
+                        Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
+                        directement à l'équipe la moins fournie.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Input
+                          placeholder="Prénom"
+                          className="h-7 w-24 text-xs"
+                          value={walkInFirstName}
+                          onChange={(e) => setWalkInFirstName(e.target.value)}
+                        />
+                        <Input
+                          placeholder="Nom (optionnel)"
+                          className="h-7 w-28 text-xs"
+                          value={walkInLastName}
+                          onChange={(e) => setWalkInLastName(e.target.value)}
+                        />
+                        <Select value={walkInPosition} onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}>
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue placeholder="Poste (optionnel)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={walkInMutation.isPending || !walkInFirstName.trim()}
+                          onClick={() => walkInMutation.mutate()}
+                        >
+                          {walkInMutation.isPending ? 'Ajout...' : 'Ajouter'}
+                        </Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setWalkInOpen(false)}>
+                          Annuler
+                        </Button>
+                      </div>
+                      {walkInMutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+                    </>
                   )}
-                </>
-              )}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="grow gap-1.5 text-xs"
+                    disabled={generateMutation.isPending}
+                    onClick={() => generateMutation.mutate()}
+                  >
+                    <Shuffle className="size-3.5" />
+                    Tout régénérer
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive gap-1.5 text-xs"
+                    disabled={deleteTeamsMutation.isPending}
+                    onClick={() => setConfirmingDeleteTeams(true)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Supprimer
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="flex flex-col items-center gap-3 py-2">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xs font-semibold">{TEAM_LABELS[0]}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={scoreInput0}
+                  onChange={(e) => setScoreInput0(e.target.value)}
+                  className="h-14 w-16 text-center text-2xl font-bold"
+                  placeholder="—"
+                  aria-label={`Score ${TEAM_LABELS[0]}`}
+                />
+              </div>
+              <span className="text-muted-foreground mt-5 text-xl font-bold">–</span>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-xs font-semibold">{TEAM_LABELS[1]}</span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={scoreInput1}
+                  onChange={(e) => setScoreInput1(e.target.value)}
+                  className="h-14 w-16 text-center text-2xl font-bold"
+                  placeholder="—"
+                  aria-label={`Score ${TEAM_LABELS[1]}`}
+                />
+              </div>
             </div>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={scoreInput0 === '' || scoreInput1 === '' || scoreMutation.isPending}
+              onClick={() => scoreMutation.mutate()}
+            >
+              {scoreMutation.isPending ? 'Enregistrement...' : 'Enregistrer le score'}
+            </Button>
+            {scoreMutation.isSuccess && (
+              <p className="text-xs font-semibold text-emerald-600">✓ Séance entièrement traitée</p>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between border-t pt-3">
+          {step === 1 ? (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              Fermer
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={() => setStep((step - 1) as ManageSessionStep)}>
+              <ChevronLeft className="size-3.5" />
+              {MANAGE_STEP_LABELS[(step - 1) as ManageSessionStep]}
+            </Button>
           )}
-          {unpointedIds.length > 0 && (
+          {step === 1 && (
+            <Button type="button" size="sm" className="gap-1" onClick={() => setStep(2)}>
+              Équipes
+              <ChevronRight className="size-3.5" />
+            </Button>
+          )}
+          {step === 2 && (
             <Button
               type="button"
               size="sm"
-              variant="secondary"
-              className="gap-1.5 self-start"
-              disabled={bulkPresentMutation.isPending}
-              onClick={() => bulkPresentMutation.mutate(unpointedIds)}
+              className="gap-1"
+              disabled={teams.length === 0 || confirmTeamsMutation.isPending}
+              onClick={() => confirmTeamsMutation.mutate()}
             >
-              <CheckCheck className="size-3.5" />
-              {bulkPresentMutation.isPending
-                ? 'Enregistrement...'
-                : `Tout présent (${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''})`}
+              {confirmTeamsMutation.isPending ? 'Validation...' : 'Valider les équipes'}
+              <ChevronRight className="size-3.5" />
             </Button>
           )}
-          <div className="flex flex-col divide-y">
-            {players.map((player) => {
-              const declared = attendances.find((a) => a.userId === player.id)
-              const actual = declared?.actualStatus ?? null
-              const mismatch = declared?.status && actual && declared.status !== actual
-
-              return (
-                <div key={player.id} className="flex items-center justify-between gap-2 py-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <PlayerAvatar
-                      firstName={player.firstName}
-                      lastName={player.lastName}
-                      avatarUrl={player.avatarUrl}
-                      size="sm"
-                    />
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate text-sm font-medium">
-                        {player.firstName} {player.lastName}
-                      </span>
-                      {declared?.status && (
-                        <span
-                          className={cn(
-                            'text-muted-foreground text-xs',
-                            mismatch && 'text-amber-600',
-                          )}
-                        >
-                          Déclaré {ATTENDANCE_STATUS_LABELS[declared.status].toLowerCase()}
-                          {mismatch && ' — à vérifier'}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    <button
-                      type="button"
-                      disabled={validateMutation.isPending || bulkPresentMutation.isPending}
-                      onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
-                      className={cn(
-                        'flex size-8 items-center justify-center rounded-full border transition-colors',
-                        actual === 'PRESENT'
-                          ? 'border-emerald-500 bg-emerald-500 text-white'
-                          : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
-                      )}
-                      aria-label="Marquer présent"
-                    >
-                      <Check className="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={validateMutation.isPending || bulkPresentMutation.isPending}
-                      onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
-                      className={cn(
-                        'flex size-8 items-center justify-center rounded-full border transition-colors',
-                        actual === 'ABSENT'
-                          ? 'border-destructive bg-destructive text-white'
-                          : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
-                      )}
-                      aria-label="Marquer absent"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          {step === 3 && (
+            <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>
+              Terminer ✓
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
+    <ConfirmDialog
+      open={confirmingRemove !== null}
+      onOpenChange={(next) => !next && setConfirmingRemove(null)}
+      title="Retirer de l'équipe ?"
+      description={confirmingRemove ? `${confirmingRemove.label} sera retiré de l'équipe.` : undefined}
+      confirmLabel="Retirer"
+      destructive
+      isPending={removeMutation.isPending}
+      onConfirm={() => confirmingRemove && removeMutation.mutate(confirmingRemove.assignmentId)}
+    />
+    <ConfirmDialog
+      open={confirmingDeleteTeams}
+      onOpenChange={setConfirmingDeleteTeams}
+      title="Supprimer les équipes de cette séance ?"
+      description="Retour à « pas encore générées »."
+      confirmLabel="Supprimer"
+      destructive
+      isPending={deleteTeamsMutation.isPending}
+      onConfirm={() => deleteTeamsMutation.mutate()}
+    />
+    </>
   )
 }
 
@@ -1170,16 +1456,26 @@ export function SessionCard({
     },
   })
 
+  const [confirmingDeleteSession, setConfirmingDeleteSession] = useState(false)
   const deleteSessionMutation = useMutation({
     mutationFn: () => deleteSession(sessionId),
-    onSuccess: invalidateSessions,
+    onSuccess: () => {
+      invalidateSessions()
+      setConfirmingDeleteSession(false)
+    },
   })
 
-  // Attendance is locked from 30 min before kickoff — the same moment teams get
+  // Attendance is locked from 1h30 before kickoff — the same moment teams get
   // auto-generated. Distinct from isPast (the "Terminé" badge below): that one only cares
   // whether the session has actually started, not the earlier lock threshold.
   const isPast = new Date(`${date}T${startTime}`).getTime() <= Date.now()
-  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 30 * 60_000 <= Date.now()
+  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 90 * 60_000 <= Date.now()
+  // "Gérer la séance" (pointage réel, équipe jouée, score) only makes sense once training
+  // is actually over — same moment PushNotificationsScheduler.handleMissingAttendanceReminders
+  // nudges the coach/admin if nobody's pointed yet. Before that, GenerateTeamsDialog /
+  // AdjustTeamsDialog below cover generating and adjusting teams.
+  const hasEnded = new Date(`${date}T${endTime}`).getTime() <= Date.now()
+  const cardTeamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
   const [guests, setGuests] = useState<GuestNameInput[]>([])
@@ -1196,6 +1492,7 @@ export function SessionCard({
   const dimmed = cancelled || isPast
 
   return (
+    <>
     <Card
       className={cn(
         'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
@@ -1241,9 +1538,7 @@ export function SessionCard({
                   variant="ghost"
                   className="text-destructive hover:text-destructive size-7"
                   disabled={deleteSessionMutation.isPending}
-                  onClick={() => {
-                    if (confirm('Supprimer cet entraînement ?')) deleteSessionMutation.mutate()
-                  }}
+                  onClick={() => setConfirmingDeleteSession(true)}
                   aria-label="Supprimer"
                 >
                   <Trash2 className="size-3.5" />
@@ -1524,21 +1819,35 @@ export function SessionCard({
               Espace coach
             </p>
             <div className="flex flex-wrap gap-2">
-              <CoachValidationDialog sessionId={sessionId} attendances={attendancesQuery.data ?? []} />
+              {hasEnded ? (
+                <ManageSessionDialog
+                  sessionId={sessionId}
+                  attendances={attendancesQuery.data ?? []}
+                  scoreTeam0={scoreTeam0}
+                  scoreTeam1={scoreTeam1}
+                />
+              ) : (cardTeamsQuery.data?.length ?? 0) === 0 ? (
+                <GenerateTeamsDialog sessionId={sessionId} />
+              ) : (
+                <AdjustTeamsDialog sessionId={sessionId} />
+              )}
               <AttendanceHistoryDialog sessionId={sessionId} />
             </div>
           </div>
         )}
-        {!cancelled && (
-          <TeamsSection
-            sessionId={sessionId}
-            isCoach={isCoach}
-            scoreTeam0={scoreTeam0}
-            scoreTeam1={scoreTeam1}
-          />
-        )}
+        {!cancelled && <TeamsSection sessionId={sessionId} scoreTeam0={scoreTeam0} scoreTeam1={scoreTeam1} />}
       </CardContent>
     </Card>
+    <ConfirmDialog
+      open={confirmingDeleteSession}
+      onOpenChange={setConfirmingDeleteSession}
+      title="Supprimer cet entraînement ?"
+      confirmLabel="Supprimer"
+      destructive
+      isPending={deleteSessionMutation.isPending}
+      onConfirm={() => deleteSessionMutation.mutate()}
+    />
+    </>
   )
 }
 
