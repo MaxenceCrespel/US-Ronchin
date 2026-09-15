@@ -659,7 +659,13 @@ export class StatsService {
       }
     }
 
-    const bestDuos = [...duoCounts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+    // allBestDuos is the same ranking, uncapped — the card only shows the top 5, but unlike
+    // topScorers/topAssists/mostDecisive (which the frontend can recompute in full from the
+    // already-fetched, unlimited per-player stats), a duo is inherently pairwise and only
+    // ever exists here, computed from raw events — there's no client-side way to get "the
+    // rest of them" without this.
+    const allBestDuos = [...duoCounts.values()].sort((a, b) => b.count - a.count);
+    const bestDuos = allBestDuos.slice(0, 5);
 
     return {
       topScorers,
@@ -672,6 +678,7 @@ export class StatsService {
       totalGoals,
       totalAssists,
       bestDuos,
+      allBestDuos,
       record,
     };
   }

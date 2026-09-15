@@ -8,6 +8,8 @@ import { getCurrentSeasonLabel } from '../stats/season.util';
 import { MONTHLY_AWARD_KEYS } from './monthly-award.constant';
 import { monthLabelDisplay } from './month.util';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { MatchesService } from '../matches/matches.service';
+import { StatsService } from '../stats/stats.service';
 
 /** The `season` column doubles as a season label ("2026-2027") for the 5 end-of-season
  * categories and a month label ("2026-09") for the monthly ones — this is the one place that
@@ -55,6 +57,8 @@ export class AwardsService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly matchesService: MatchesService,
+    private readonly statsService: StatsService,
   ) {}
 
   /** Only this season's categories — AwardsScheduler opens a fresh row per fixed key every
@@ -96,6 +100,31 @@ export class AwardsService {
     const current = responses.filter((r) => r.isActive);
     const history = responses.filter((r) => !r.isActive);
     return { current, history };
+  }
+
+  /** Every source a trophy can come from, collapsed to the one number ProfilePage's "Ma
+   * vitrine de trophées" subtitle actually needs — season (5 categories), the voted monthly
+   * one, the two auto-computed monthly ones (attendance/training), and per-match ones. Used
+   * to cost ProfilePage 5 separate round-trips (one per source, each pulling full result
+   * detail just to take its `.length`) purely to render a single number; this reuses the
+   * exact same service methods TrophyCasePage's own shelves call for the real detail, just in
+   * one request instead of five. */
+  async getMyTrophyCount(userId: string): Promise<number> {
+    const [categories, monthly, matchTrophies, attendanceTrophies, trainingChampionTrophies] =
+      await Promise.all([
+        this.findAll(userId),
+        this.findMonthly(userId),
+        this.matchesService.getMyMatchTrophies(userId),
+        this.statsService.getMyAttendanceTrophies(userId),
+        this.statsService.getMyTrainingChampionTrophies(userId),
+      ]);
+    return (
+      categories.filter((c) => !c.isActive && c.results?.[0]?.userId === userId).length +
+      monthly.history.filter((c) => c.results?.[0]?.userId === userId).length +
+      matchTrophies.length +
+      attendanceTrophies.length +
+      trainingChampionTrophies.length
+    );
   }
 
   private buildResponse(

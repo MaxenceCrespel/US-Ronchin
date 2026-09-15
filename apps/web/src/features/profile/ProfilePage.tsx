@@ -20,9 +20,7 @@ import { useCelebration } from '@/lib/useCelebration'
 import { Confetti } from '@/components/Confetti'
 import type { AccountTier } from '@/lib/types'
 import { fetchBadgesForUser } from '@/features/badges/api'
-import { fetchAwardCategories, fetchMonthlyAward } from '@/features/awards/api'
-import { fetchMyMatchTrophies } from '@/features/matches/api'
-import { fetchMyAttendanceTrophies, fetchMyTrainingChampionTrophies } from '@/features/stats/api'
+import { fetchMyTrophyCount } from '@/features/awards/api'
 
 /** A tappable row that navigates to a dedicated sub-page — this is the whole point of the
  * redesign: instead of every settings section piled up inline (long scroll, mostly closed
@@ -33,23 +31,17 @@ function ProfileNavBlock({
   title,
   subtitle,
   tour,
-  trophyTour,
 }: {
   to: string
   icon: ReactNode
   title: string
   subtitle?: string
   tour?: string
-  /** Separate from `tour` (the main onboarding engine's own anchor) — TrophyFeatureTour's
-   * first stop, showing where the vitrine actually lives before it walks through what's
-   * inside it (see that component's doc comment for why it's a distinct attribute). */
-  trophyTour?: string
 }) {
   return (
     <Link
       to={to}
       data-tour={tour}
-      data-trophy-tour={trophyTour}
       className="bg-card text-card-foreground flex items-center gap-3 rounded-xl border px-4 py-3.5 shadow-sm transition-colors active:bg-accent"
     >
       <span className="bg-accent text-club-blue-dark flex size-9 shrink-0 items-center justify-center rounded-full">
@@ -75,36 +67,16 @@ export function ProfilePage() {
   })
   // Every source a trophy can come from — season (5 categories), the voted monthly one
   // ("Joueur du mois"), the two auto-computed monthly ones ("Assidu du mois"/"Vainqueur
-  // d'entraînement"), and per-match ones ("Homme du match"/"Patron de la défense"). This
-  // subtitle used to only count the voted monthly history, badly undercounting anyone with a
-  // season, match, or stat-based trophy — see TrophyCasePage for the same four-source tally.
-  const seasonAwardQuery = useQuery({ queryKey: ['award-categories'], queryFn: fetchAwardCategories, enabled: !!user })
-  const monthlyAwardQuery = useQuery({ queryKey: ['award-monthly'], queryFn: fetchMonthlyAward, enabled: !!user })
-  const matchTrophiesQuery = useQuery({ queryKey: ['my-match-trophies'], queryFn: fetchMyMatchTrophies, enabled: !!user })
-  const attendanceTrophiesQuery = useQuery({
-    queryKey: ['my-attendance-trophies'],
-    queryFn: fetchMyAttendanceTrophies,
+  // d'entraînement"), and per-match ones ("Homme du match"/"Patron de la défense") — tallied
+  // server-side (see AwardsService.getMyTrophyCount) instead of 5 separate detailed requests
+  // just to take each one's `.length`; TrophyCasePage still fetches each source's own detail
+  // in full, since it actually renders the trophies rather than just counting them.
+  const trophyCountQuery = useQuery({
+    queryKey: ['my-trophy-count', user?.id],
+    queryFn: fetchMyTrophyCount,
     enabled: !!user,
   })
-  const trainingChampionTrophiesQuery = useQuery({
-    queryKey: ['my-training-champion-trophies'],
-    queryFn: fetchMyTrainingChampionTrophies,
-    enabled: !!user,
-  })
-  const trophyQueries = [
-    seasonAwardQuery,
-    monthlyAwardQuery,
-    matchTrophiesQuery,
-    attendanceTrophiesQuery,
-    trainingChampionTrophiesQuery,
-  ]
-  const totalTrophiesWon = trophyQueries.every((q) => q.isSuccess)
-    ? (seasonAwardQuery.data ?? []).filter((c) => !c.isActive && c.results?.[0]?.userId === user?.id).length +
-      (monthlyAwardQuery.data?.history ?? []).filter((c) => c.results?.[0]?.userId === user?.id).length +
-      (matchTrophiesQuery.data?.length ?? 0) +
-      (attendanceTrophiesQuery.data?.length ?? 0) +
-      (trainingChampionTrophiesQuery.data?.length ?? 0)
-    : undefined
+  const totalTrophiesWon = trophyCountQuery.data
   const { active: tierUpCelebration, trigger: triggerTierUpCelebration } = useCelebration()
   const [tierJustReached, setTierJustReached] = useState<AccountTier | null>(null)
   useEffect(() => {
@@ -215,7 +187,6 @@ export function ProfilePage() {
                 : 'Aucun pour l’instant'
               : undefined
           }
-          trophyTour="profile-nav"
         />
         <ProfileNavBlock
           to="/profile/notifications"

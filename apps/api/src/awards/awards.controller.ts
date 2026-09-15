@@ -24,6 +24,11 @@ export class AwardsController {
     return this.awardsService.findMonthly(currentUser.id);
   }
 
+  @Get('trophy-count')
+  getMyTrophyCount(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.awardsService.getMyTrophyCount(currentUser.id);
+  }
+
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch('categories/:id')

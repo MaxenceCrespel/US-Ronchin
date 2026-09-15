@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
+import { pluralize } from '@/lib/utils'
 import type { AttendanceStatus, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
@@ -791,7 +792,9 @@ export function HomePage() {
                       {topScorer.firstName} {topScorer.lastName}
                     </p>
                   </div>
-                  <Badge className="bg-club-gold text-white">{topScorer.goals} buts</Badge>
+                  <Badge className="bg-club-gold text-white">
+                    {topScorer.goals} {pluralize('but', topScorer.goals)}
+                  </Badge>
                 </CardContent>
               </Card>
             )}
@@ -805,7 +808,8 @@ export function HomePage() {
                     </p>
                   </div>
                   <Badge className="bg-club-gold text-white">
-                    {mostDecisive.goals + mostDecisive.assists} pts
+                    {mostDecisive.goals + mostDecisive.assists}{' '}
+                    {pluralize('pt', mostDecisive.goals + mostDecisive.assists)}
                   </Badge>
                 </CardContent>
               </Card>

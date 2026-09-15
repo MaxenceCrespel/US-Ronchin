@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { cn } from '@/lib/utils'
+import { cn, pluralize } from '@/lib/utils'
 import type { AccountLevel, AccountTier, BadgeRarity } from '@/lib/types'
 import { fetchAccountLevel, fetchAllAccountLevels } from '@/features/badges/api'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -127,7 +127,9 @@ export function AccountLevelDialog({ level, children }: { level: AccountLevel; c
             >
               {TIER_LABELS[level.tier]}
             </span>
-            <span className="text-muted-foreground text-sm">{level.score} pts</span>
+            <span className="text-muted-foreground text-sm">
+              {level.score} {pluralize('pt', level.score)}
+            </span>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -156,7 +158,9 @@ export function AccountLevelDialog({ level, children }: { level: AccountLevel; c
                 >
                   {TIER_LABELS[tier]}
                 </span>
-                <span className="text-muted-foreground">{TIER_MIN_SCORE[tier]} pts</span>
+                <span className="text-muted-foreground">
+                  {TIER_MIN_SCORE[tier]} {pluralize('pt', TIER_MIN_SCORE[tier])}
+                </span>
               </div>
             ))}
           </div>

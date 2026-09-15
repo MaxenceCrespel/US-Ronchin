@@ -20,10 +20,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { cn } from '@/lib/utils'
+import { cn, pluralize } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSeasonBounds, isInSeason } from '@/lib/season'
-import type { PlayerStats } from '@/lib/types'
+import type { DuoStats, PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
@@ -85,7 +85,7 @@ function Leaderboard({ title, players, valueKey, valueLabel, onSeeAll }: {
                   {p.firstName} {p.lastName}
                 </span>
                 <Badge variant="secondary">
-                  {p[valueKey]} {valueLabel}
+                  {p[valueKey]} {pluralize(valueLabel, p[valueKey])}
                 </Badge>
               </li>
             ))}
@@ -130,11 +130,48 @@ function FullLeaderboardDialog({
                   {p.firstName} {p.lastName}
                 </span>
                 <Badge variant="secondary">
-                  {getValue(p)} {valueLabel}
+                  {getValue(p)} {pluralize(valueLabel, getValue(p))}
                 </Badge>
               </li>
             ))}
           </ul>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Same idea as FullLeaderboardDialog, for "Meilleures connexions" — a duo can't be
+ * recomputed client-side the way the other cards' full rankings are (see TeamStats.allBestDuos'
+ * own doc comment for why), so this is fed straight from the server's already-uncapped list. */
+function FullDuosDialog({ duos, onClose }: { duos: DuoStats[]; onClose: () => void }) {
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Classement complet — Meilleures connexions</DialogTitle>
+        </DialogHeader>
+        {duos.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Pas encore de données.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Passeur</TableHead>
+                <TableHead>Buteur</TableHead>
+                <TableHead>Buts</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {duos.map((duo) => (
+                <TableRow key={`${duo.scorerId}-${duo.assistId}`}>
+                  <TableCell>{duo.assistName}</TableCell>
+                  <TableCell>{duo.scorerName}</TableCell>
+                  <TableCell>{duo.count}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </DialogContent>
     </Dialog>
@@ -396,9 +433,9 @@ export function StatsPage() {
 
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)
 
-  const [openLeaderboard, setOpenLeaderboard] = useState<'goals' | 'assists' | 'decisive' | null>(
-    null,
-  )
+  const [openLeaderboard, setOpenLeaderboard] = useState<
+    'goals' | 'assists' | 'decisive' | 'duos' | null
+  >(null)
   const fullTopScorers = useMemo(
     () => [...(playerStatsQuery.data ?? [])].filter((p) => p.goals > 0).sort((a, b) => b.goals - a.goals),
     [playerStatsQuery.data],
@@ -497,14 +534,14 @@ export function StatsPage() {
               title="Meilleurs buteurs"
               players={teamStatsQuery.data?.topScorers ?? []}
               valueKey="goals"
-              valueLabel="buts"
+              valueLabel="but"
               onSeeAll={() => setOpenLeaderboard('goals')}
             />
             <Leaderboard
               title="Meilleurs passeurs"
               players={teamStatsQuery.data?.topAssists ?? []}
               valueKey="assists"
-              valueLabel="passes"
+              valueLabel="passe"
               onSeeAll={() => setOpenLeaderboard('assists')}
             />
             <Card
@@ -528,7 +565,9 @@ export function StatsPage() {
                           <RankBadge rank={index} />
                           {p.firstName} {p.lastName}
                         </span>
-                        <Badge variant="secondary">{p.goals + p.assists} pts</Badge>
+                        <Badge variant="secondary">
+                          {p.goals + p.assists} {pluralize('pt', p.goals + p.assists)}
+                        </Badge>
                       </li>
                     ))}
                   </ul>
@@ -538,7 +577,24 @@ export function StatsPage() {
             </Card>
           </div>
 
-          <Card>
+          <Card
+            role={(teamStatsQuery.data?.allBestDuos.length ?? 0) > 3 ? 'button' : undefined}
+            tabIndex={(teamStatsQuery.data?.allBestDuos.length ?? 0) > 3 ? 0 : undefined}
+            onClick={
+              (teamStatsQuery.data?.allBestDuos.length ?? 0) > 3
+                ? () => setOpenLeaderboard('duos')
+                : undefined
+            }
+            onKeyDown={
+              (teamStatsQuery.data?.allBestDuos.length ?? 0) > 3
+                ? (e) => (e.key === 'Enter' || e.key === ' ') && setOpenLeaderboard('duos')
+                : undefined
+            }
+            className={cn(
+              (teamStatsQuery.data?.allBestDuos.length ?? 0) > 3 &&
+                'cursor-pointer transition-colors hover:bg-accent/40',
+            )}
+          >
             <CardHeader>
               <CardTitle className="text-base">Meilleures connexions (buteur / passeur)</CardTitle>
             </CardHeader>
@@ -565,6 +621,9 @@ export function StatsPage() {
                   </TableBody>
                 </Table>
               )}
+              {(teamStatsQuery.data?.allBestDuos.length ?? 0) > 3 && (
+                <p className="text-muted-foreground mt-3 text-xs">Voir le classement complet →</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -575,7 +634,7 @@ export function StatsPage() {
           title="Classement complet — Meilleurs buteurs"
           players={fullTopScorers}
           getValue={(p) => p.goals}
-          valueLabel="buts"
+          valueLabel="but"
           onClose={() => setOpenLeaderboard(null)}
         />
       )}
@@ -584,7 +643,7 @@ export function StatsPage() {
           title="Classement complet — Meilleurs passeurs"
           players={fullTopAssists}
           getValue={(p) => p.assists}
-          valueLabel="passes"
+          valueLabel="passe"
           onClose={() => setOpenLeaderboard(null)}
         />
       )}
@@ -593,7 +652,13 @@ export function StatsPage() {
           title="Classement complet — Joueurs les plus décisifs"
           players={fullMostDecisive}
           getValue={(p) => p.goals + p.assists}
-          valueLabel="pts"
+          valueLabel="pt"
+          onClose={() => setOpenLeaderboard(null)}
+        />
+      )}
+      {openLeaderboard === 'duos' && (
+        <FullDuosDialog
+          duos={teamStatsQuery.data?.allBestDuos ?? []}
           onClose={() => setOpenLeaderboard(null)}
         />
       )}

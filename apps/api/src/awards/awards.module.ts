@@ -5,13 +5,20 @@ import { AwardVote } from './entities/award-vote.entity';
 import { User } from '../users/entities/user.entity';
 import { Match } from '../matches/entities/match.entity';
 import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
+import { MatchesModule } from '../matches/matches.module';
+import { StatsModule } from '../stats/stats.module';
 import { AwardsService } from './awards.service';
 import { AwardsController } from './awards.controller';
 import { AwardsScheduler } from './awards.scheduler';
 import { MonthlyAwardScheduler } from './monthly-award.scheduler';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AwardCategory, AwardVote, User, Match]), PushNotificationsModule],
+  imports: [
+    TypeOrmModule.forFeature([AwardCategory, AwardVote, User, Match]),
+    PushNotificationsModule,
+    MatchesModule,
+    StatsModule,
+  ],
   controllers: [AwardsController],
   providers: [AwardsService, AwardsScheduler, MonthlyAwardScheduler],
 })

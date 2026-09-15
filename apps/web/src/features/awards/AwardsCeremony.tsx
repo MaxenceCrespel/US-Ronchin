@@ -4,7 +4,7 @@ import { Crown, Flame, Repeat, Shield, Sparkles, Star, Target, Trophy, Users, X 
 import { Button } from '@/components/ui/button'
 import { Confetti } from '@/components/Confetti'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
-import { cn } from '@/lib/utils'
+import { cn, pluralize } from '@/lib/utils'
 import type { AwardCategory, PlayerStats, TeamStats } from '@/lib/types'
 
 // three.js + @react-three/fiber are a meaningful chunk of weight nothing else in the app
@@ -51,12 +51,6 @@ const CURTAIN_DURATION_S = 1.1
 export const GALA_CONFETTI_COLORS = ['#f4b400', '#ffd75e', '#ffffff', '#0089cf', '#005b8a']
 
 export const SPRING_POP = { type: 'spring' as const, stiffness: 300, damping: 20 }
-
-/** French plural of a stat unit — a word ending in s/x/z ("fois") never takes an extra "s". */
-function pluralize(word: string, count: number): string {
-  if (count <= 1 || /[sxz]$/i.test(word)) return word
-  return `${word}s`
-}
 
 /* ------------------------------------------------------------------ *
  *  Shared visual primitives — the whole ceremony reads as one piece   *

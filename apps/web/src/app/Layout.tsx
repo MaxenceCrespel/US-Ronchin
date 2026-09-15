@@ -10,12 +10,12 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
+import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
 import { AwardsCeremonyWatcher } from '@/features/awards/AwardsCeremonyWatcher'
 import { MonthlyTrophyUnlockWatcher } from '@/features/awards/MonthlyTrophyUnlockWatcher'
 import { MatchTrophyUnlockWatcher } from '@/features/matches/MatchTrophyUnlockWatcher'
 import { TrophySnapshotHost } from '@/features/awards/TrophySnapshot'
 import { OnboardingTour } from '@/components/OnboardingTour'
-import { TrophyFeatureTour } from '@/components/TrophyFeatureTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
 
@@ -64,7 +64,6 @@ export function Layout() {
       <MatchTrophyUnlockWatcher />
       <TrophySnapshotHost />
       <OnboardingTour />
-      <TrophyFeatureTour />
 
       {sidebarOpen && (
         <div
@@ -167,6 +166,7 @@ export function Layout() {
             </Button>
           </div>
         </header>
+        <VoteReminderBanner />
         <InstallAppBanner />
         <NotificationPrompt />
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">

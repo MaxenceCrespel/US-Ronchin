@@ -1,17 +1,17 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowLeft, ArrowRight, Check, Pencil, Trophy } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Pencil, Trophy, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { useAuthStore } from '@/lib/auth-store'
-import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { isRosterPlayer } from '@/lib/roster'
 import { cn } from '@/lib/utils'
-import { monthLabelDisplay } from '@/lib/month-label'
+import { useVotePopupDismissedStore } from '@/lib/vote-popup-dismissed'
 import { fetchPlayers } from '@/features/players/api'
 import type { AwardCategory } from '@/lib/types'
-import { castVote, fetchAwardCategories, fetchMonthlyAward } from './api'
+import { castVote } from './api'
+import { usePendingVote, type PendingVoteSource } from './usePendingVote'
 import { PlayerVoteGrid, type VotablePlayer } from './PlayerVoteGrid'
 
 // Lazy for the same reason as everywhere else this shows up — three.js is heavy, kept out of
@@ -19,8 +19,6 @@ import { PlayerVoteGrid, type VotablePlayer } from './PlayerVoteGrid'
 const CategoryTrophyScene = lazy(() =>
   import('./Trophy3D').then((m) => ({ default: m.CategoryTrophyScene })),
 )
-
-const POLL_INTERVAL_MS = 60_000
 
 /** A one-liner per trophy so the vote feels like designating someone, not filling a form —
  * keyed off the category `key` (see api/awards/fixed-categories.ts and
@@ -36,10 +34,9 @@ const CATEGORY_BLURB: Record<string, string> = {
 }
 
 type Phase = 'intro' | 'vote' | 'review' | 'done'
-type Source = 'season' | 'monthly'
 
 interface Flow {
-  source: Source
+  source: PendingVoteSource
   periodLabel: string | null
   categories: AwardCategory[]
   players: VotablePlayer[]
@@ -47,55 +44,33 @@ interface Flow {
 
 /** Mounted once at the app root (same idea as BadgeUnlockWatcher) — while EITHER the season
  * awards vote or the month's vote is open and a roster player still has an unvoted category
- * in it, this takes over the whole screen, the same way /complete-profile blocks navigation
- * before that gate is cleared. A guided flow either way (one trophy at a time, tap a
- * player's face to pick them, review, confirm) rather than a stack of dropdowns — season
- * because it's a once-a-year moment worth the ceremony, monthly for consistency with it
- * (same mandatory treatment the user asked for, not a lesser one). Season always wins if
- * both happen to be open and unvoted at once — the rarer, bigger event, same convention as
- * ceremony-gate.ts's reveal priority — so the two can never stack; the monthly flow simply
- * doesn't start until the season one has nothing left pending. Disappears the instant every
- * category in whichever source is showing gets voted — AwardsService closes the whole
- * season/month early once the entire roster has too. */
+ * in it, this greets them with the vote flow (one trophy at a time, tap a player's face to
+ * pick them, review, confirm) rather than a stack of dropdowns — season because it's a
+ * once-a-year moment worth the ceremony, monthly for consistency with it. Unlike
+ * /complete-profile's gate, this is dismissible (the X below): the vote window is genuinely
+ * open for a week (monthly: the 1st-6th, see MonthlyAwardScheduler) or two (season: June
+ * 1-16, see AwardsScheduler), so trapping someone in it on page load — the very first thing
+ * they'd see, with no way out — doesn't match how much time they actually have. Dismissing
+ * doesn't drop the reminder entirely though: VoteReminderBanner picks up the instant this
+ * closes (they share useVotePopupDismissedStore) and stays as a non-dismissible banner until
+ * the vote's actually cast or the window closes — tapping its "Voter" reopens this exact
+ * popup. Season always wins if both happen to be open and unvoted at once — the rarer,
+ * bigger event, same convention as ceremony-gate.ts's reveal priority — so the two can never
+ * stack; the monthly flow simply doesn't start until the season one has nothing left
+ * pending. Disappears the instant every category in whichever source is showing gets voted —
+ * AwardsService closes the whole season/month early once the entire roster has too. */
 export function MandatoryVotePopup() {
   const user = useAuthStore((s) => s.user)
-  const tourActive = useOnboardingUiStore((s) => s.active)
   const queryClient = useQueryClient()
 
-  // A non-playing coach/admin isn't part of the roster and isn't forced to vote — same rule
-  // for both sources.
-  const eligible = !!user && isRosterPlayer(user) && !tourActive
-
-  const seasonQuery = useQuery({
-    queryKey: ['award-categories'],
-    queryFn: fetchAwardCategories,
-    enabled: eligible,
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchOnWindowFocus: true,
-  })
-  const monthlyQuery = useQuery({
-    queryKey: ['award-monthly'],
-    queryFn: fetchMonthlyAward,
-    enabled: eligible,
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchOnWindowFocus: true,
-  })
+  // periodLabel here tracks the live query, not the frozen `flow.periodLabel` snapshot used
+  // for rendering below — only used to build that snapshot in the first place.
+  const { eligible, source, pending, periodLabel: livePeriodLabel } = usePendingVote()
   const playersQuery = useQuery({
     queryKey: ['players'],
     queryFn: fetchPlayers,
     enabled: eligible,
   })
-
-  const seasonPending = useMemo(
-    () => (seasonQuery.data ?? []).filter((c) => c.isActive && !c.myVoteUserId),
-    [seasonQuery.data],
-  )
-  const monthlyPending = useMemo(
-    () => (monthlyQuery.data?.current ?? []).filter((c) => c.isActive && !c.myVoteUserId),
-    [monthlyQuery.data],
-  )
-  const source: Source | null = seasonPending.length > 0 ? 'season' : monthlyPending.length > 0 ? 'monthly' : null
-  const pending = source === 'season' ? seasonPending : source === 'monthly' ? monthlyPending : []
 
   // Snapshot the source + categories + roster the first time everything's ready, and never
   // touch it again — the 60s poll / refocus refetch must not reshuffle the flow mid-vote.
@@ -104,8 +79,7 @@ export function MandatoryVotePopup() {
     if (flow || !eligible || !source || pending.length === 0 || !playersQuery.data) return
     setFlow({
       source,
-      periodLabel:
-        source === 'season' ? (pending[0]?.season ?? null) : pending[0]?.season ? monthLabelDisplay(pending[0].season) : null,
+      periodLabel: livePeriodLabel,
       categories: pending,
       players: playersQuery.data
         // No voting for yourself — you're not in your own grid.
@@ -113,7 +87,11 @@ export function MandatoryVotePopup() {
         .map((p) => ({ id: p.id, firstName: p.firstName, lastName: p.lastName, avatarUrl: p.avatarUrl })),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow, eligible, source, pending, playersQuery.data])
+  }, [flow, eligible, source, pending, livePeriodLabel, playersQuery.data])
+
+  const dismissed = useVotePopupDismissedStore((s) => s.dismissed)
+  const dismiss = useVotePopupDismissedStore((s) => s.dismiss)
+  const reopen = useVotePopupDismissedStore((s) => s.reopen)
 
   // Once the flow's own source no longer has anything pending (its vote landed and the
   // query refetched), clear the snapshot so the effect above is free to pick a fresh one —
@@ -121,10 +99,15 @@ export function MandatoryVotePopup() {
   // `flow` would stay frozen on the completed season snapshot forever, since the effect
   // above only builds a new one while `flow` is still null. Never fires mid-vote purely from
   // the query's own 60s poll: the vote hasn't landed server-side yet, so `source` still
-  // matches `flow.source` right up until the invalidate below actually lands.
+  // matches `flow.source` right up until the invalidate below actually lands. Also lifts a
+  // stale dismissal — a fresh source (the season vote opening right as the monthly one was
+  // dismissed, say) deserves its own first look, not to inherit an unrelated dismissal.
   useEffect(() => {
-    if (flow && source !== flow.source) setFlow(null)
-  }, [flow, source])
+    if (flow && source !== flow.source) {
+      setFlow(null)
+      reopen()
+    }
+  }, [flow, source, reopen])
 
   const [phase, setPhase] = useState<Phase>('intro')
   const [catIndex, setCatIndex] = useState(0)
@@ -160,7 +143,7 @@ export function MandatoryVotePopup() {
     return () => clearTimeout(t)
   }, [phase, flow, queryClient])
 
-  if (!eligible || pending.length === 0 || !flow) return null
+  if (!eligible || pending.length === 0 || !flow || dismissed) return null
 
   const { periodLabel, categories, players } = flow
   const category = categories[catIndex]
@@ -227,6 +210,21 @@ export function MandatoryVotePopup() {
         className="pointer-events-none fixed inset-x-0 top-0 h-40"
         style={{ background: 'linear-gradient(to bottom, rgba(244,180,0,0.12), transparent)' }}
       />
+
+      {/* The vote window is open for a week or two (see this component's own doc comment) —
+          no reason to trap anyone in here the instant they open the app. Not shown once a
+          vote's actually in flight (review/done), so a half-finished submission can't be
+          lost by accident. */}
+      {(phase === 'intro' || phase === 'vote') && (
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Voter plus tard"
+          className="fixed top-4 right-4 z-50 flex size-9 items-center justify-center rounded-full bg-white/10 text-white/70 backdrop-blur-sm hover:bg-white/20 hover:text-white"
+        >
+          <X className="size-4" />
+        </button>
+      )}
 
       <div className="relative mx-auto flex min-h-full w-full max-w-lg flex-col px-5 py-8">
         {/* Header — trophy mark + period, always visible so the whole flow reads as one moment. */}

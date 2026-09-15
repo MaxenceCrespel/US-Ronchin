@@ -168,6 +168,9 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     bestDuos: [
       { scorerId: fabien.id, scorerName: 'Fabien Caboche', assistId: vincent.id, assistName: 'Vincent Ringalle', count: 3 },
     ],
+    allBestDuos: [
+      { scorerId: fabien.id, scorerName: 'Fabien Caboche', assistId: vincent.id, assistName: 'Vincent Ringalle', count: 3 },
+    ],
     record: { played: 10, wins: 6, draws: 2, losses: 2, goalsFor: 24, goalsAgainst: 15 },
   }
 

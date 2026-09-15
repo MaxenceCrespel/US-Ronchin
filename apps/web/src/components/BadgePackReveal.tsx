@@ -1,312 +1,323 @@
-import { useEffect, useRef, useState } from 'react'
-import { animate, stagger } from 'animejs'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { BadgeRarity, BadgeStatus } from '@/lib/types'
-import { RARITY_LABELS, RARITY_RING } from '@/features/badges/BadgesGrid'
-
-const PARTICLE_COLORS = ['#facc15', '#38bdf8', '#34d399', '#f472b6', '#f97316', '#a78bfa']
-
-/** Everything about the reveal scales with rarity — a common badge is a quick pop, a
- * legendary one gets a longer charge, more particles, and a much brighter burst. */
-const RARITY_GLOW: Record<BadgeRarity, string> = {
-  COMMON: 'rgba(168,162,158,0.5)',
-  RARE: 'rgba(14,165,233,0.55)',
-  EPIC: 'rgba(168,85,247,0.6)',
-  LEGENDARY: 'rgba(251,191,36,0.75)',
-}
-
-const RARITY_PACK_STYLE: Record<BadgeRarity, string> = {
-  COMMON: 'border-stone-400/60 from-stone-500 via-stone-600 to-stone-400/60 shadow-[0_0_40px_rgba(168,162,158,0.35)]',
-  RARE: 'border-sky-400/70 from-sky-600 via-sky-700 to-sky-400/50 shadow-[0_0_45px_rgba(14,165,233,0.4)]',
-  EPIC: 'border-purple-400/70 from-purple-600 via-purple-700 to-purple-400/50 shadow-[0_0_50px_rgba(168,85,247,0.45)]',
-  LEGENDARY:
-    'border-amber-300/80 from-amber-500 via-yellow-500 to-amber-300/70 shadow-[0_0_65px_rgba(251,191,36,0.6)]',
-}
-
-const RARITY_PARTICLE_COUNT: Record<BadgeRarity, number> = {
-  COMMON: 12,
-  RARE: 18,
-  EPIC: 26,
-  LEGENDARY: 36,
-}
-
-const RARITY_CHARGE_MS: Record<BadgeRarity, number> = {
-  COMMON: 380,
-  RARE: 480,
-  EPIC: 600,
-  LEGENDARY: 820,
-}
-
-const RARITY_FLASH_SCALE: Record<BadgeRarity, number> = {
-  COMMON: 2.4,
-  RARE: 2.8,
-  EPIC: 3.4,
-  LEGENDARY: 4.2,
-}
-
-function BurstParticles({ triggerKey, count, spread }: { triggerKey: number; count: number; spread: number }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const particles = Array.from(container.children) as HTMLElement[]
-    animate(particles, {
-      translateX: () => (Math.random() - 0.5) * spread,
-      translateY: () => (Math.random() - 0.5) * spread,
-      rotate: () => (Math.random() - 0.5) * 360,
-      scale: [{ to: 1 }, { to: 0 }],
-      opacity: [{ to: 1 }, { to: 0 }],
-      duration: 1000,
-      delay: stagger(6),
-      ease: 'outCubic',
-    })
-  }, [triggerKey, spread])
-
-  return (
-    <div ref={containerRef} className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      {Array.from({ length: count }).map((_, i) => (
-        <span
-          key={i}
-          className="absolute size-2 rounded-sm"
-          style={{ backgroundColor: PARTICLE_COLORS[i % PARTICLE_COLORS.length] }}
-        />
-      ))}
-    </div>
-  )
-}
+import { RARITY_LABELS } from '@/features/badges/BadgesGrid'
 
 type Phase = 'closed' | 'charging' | 'opening' | 'revealed'
 
-/** Full-screen "pack opening" reveal for newly-earned badges — tap the pack, watch it
- * charge up and burst into light rays + confetti, then the badge zooms in with a glow.
- * Rarer badges get a longer charge, a bigger flash, and more particles. */
+interface OrbitRing {
+  count: number
+  r: number
+  dur: number
+  dir: 'normal' | 'reverse'
+}
+
+interface RarityConfig {
+  c1: string
+  c2: string
+  c3: string
+  glow: string
+  labelColor: string
+  /** 0-3, common to legendary — drives how much of the reveal escalates (see each field
+   * below): a common badge should read as modest, a legendary one as a real spectacle,
+   * not just a different color of the exact same effect. */
+  tier: number
+  tiltAmp: number
+  tiltScale: number
+  rimPad: number
+  pedestal: { w: number; h: number; o: number }
+  orbitRings: OrbitRing[]
+  charge: number
+  shards: number
+  sparks: number
+  flashScale: number
+}
+
+const RARITY_CONFIG: Record<BadgeRarity, RarityConfig> = {
+  COMMON: {
+    c1: '#e7ebef', c2: '#9aa3ad', c3: '#5b6470', glow: 'rgba(180,190,200,0.55)', labelColor: '#c7ccd2',
+    tier: 0, tiltAmp: 5, tiltScale: 1.01, rimPad: 5,
+    pedestal: { w: 170, h: 36, o: 0.5 },
+    orbitRings: [],
+    charge: 420, shards: 8, sparks: 10, flashScale: 2.6,
+  },
+  RARE: {
+    c1: '#bfe6fb', c2: '#38a3d1', c3: '#0d4f73', glow: 'rgba(56,169,225,0.6)', labelColor: '#7dd3fc',
+    tier: 1, tiltAmp: 7, tiltScale: 1.02, rimPad: 6,
+    pedestal: { w: 200, h: 42, o: 0.65 },
+    orbitRings: [{ count: 4, r: 100, dur: 4.5, dir: 'normal' }],
+    charge: 520, shards: 12, sparks: 16, flashScale: 3,
+  },
+  EPIC: {
+    c1: '#ecd6ff', c2: '#a855f7', c3: '#54208a', glow: 'rgba(168,85,247,0.65)', labelColor: '#d8b4fe',
+    tier: 2, tiltAmp: 10, tiltScale: 1.035, rimPad: 7,
+    pedestal: { w: 235, h: 48, o: 0.75 },
+    orbitRings: [
+      { count: 5, r: 88, dur: 4, dir: 'normal' },
+      { count: 4, r: 118, dur: 6, dir: 'reverse' },
+    ],
+    charge: 640, shards: 18, sparks: 22, flashScale: 3.5,
+  },
+  LEGENDARY: {
+    c1: '#fff3c4', c2: '#f4b400', c3: '#8a5a00', glow: 'rgba(244,180,0,0.8)', labelColor: '#f4b400',
+    tier: 3, tiltAmp: 13, tiltScale: 1.05, rimPad: 9,
+    pedestal: { w: 270, h: 54, o: 0.9 },
+    orbitRings: [
+      { count: 7, r: 92, dur: 3.5, dir: 'normal' },
+      { count: 6, r: 124, dur: 5.5, dir: 'reverse' },
+    ],
+    charge: 860, shards: 26, sparks: 32, flashScale: 4.4,
+  },
+}
+
+interface Fragment {
+  id: string
+  dx: number
+  dy: number
+  rot: number
+  delay: number
+}
+
+function buildFragments(count: number): Fragment[] {
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4
+    const dist = 90 + Math.random() * 140
+    return {
+      id: `${i}-${Math.random()}`,
+      dx: Math.cos(angle) * dist,
+      dy: Math.sin(angle) * dist,
+      rot: (Math.random() - 0.5) * 480,
+      delay: Math.random() * 60,
+    }
+  })
+}
+
+/** Full-screen "sealed medallion" reveal for newly-earned badges — tap the seal, watch it
+ * crack and shatter into light, then the badge settles as a metallic coin that keeps
+ * tilting gently in place. Every layer of the effect (ray shafts, orbiting sparkles, the
+ * coin's own tilt/shimmer, the ground glow beneath it) scales up with rarity — common is
+ * deliberately understated, legendary is the full spectacle — so the escalation reads at a
+ * glance instead of just being a different accent color on an identical animation. */
 export function BadgePackReveal({ queue, onDone }: { queue: BadgeStatus[]; onDone: () => void }) {
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>('closed')
-  const [burstKey, setBurstKey] = useState(0)
-  const packRef = useRef<HTMLButtonElement>(null)
-  const shineRef = useRef<HTMLDivElement>(null)
-  const raysRef = useRef<HTMLDivElement>(null)
-  const flashRef = useRef<HTMLDivElement>(null)
-  const medalRef = useRef<HTMLDivElement>(null)
-  const haloRef = useRef<HTMLDivElement>(null)
+  const [coinActive, setCoinActive] = useState(false)
+  const [shards, setShards] = useState<Fragment[]>([])
+  const [sparks, setSparks] = useState<Fragment[]>([])
 
   const badge = queue[index]
   const rarity: BadgeRarity = badge?.rarity ?? 'COMMON'
-  const glow = RARITY_GLOW[rarity]
+  const cfg = RARITY_CONFIG[rarity]
 
-  // idle pack: gentle breathing pulse + a diagonal shine sweeping across it on loop —
-  // legendary packs breathe faster, they can barely contain themselves
+  // Phase sequencing — each phase arms the next one after its own duration, mirroring the
+  // old anime.js timeline but driven by plain state instead of imperative refs.
   useEffect(() => {
-    if (phase !== 'closed' || !packRef.current) return
-    const pulse = animate(packRef.current, {
-      scale: [{ to: 1.04 }, { to: 1 }],
-      duration: rarity === 'LEGENDARY' ? 700 : 1100,
-      loop: true,
-      ease: 'inOutSine',
-    })
-    let shine: ReturnType<typeof animate> | null = null
-    if (shineRef.current) {
-      shine = animate(shineRef.current, {
-        translateX: ['-140%', '260%'],
-        duration: 1600,
-        loop: true,
-        loopDelay: rarity === 'LEGENDARY' ? 300 : 700,
-        ease: 'inOutQuad',
-      })
+    if (phase === 'charging') {
+      const t = setTimeout(() => setPhase('opening'), cfg.charge)
+      return () => clearTimeout(t)
     }
-    return () => {
-      pulse.pause()
-      shine?.pause()
+    if (phase === 'opening') {
+      const t = setTimeout(() => setPhase('revealed'), 260)
+      return () => clearTimeout(t)
     }
-  }, [phase, index, rarity])
-
-  // rays behind the badge keep slowly spinning once the pack has burst open
-  useEffect(() => {
-    if (phase === 'closed' || !raysRef.current) return
-    const anim = animate(raysRef.current, {
-      rotate: '1turn',
-      duration: 9000,
-      loop: true,
-      ease: 'linear',
-    })
-    return () => {
-      anim.pause()
+    if (phase === 'revealed') {
+      // Hands the medal's transform over to the idle coin-tilt loop once the pop settles.
+      const t = setTimeout(() => setCoinActive(true), 800)
+      return () => clearTimeout(t)
     }
-  }, [phase, index])
+  }, [phase, cfg.charge])
 
   useEffect(() => {
-    if (phase !== 'revealed' || !medalRef.current) return
-    animate(medalRef.current, {
-      scale: [{ to: 0.2 }, { to: 1.2 }, { to: 1 }],
-      rotate: [{ to: -20 }, { to: 0 }],
-      duration: 750,
-      ease: 'outElastic(1, .55)',
-    })
-    if (haloRef.current) {
-      animate(haloRef.current, {
-        scale: [{ to: 0.8 }, { to: 1.15 }, { to: 0.95 }],
-        opacity: [{ to: 0 }, { to: 1 }, { to: 0.75 }],
-        duration: 900,
-        ease: 'outCubic',
-      })
-      animate(haloRef.current, {
-        scale: [{ to: 0.95 }, { to: 1.1 }, { to: 0.95 }],
-        loop: true,
-        duration: rarity === 'LEGENDARY' ? 1100 : 1800,
-        delay: 900,
-        ease: 'inOutSine',
-      })
-    }
-  }, [phase, index, rarity])
+    if (phase !== 'opening') return
+    setShards(buildFragments(cfg.shards))
+    setSparks(buildFragments(cfg.sparks))
+    const t = setTimeout(() => {
+      setShards([])
+      setSparks([])
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [phase, cfg.shards, cfg.sparks])
 
   if (!badge) return null
 
   const openPack = () => {
-    if (phase !== 'closed' || !packRef.current) return
+    if (phase !== 'closed') return
     setPhase('charging')
-
-    // charge up: rapid shake + scale punch, building anticipation — longer for rarer badges
-    animate(packRef.current, {
-      scale: [{ to: 1.22 }, { to: 1.1 }, { to: 1.22 }, { to: 1.1 }],
-      rotate: [{ to: -6 }, { to: 6 }, { to: -5 }, { to: 5 }, { to: 0 }],
-      duration: RARITY_CHARGE_MS[rarity],
-      ease: 'inOutSine',
-      onComplete: () => {
-        setPhase('opening')
-        setBurstKey((k) => k + 1)
-        if (flashRef.current) {
-          animate(flashRef.current, {
-            scale: [{ to: 0 }, { to: RARITY_FLASH_SCALE[rarity] }],
-            opacity: [{ to: 0.95 }, { to: 0 }],
-            duration: 550,
-            ease: 'outCubic',
-          })
-        }
-        if (raysRef.current) {
-          animate(raysRef.current, { opacity: [{ to: 0 }, { to: 1 }], duration: 400, ease: 'outQuad' })
-        }
-        if (packRef.current) {
-          animate(packRef.current, {
-            scale: [{ to: 1.3 }, { to: 0 }],
-            rotate: '+=35',
-            opacity: [{ to: 1 }, { to: 0 }],
-            duration: 400,
-            ease: 'inBack',
-            onComplete: () => setPhase('revealed'),
-          })
-        }
-      },
-    })
   }
 
   const next = () => {
+    setPhase('closed')
+    setCoinActive(false)
+    setShards([])
+    setSparks([])
     if (index + 1 < queue.length) {
       setIndex((i) => i + 1)
-      setPhase('closed')
     } else {
       onDone()
     }
   }
 
+  const opened = phase === 'opening' || phase === 'revealed'
+  const revealed = phase === 'revealed'
+
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 overflow-hidden bg-black/85 px-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 overflow-hidden bg-black px-4"
+      data-tier={cfg.tier}
+    >
       {queue.length > 1 && (
         <p className="text-xs font-semibold tracking-wide text-white/70 uppercase">
           Badge {index + 1} / {queue.length}
         </p>
       )}
 
-      <div className="relative flex size-72 items-center justify-center">
-        {phase !== 'closed' && (
-          <div
-            ref={raysRef}
-            className="pointer-events-none absolute size-[30rem] opacity-0"
-            style={{
-              background: `conic-gradient(from 0deg, transparent 0deg, ${glow} 25deg, transparent 70deg, transparent 180deg, ${glow} 205deg, transparent 250deg, transparent 360deg)`,
-            }}
-          />
-        )}
-
+      <div className="badge-reveal-stage relative flex size-72 items-center justify-center">
         <div
-          ref={flashRef}
-          className="pointer-events-none absolute size-24 rounded-full bg-white opacity-0"
+          className={cn('badge-reveal-rays', opened && 'show')}
+          style={{ background: `repeating-conic-gradient(from 0deg, ${cfg.glow} 0deg 1.4deg, transparent 1.4deg 30deg)` }}
+        />
+        <div
+          className={cn('badge-reveal-rays2', opened && 'show')}
+          style={{ background: `repeating-conic-gradient(from 15deg, ${cfg.glow} 0deg 1deg, transparent 1deg 22deg)` }}
         />
 
-        {phase !== 'revealed' && (
-          <button
-            ref={packRef}
-            type="button"
-            onClick={openPack}
-            disabled={phase !== 'closed'}
-            className={cn(
-              'relative flex h-52 w-40 flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 bg-gradient-to-br text-white active:scale-95',
-              RARITY_PACK_STYLE[rarity],
-            )}
-          >
-            <div
-              ref={shineRef}
-              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-12 bg-white/25"
-            />
-            <span className="text-4xl">🎁</span>
-            <span className="text-[11px] font-bold tracking-wide uppercase">Nouveau badge</span>
-            <span className="text-[10px] text-white/70">Touche pour ouvrir</span>
-          </button>
-        )}
+        <div
+          className={cn('badge-reveal-flash', phase === 'opening' && 'burst')}
+          style={{ '--flash-scale': cfg.flashScale } as CSSProperties}
+        />
 
-        {phase === 'opening' && (
-          <BurstParticles
-            triggerKey={burstKey}
-            count={RARITY_PARTICLE_COUNT[rarity]}
-            spread={rarity === 'LEGENDARY' ? 420 : 320}
+        <div
+          className={cn('badge-reveal-medal-wrap', phase === 'closed' && 'idle-breathe', phase === 'charging' && 'charging')}
+          style={{ '--charge-ms': `${cfg.charge}ms` } as CSSProperties}
+        >
+          <div className={cn('badge-reveal-seal', phase !== 'closed' && 'cracking', opened && 'shattered')}>
+            <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.4">
+              <path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4Z" />
+            </svg>
+            <span className={cn('badge-reveal-tap-hint', phase !== 'closed' && 'hide')}>
+              Touche pour révéler
+            </span>
+          </div>
+
+          <div
+            className={cn('badge-reveal-halo', revealed && 'show')}
+            style={{ background: `radial-gradient(circle, ${cfg.glow}, transparent 70%)` }}
           />
-        )}
 
-        {phase === 'revealed' && (
-          <>
+          <div className={cn('badge-reveal-orbit', revealed && 'show')}>
+            {cfg.orbitRings.flatMap((ring, ringIdx) =>
+              Array.from({ length: ring.count }, (_, i) => (
+                <span
+                  key={`${ringIdx}-${i}`}
+                  style={{
+                    '--orbit-r': `${ring.r}px`,
+                    '--orbit-dur': `${ring.dur}s`,
+                    '--orbit-dir': ring.dir,
+                    animationDelay: `${-(i / ring.count) * ring.dur}s`,
+                    background: cfg.c1,
+                    boxShadow: `0 0 6px 1px ${cfg.glow}`,
+                  } as CSSProperties}
+                />
+              )),
+            )}
+          </div>
+
+          {shards.map((f) => (
             <div
-              ref={haloRef}
-              className="pointer-events-none absolute size-40 rounded-full opacity-0 blur-xl"
-              style={{ backgroundColor: glow }}
+              key={f.id}
+              className="badge-reveal-shard fly"
+              style={{
+                '--dx': `${f.dx}px`,
+                '--dy': `${f.dy}px`,
+                '--rot': `${f.rot}deg`,
+                animationDelay: `${f.delay}ms`,
+                background: `linear-gradient(135deg, ${cfg.c1}, ${cfg.c2})`,
+              } as CSSProperties}
             />
-            <div
-              ref={medalRef}
-              className={cn(
-                'relative flex size-32 items-center justify-center rounded-full border-4 text-5xl shadow-lg',
-                RARITY_RING[rarity],
-                rarity === 'LEGENDARY' && 'animate-legendary-pulse',
-              )}
-            >
-              {badge.emoji}
+          ))}
+          {sparks.map((f, i) => {
+            const size = 3 + ((i * 37) % 100) / 100 * 4
+            return (
+              <div
+                key={f.id}
+                className="badge-reveal-spark fly"
+                style={{
+                  '--dx': `${f.dx}px`,
+                  '--dy': `${f.dy}px`,
+                  width: size,
+                  height: size,
+                  animationDelay: `${f.delay}ms`,
+                  background: i % 2 === 0 ? cfg.c1 : '#fff',
+                  boxShadow: `0 0 8px 1px ${cfg.glow}`,
+                } as CSSProperties}
+              />
+            )
+          })}
+
+          <div
+            className={cn('badge-reveal-medal', opened && 'show', coinActive && 'idle-coin')}
+            style={{
+              '--c1': cfg.c1,
+              '--c2': cfg.c2,
+              '--c3': cfg.c3,
+              '--tilt-amp': `${cfg.tiltAmp}deg`,
+              '--tilt-scale': cfg.tiltScale,
+              '--rim-pad': `${cfg.rimPad}px`,
+            } as CSSProperties}
+          >
+            <div className="badge-reveal-edge" />
+            <div className="badge-reveal-rim" />
+            <div className="badge-reveal-bevel" />
+            <div className="badge-reveal-face">
+              <div className="badge-reveal-gloss" />
+              <div className="badge-reveal-sweep" />
+              <div className="badge-reveal-sweep2" />
+              <span className="relative z-[2] text-5xl drop-shadow-[0_3px_5px_rgba(0,0,0,0.45)]">
+                {badge.emoji}
+              </span>
             </div>
-          </>
-        )}
+          </div>
+
+          {phase === 'closed' && (
+            <button
+              type="button"
+              onClick={openPack}
+              aria-label="Révéler le badge"
+              className="absolute -inset-5 z-[6] cursor-pointer rounded-full"
+            />
+          )}
+        </div>
+
+        <div
+          className={cn('badge-reveal-pedestal', revealed && 'show')}
+          style={{
+            width: cfg.pedestal.w,
+            height: cfg.pedestal.h,
+            '--pedestal-opacity': cfg.pedestal.o,
+            background: `radial-gradient(ellipse, ${cfg.glow}, transparent 72%)`,
+          } as CSSProperties}
+        />
       </div>
 
-      {phase === 'revealed' && (
-        <div className="animate-pop-in flex max-w-xs flex-col items-center gap-1 text-center text-white">
+      {revealed && (
+        <div className="badge-reveal-info flex max-w-xs flex-col items-center gap-1.5 text-center text-white">
           <p
-            className={cn(
-              'text-[11px] font-bold tracking-wide uppercase',
-              rarity === 'LEGENDARY'
-                ? 'text-amber-300'
-                : rarity === 'EPIC'
-                  ? 'text-purple-300'
-                  : rarity === 'RARE'
-                    ? 'text-sky-300'
-                    : 'text-stone-300',
-            )}
+            className="text-[11px] font-bold tracking-[0.25em] uppercase"
+            style={{ color: cfg.labelColor }}
           >
             {RARITY_LABELS[rarity]} · Badge débloqué !
           </p>
-          <p className="text-lg font-bold">
+          <span className="h-0.5 w-8 rounded-full opacity-70" style={{ background: cfg.labelColor }} />
+          <p className="text-xl font-extrabold tracking-tight">
             {badge.title}
             {badge.count > 1 && <span className="text-white/70"> ×{badge.count}</span>}
           </p>
           <p className="text-sm text-white/70">{badge.description}</p>
-          <Button className="mt-4" onClick={next}>
+          <Button
+            className="mt-4 bg-[linear-gradient(180deg,#ffdf66_0%,var(--club-gold)_55%,#b8850a_100%)] font-extrabold text-[#1a1200] shadow-[0_10px_24px_-8px_rgba(244,180,0,0.55),inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-2px_2px_rgba(0,0,0,0.15)] hover:opacity-95"
+            onClick={next}
+          >
             {index + 1 < queue.length ? 'Badge suivant' : 'Génial !'}
           </Button>
         </div>

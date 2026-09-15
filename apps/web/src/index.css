@@ -212,8 +212,477 @@
   animation: motm-sweep 1.8s ease-in-out infinite;
 }
 
+/* A slow light sweep across VoteReminderBanner — the same restrained "this matters" material
+   language as the badge medal reveal's own sheen, on an element that otherwise reads as a
+   flat notice bar. */
+@keyframes banner-sheen {
+  0%,
+  25% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+.animate-banner-sheen {
+  animation: banner-sheen 5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-motm-sweep {
+  .animate-motm-sweep,
+  .animate-banner-sheen {
+    animation: none;
+  }
+}
+
+/* ---------- BadgePackReveal — sealed medallion crack/reveal ---------- */
+
+.badge-reveal-stage {
+  isolation: isolate;
+}
+
+.badge-reveal-rays,
+.badge-reveal-rays2 {
+  position: absolute;
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  transition: opacity 0.7s ease;
+}
+.badge-reveal-rays {
+  width: 130%;
+  height: 130%;
+  filter: blur(3px);
+  mask-image: radial-gradient(circle, transparent 0%, transparent 26%, black 42%, black 58%, transparent 80%);
+}
+.badge-reveal-rays.show {
+  opacity: 1;
+  animation: badge-rays-spin 20s linear infinite;
+}
+.badge-reveal-rays2 {
+  width: 115%;
+  height: 115%;
+  filter: blur(2px);
+  mask-image: radial-gradient(circle, transparent 0%, transparent 30%, black 46%, black 62%, transparent 84%);
+  display: none;
+}
+[data-tier='2'] .badge-reveal-rays2,
+[data-tier='3'] .badge-reveal-rays2 {
+  display: block;
+}
+.badge-reveal-rays2.show {
+  opacity: 0.8;
+  animation: badge-rays-spin-rev 14s linear infinite;
+}
+@keyframes badge-rays-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes badge-rays-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.badge-reveal-flash {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #fff 0%, rgba(255, 255, 255, 0.6) 40%, transparent 72%);
+  opacity: 0;
+  transform: scale(0);
+  z-index: 5;
+  pointer-events: none;
+}
+.badge-reveal-flash.burst {
+  animation: badge-flash-burst 600ms cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+@keyframes badge-flash-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(var(--flash-scale, 3));
+  }
+}
+
+.badge-reveal-medal-wrap {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  z-index: 3;
+}
+.badge-reveal-medal-wrap.charging {
+  animation: badge-charge-shake var(--charge-ms, 500ms) ease-in-out;
+}
+@keyframes badge-charge-shake {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  20% {
+    transform: scale(1.03) rotate(-3deg);
+  }
+  40% {
+    transform: scale(1.06) rotate(3deg);
+  }
+  60% {
+    transform: scale(1.03) rotate(-2deg);
+  }
+  80% {
+    transform: scale(1.07) rotate(2deg);
+  }
+}
+.badge-reveal-medal-wrap.idle-breathe {
+  animation: badge-idle-breathe 2.2s ease-in-out infinite;
+}
+@keyframes badge-idle-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Sealed (idle) medallion — frosted, no color, waiting to crack open. */
+.badge-reveal-seal {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.16), transparent 45%),
+    linear-gradient(155deg, #2a2d34, #131519 60%, #0a0b0d);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 2;
+}
+.badge-reveal-seal svg {
+  opacity: 0.4;
+}
+.badge-reveal-tap-hint {
+  position: absolute;
+  bottom: -30px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  transition: opacity 0.2s ease;
+}
+.badge-reveal-tap-hint.hide {
+  opacity: 0;
+}
+.badge-reveal-seal.shattered {
+  opacity: 0;
+  transform: scale(1.4);
+  pointer-events: none;
+}
+
+.badge-reveal-shard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+  opacity: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.badge-reveal-shard.fly {
+  animation: badge-shard-fly 700ms cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+@keyframes badge-shard-fly {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(0.3);
+  }
+}
+
+.badge-reveal-spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 999px;
+  opacity: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.badge-reveal-spark.fly {
+  animation: badge-spark-fly 950ms cubic-bezier(0.15, 0.7, 0.25, 1) forwards;
+}
+@keyframes badge-spark-fly {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2);
+  }
+}
+
+.badge-reveal-halo {
+  position: absolute;
+  inset: -20px;
+  border-radius: 999px;
+  opacity: 0;
+  filter: blur(22px);
+  z-index: 2;
+  transition: opacity 0.4s ease;
+}
+.badge-reveal-halo.show {
+  opacity: 0.85;
+  animation: badge-halo-pulse 2.4s ease-in-out infinite 0.5s;
+}
+@keyframes badge-halo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.95;
+  }
+}
+
+.badge-reveal-medal {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  z-index: 3;
+  opacity: 0;
+  transform: scale(0.3) rotate(-25deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+}
+.badge-reveal-medal.show {
+  /* Set statically, not just via badge-medal-pop's fill-forwards — the idle-coin class
+     below swaps in a whole new `animation` value once it's added, which would otherwise
+     drop back to the base (opacity: 0) the instant that second animation takes over. */
+  opacity: 1;
+  animation: badge-medal-pop 800ms cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+@keyframes badge-medal-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.25) rotate(-30deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.12) rotate(4deg);
+  }
+  75% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(700px) scale(1) rotate(0deg) rotateY(0deg) rotateX(0deg);
+  }
+}
+/* Takes over the transform once the pop settles — a slow coin-like tilt so the medal reads
+   as a dimensional object catching light, not a sticker facing the camera dead-on. */
+.badge-reveal-medal.idle-coin {
+  animation: badge-coin-tilt 6s ease-in-out infinite;
+}
+@keyframes badge-coin-tilt {
+  0%,
+  100% {
+    transform: perspective(700px) scale(1) rotateY(calc(-1 * var(--tilt-amp, 8deg))) rotateX(calc(var(--tilt-amp, 8deg) * 0.4));
+  }
+  50% {
+    transform: perspective(700px) scale(var(--tilt-scale, 1)) rotateY(var(--tilt-amp, 8deg)) rotateX(calc(-1 * var(--tilt-amp, 8deg) * 0.3));
+  }
+}
+
+/* Reeded coin edge — a thin ring of fine light/dark wedges, the detail that most reads as
+   "real minted object" rather than a flat colored disc. */
+.badge-reveal-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0deg 1.2deg, rgba(0, 0, 0, 0.4) 1.2deg 2.4deg);
+  mask-image: radial-gradient(circle, transparent 90%, black 91% 100%);
+}
+
+.badge-reveal-rim {
+  position: absolute;
+  inset: 5px;
+  border-radius: 999px;
+  padding: var(--rim-pad, 6px);
+  background: conic-gradient(from var(--rim-angle, 0deg), var(--c1), var(--c2), var(--c3), var(--c2), var(--c1));
+  animation: badge-rim-spin 7s linear infinite;
+}
+@keyframes badge-rim-spin {
+  to {
+    --rim-angle: 360deg;
+  }
+}
+@property --rim-angle {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.badge-reveal-bevel {
+  position: absolute;
+  inset: 11px;
+  border-radius: 999px;
+  background: #0c0d10;
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.65), inset 0 -2px 3px rgba(255, 255, 255, 0.1);
+  padding: 5px;
+}
+.badge-reveal-face {
+  position: absolute;
+  inset: 16px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 32% 26%, var(--c1) 0%, var(--c2) 55%, var(--c3) 100%);
+  box-shadow: inset 0 3px 6px rgba(255, 255, 255, 0.35), inset 0 -6px 14px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.badge-reveal-gloss {
+  position: absolute;
+  top: -20%;
+  left: -10%;
+  width: 70%;
+  height: 55%;
+  background: linear-gradient(200deg, rgba(255, 255, 255, 0.55), transparent 70%);
+  border-radius: 50%;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+.badge-reveal-sweep,
+.badge-reveal-sweep2 {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  pointer-events: none;
+}
+.badge-reveal-sweep {
+  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, 0.5) 48%, transparent 56%);
+}
+.badge-reveal-sweep2 {
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.35) 50%, transparent 58%);
+  display: none;
+}
+[data-tier='3'] .badge-reveal-sweep2 {
+  display: block;
+}
+.badge-reveal-medal.idle-coin .badge-reveal-sweep {
+  animation: badge-sweep 4.5s ease-in-out infinite 0.6s;
+}
+.badge-reveal-medal.idle-coin .badge-reveal-sweep2 {
+  animation: badge-sweep 4.5s ease-in-out infinite 2.1s;
+}
+@keyframes badge-sweep {
+  0%,
+  15% {
+    transform: translateX(-120%);
+  }
+  45%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* Museum-pedestal glow on the ground beneath the medal, instead of it floating in a void. */
+.badge-reveal-pedestal {
+  position: absolute;
+  bottom: 6%;
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  border-radius: 999px;
+  filter: blur(10px);
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 0.6s ease 0.3s, transform 0.6s ease 0.3s;
+  pointer-events: none;
+}
+.badge-reveal-pedestal.show {
+  opacity: var(--pedestal-opacity, 0.8);
+  transform: translateX(-50%) scale(1);
+}
+
+.badge-reveal-orbit {
+  position: absolute;
+  inset: -8px;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+}
+.badge-reveal-orbit.show {
+  opacity: 1;
+}
+.badge-reveal-orbit span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  margin: -2px 0 0 -2px;
+  animation: badge-orbit var(--orbit-dur, 4.5s) linear infinite;
+  animation-direction: var(--orbit-dir, normal);
+}
+@keyframes badge-orbit {
+  from {
+    transform: rotate(0deg) translateX(var(--orbit-r, 102px)) rotate(0deg);
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  to {
+    transform: rotate(360deg) translateX(var(--orbit-r, 102px)) rotate(-360deg);
+    opacity: 0.9;
+  }
+}
+
+.badge-reveal-info {
+  animation: pop-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-reveal-rays.show,
+  .badge-reveal-rays2.show,
+  .badge-reveal-medal-wrap.idle-breathe,
+  .badge-reveal-medal.idle-coin,
+  .badge-reveal-rim,
+  .badge-reveal-halo.show,
+  .badge-reveal-orbit span,
+  .badge-reveal-medal.idle-coin .badge-reveal-sweep,
+  .badge-reveal-medal.idle-coin .badge-reveal-sweep2 {
     animation: none;
   }
 }

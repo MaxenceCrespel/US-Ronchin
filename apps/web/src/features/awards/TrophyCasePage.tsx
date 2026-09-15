@@ -229,15 +229,11 @@ function TrophyShelf({
   subtitle,
   won,
   onOpen,
-  tourId,
 }: {
   title: string
   subtitle: string
   won: WonTrophy[]
   onOpen: (trophy: WonTrophy) => void
-  /** Anchor for TrophyFeatureTour's one-time walkthrough — a separate attribute from the
-   * main onboarding tour's own `data-tour`, see that component's doc comment for why. */
-  tourId?: string
 }) {
   // Rounded up to a full ROW_SIZE — every shelf level always carries exactly ROW_SIZE
   // spotlights/slots, even its last one, so a level short on real trophies still gets its
@@ -247,7 +243,7 @@ function TrophyShelf({
   const rows = chunk(slots, ROW_SIZE)
 
   return (
-    <div className="flex flex-col gap-2" data-trophy-tour={tourId}>
+    <div className="flex flex-col gap-2">
       <div>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-muted-foreground text-sm">{subtitle}</p>
@@ -464,20 +460,17 @@ export function TrophyCasePage() {
             subtitle='"Homme du match" et "Patron de la défense", votés après chaque match.'
             won={matchWon}
             onOpen={setOpenTrophy}
-            tourId="matches"
           />
           <TrophyShelf
             title="Vitrine du mois"
             subtitle={`"Joueur du mois", "Assidu du mois" et "Vainqueur d'entraînement".`}
             won={monthlyWon}
             onOpen={setOpenTrophy}
-            tourId="month"
           />
           <TrophyShelf
             title="Vitrine de la saison"
             subtitle="Les récompenses votées par l'équipe en fin de saison."
             won={seasonWon}
-            tourId="season"
             onOpen={setOpenTrophy}
           />
         </>

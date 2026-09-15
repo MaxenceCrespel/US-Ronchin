@@ -432,6 +432,8 @@ export interface TeamStats {
   totalGoals: number
   totalAssists: number
   bestDuos: DuoStats[]
+  /** Same ranking as bestDuos, uncapped — the "voir le classement complet" dialog's source. */
+  allBestDuos: DuoStats[]
   /** Team record for the season — wins/draws/losses and goals for/against, from played
    * matches with a score entered. */
   record: {
