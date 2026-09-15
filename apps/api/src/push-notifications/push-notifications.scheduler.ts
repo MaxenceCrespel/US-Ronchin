@@ -276,4 +276,34 @@ export class PushNotificationsScheduler {
       }
     }
   }
+
+  /** Once a day, notifies every other active member when it's someone's birthday, so the
+   * whole club can wish them well — not just their teammates for a given match/session. */
+  @Cron('0 0 9 * * *', { timeZone: 'Europe/Paris' })
+  async handleBirthdayReminders() {
+    const today = parisToday();
+    const monthDay = today.slice(5, 10);
+    const activeUsers = await this.usersRepository.find({ where: { status: UserStatus.ACTIVE } });
+    const birthdayUsers = activeUsers.filter(
+      (u) => u.birthDate?.slice(5, 10) === monthDay && u.lastBirthdayReminderSentOn !== today,
+    );
+    if (birthdayUsers.length === 0) return;
+
+    for (const birthdayUser of birthdayUsers) {
+      try {
+        const recipientIds = activeUsers.filter((u) => u.id !== birthdayUser.id).map((u) => u.id);
+        await this.pushNotificationsService.sendToUsers(recipientIds, {
+          title: "🎂 C'est un anniversaire !",
+          body: `${birthdayUser.firstName} ${birthdayUser.lastName} fête son anniversaire aujourd'hui — pense à lui souhaiter !`,
+          url: '/',
+        });
+        birthdayUser.lastBirthdayReminderSentOn = today;
+        await this.usersRepository.save(birthdayUser);
+      } catch (error) {
+        this.logger.warn(
+          `Échec du rappel d'anniversaire pour ${birthdayUser.id}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+  }
 }

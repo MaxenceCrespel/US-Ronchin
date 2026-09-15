@@ -110,6 +110,12 @@ export class User {
   @Column({ name: 'birth_date', type: 'date', nullable: true })
   birthDate: string | null;
 
+  /** Date (YYYY-MM-DD) the "c'est l'anniversaire de X" push went out this year — guards
+   * handleBirthdayReminders against re-notifying everyone if the cron fires more than once
+   * on the same day. */
+  @Column({ name: 'last_birthday_reminder_sent_on', type: 'date', nullable: true })
+  lastBirthdayReminderSentOn: string | null;
+
   /** Stores a resized image as a base64 data URI — small enough (~256px, compressed) to embed directly. */
   @Column({ name: 'avatar_url', type: 'text', nullable: true })
   avatarUrl: string | null;

@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck } from 'lucide-react'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -467,11 +467,31 @@ export function HomePage() {
     queryFn: () => fetchPlayerStats(),
   })
   const teamStatsQuery = useQuery({ queryKey: ['stats', 'team'], queryFn: () => fetchTeamStats() })
-  const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers, enabled: isCoach })
+  // No longer coach-gated: the birthday reminder below needs everyone's birthDate, not
+  // just the pending-approval count coaches use it for.
+  const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
 
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)
 
   const pendingPlayers = (playersQuery.data ?? []).filter((p) => p.status === 'PENDING')
+
+  // Days until the next occurrence of a MM-DD birthday, wrapping to next year once it's
+  // passed this year — 0 means today. Kept to a week so the card stays a quick glance,
+  // not a full calendar.
+  const upcomingBirthdays = useMemo(() => {
+    const now = new Date()
+    const thisYear = now.getFullYear()
+    return (playersQuery.data ?? [])
+      .filter((p) => p.status === 'ACTIVE' && p.birthDate)
+      .map((p) => {
+        const [, month, day] = p.birthDate!.split('-').map(Number)
+        let next = new Date(thisYear, month - 1, day)
+        if (differenceInCalendarDays(next, now) < 0) next = new Date(thisYear + 1, month - 1, day)
+        return { player: p, daysUntil: differenceInCalendarDays(next, now), date: next }
+      })
+      .filter((b) => b.daysUntil <= 7)
+      .sort((a, b) => a.daysUntil - b.daysUntil)
+  }, [playersQuery.data])
   const matchesNeedingResult = (matchesQuery.data ?? [])
     .filter((m) => m.status !== 'PLAYED' && m.date < todayKey)
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -700,6 +720,40 @@ export function HomePage() {
                 <span className="flex-1">{item.label}</span>
                 <ChevronRight className="text-muted-foreground size-4 shrink-0" />
               </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {upcomingBirthdays.length > 0 && (
+        <Card className="border-club-gold/40 py-0">
+          <CardContent className="flex flex-col divide-y p-0">
+            {upcomingBirthdays.map(({ player, daysUntil, date }) => (
+              <div key={player.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+                <span className="bg-club-gold/15 text-club-gold flex size-8 shrink-0 items-center justify-center rounded-full">
+                  <Cake className="size-4" />
+                </span>
+                <span className="flex-1">
+                  {daysUntil === 0 ? (
+                    <>
+                      C'est l'anniversaire de{' '}
+                      <strong>
+                        {player.firstName} {player.lastName}
+                      </strong>{' '}
+                      aujourd'hui 🎉
+                    </>
+                  ) : (
+                    <>
+                      Anniversaire de{' '}
+                      <strong>
+                        {player.firstName} {player.lastName}
+                      </strong>{' '}
+                      {daysUntil === 1 ? 'demain' : `dans ${daysUntil} jours`} (
+                      {date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })})
+                    </>
+                  )}
+                </span>
+              </div>
             ))}
           </CardContent>
         </Card>
