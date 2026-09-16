@@ -492,8 +492,20 @@ export function HomePage() {
       .filter((b) => b.daysUntil <= 7)
       .sort((a, b) => a.daysUntil - b.daysUntil)
   }, [playersQuery.data])
+  // A same-day match only counts as "needing a result" once it's actually likely over —
+  // otherwise a 9h30 kickoff wouldn't show up here until tomorrow, even checked at 11h30
+  // with the match long finished. Matches have no stored end time (unlike training
+  // sessions), so this is an estimate: kickoff + ~2h (90 min plus half-time/stoppage).
+  // Without a kickOffTime at all there's no way to know, so it falls back to the old
+  // date-only behavior (safe — surfaces it starting the next day instead of guessing wrong).
+  const MATCH_DURATION_MS = 2 * 60 * 60_000
   const matchesNeedingResult = (matchesQuery.data ?? [])
-    .filter((m) => m.status !== 'PLAYED' && m.date < todayKey)
+    .filter((m) => {
+      if (m.status === 'PLAYED') return false
+      if (m.date !== todayKey) return m.date < todayKey
+      if (!m.kickOffTime) return false
+      return new Date(`${m.date}T${m.kickOffTime}`).getTime() + MATCH_DURATION_MS <= Date.now()
+    })
     .sort((a, b) => b.date.localeCompare(a.date))
 
   const recentPlayedMatches = useMemo(
