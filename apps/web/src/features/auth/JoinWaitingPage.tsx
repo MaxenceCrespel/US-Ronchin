@@ -14,7 +14,6 @@ export function JoinWaitingPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const email = searchParams.get('email') ?? ''
-  const token = searchParams.get('token') ?? ''
 
   const statusQuery = useQuery({
     queryKey: ['join-status', email],
@@ -64,11 +63,9 @@ export function JoinWaitingPage() {
               <p className="text-muted-foreground text-sm">
                 Ta demande a peut-être été refusée ou supprimée par le coach.
               </p>
-              {token && (
-                <Button variant="outline" onClick={() => navigate(`/join?token=${token}`)}>
-                  Refaire une demande
-                </Button>
-              )}
+              <Button variant="outline" onClick={() => navigate('/join')}>
+                Refaire une demande
+              </Button>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3 py-4 text-center">

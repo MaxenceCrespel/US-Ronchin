@@ -9,9 +9,6 @@ export class ClubSettings {
   @Column({ name: 'fff_team_url', type: 'varchar', nullable: true })
   fffTeamUrl: string | null;
 
-  @Column({ name: 'join_token', type: 'varchar', nullable: true })
-  joinToken: string | null;
-
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
@@ -84,6 +84,12 @@ export function LoginPage() {
                 'Se connecter'
               )}
             </Button>
+            <p className="text-muted-foreground text-center text-sm">
+              Pas encore de compte ?{' '}
+              <Link to="/join" className="text-club-blue font-medium underline">
+                Créer mon compte
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>

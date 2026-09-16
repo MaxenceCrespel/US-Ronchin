@@ -1,9 +1,6 @@
 import { IsEmail, IsString, MinLength } from 'class-validator';
 
 export class JoinDto {
-  @IsString()
-  token: string;
-
   @IsEmail()
   email: string;
 

@@ -12,7 +12,6 @@ import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { Invitation } from './entities/invitation.entity';
 import { UsersService } from '../users/users.service';
-import { SettingsService } from '../settings/settings.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { JoinDto } from './dto/join.dto';
 import { AuthenticatedUser } from './types/authenticated-user';
@@ -27,7 +26,6 @@ export class AuthService {
     @InjectRepository(Invitation)
     private readonly invitationsRepository: Repository<Invitation>,
     private readonly usersService: UsersService,
-    private readonly settingsService: SettingsService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -114,11 +112,6 @@ export class AuthService {
   }
 
   async join(dto: JoinDto): Promise<void> {
-    const settings = await this.settingsService.findByJoinToken(dto.token);
-    if (!settings) {
-      throw new BadRequestException("Lien d'invitation invalide ou désactivé");
-    }
-
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
     // Never self-declared — only a coach/admin can grant licensed status (via the
     // invitation flow's own isLicensed, or by editing the player afterwards), since it

@@ -7,10 +7,8 @@ import {
   ClipboardList,
   Copy,
   History,
-  Link2,
   Pencil,
   QrCode,
-  RefreshCw,
   Search,
   Trash2,
   TriangleAlert,
@@ -54,108 +52,65 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { BadgesGrid } from '@/features/badges/BadgesGrid'
 import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
-import { fetchSettings, regenerateJoinLink, disableJoinLink } from '@/features/settings/api'
 import { fetchUnlinkedGuestMatches, linkPastGuestTrainings } from '@/features/trainings/teams-api'
 
-function JoinLinkCard() {
-  const queryClient = useQueryClient()
-  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings })
-  const [copied, setCopied] = useState(false)
+// Signup lives at a fixed, public /join route (no token — see LoginPage's "Créer mon
+// compte" link) so there's nothing here to generate, regenerate or leak: just a static QR
+// to that same URL, handy to display/print at training for someone who'd rather scan than
+// type. New accounts still land PENDING and need approval below regardless of how they
+// got to /join.
+function ClubJoinQrCard() {
   const [qrOpen, setQrOpen] = useState(false)
-
-  const regenerateMutation = useMutation({
-    mutationFn: regenerateJoinLink,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
-  })
-
-  const disableMutation = useMutation({
-    mutationFn: disableJoinLink,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
-  })
-
-  const joinUrl = settingsQuery.data?.joinToken
-    ? `${window.location.origin}/join?token=${settingsQuery.data.joinToken}`
-    : null
+  const [copied, setCopied] = useState(false)
+  const joinUrl = `${window.location.origin}/join`
 
   return (
     <Card data-tour="players-join-link">
       <CardHeader>
-        <CardTitle>Lien d'invitation</CardTitle>
+        <CardTitle>Créer un compte</CardTitle>
         <CardDescription>
-          Partage ce lien (WhatsApp, SMS...) pour que les joueurs créent eux-mêmes leur compte —
-          tu devras ensuite valider chaque nouveau compte ci-dessous.
+          N'importe qui peut créer son compte depuis la page de connexion — tu devras ensuite
+          valider chaque nouveau compte ci-dessous. Ce QR code mène directement au formulaire,
+          pratique à afficher ou imprimer à l'entraînement.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {joinUrl ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                navigator.clipboard.writeText(joinUrl)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1500)
-              }}
-              aria-label="Copier le lien"
-            >
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            </Button>
-            <Dialog open={qrOpen} onOpenChange={setQrOpen}>
-              <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="icon" aria-label="Afficher le QR code">
-                  <QrCode className="size-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-xs">
-                <DialogHeader>
-                  <DialogTitle>Rejoindre US Ronchin</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col items-center gap-3 py-2">
-                  <div className="rounded-lg border bg-white p-4">
-                    <QRCodeSVG value={joinUrl} size={220} />
-                  </div>
-                  <p className="text-muted-foreground text-center text-sm">
-                    Scanne pour créer ton compte directement.
-                  </p>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">Aucun lien actif pour le moment.</p>
-        )}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            disabled={regenerateMutation.isPending}
-            onClick={() => regenerateMutation.mutate()}
+            size="icon"
+            onClick={() => {
+              navigator.clipboard.writeText(joinUrl)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            }}
+            aria-label="Copier le lien"
           >
-            <RefreshCw className="size-4" />
-            {joinUrl ? 'Régénérer' : 'Générer un lien'}
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
-          {joinUrl && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              disabled={disableMutation.isPending}
-              onClick={() => disableMutation.mutate()}
-            >
-              Désactiver
-            </Button>
-          )}
+          <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+            <DialogTrigger asChild>
+              <Button type="button" variant="outline" size="icon" aria-label="Afficher le QR code">
+                <QrCode className="size-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xs">
+              <DialogHeader>
+                <DialogTitle>Rejoindre US Ronchin</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col items-center gap-3 py-2">
+                <div className="rounded-lg border bg-white p-4">
+                  <QRCodeSVG value={joinUrl} size={220} />
+                </div>
+                <p className="text-muted-foreground text-center text-sm">
+                  Scanne pour créer ton compte directement.
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
-        <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
-          <Link2 className="mt-0.5 size-3.5 shrink-0" />
-          Régénérer le lien invalide immédiatement l'ancien — utile si tu penses qu'il a fuité en
-          dehors du groupe.
-        </p>
       </CardContent>
     </Card>
   )
@@ -774,7 +729,7 @@ export function PlayersPage() {
         {isCoach && <InvitePlayerDialog />}
       </div>
 
-      {isCoach && <JoinLinkCard />}
+      {isCoach && <ClubJoinQrCard />}
 
       <Card data-tour="players-roster">
         <CardHeader>

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,15 +20,5 @@ export class SettingsController {
   @Patch()
   update(@Body() dto: UpdateSettingsDto) {
     return this.settingsService.update(dto);
-  }
-
-  @Post('join-link')
-  regenerateJoinLink() {
-    return this.settingsService.regenerateJoinToken();
-  }
-
-  @Delete('join-link')
-  disableJoinLink() {
-    return this.settingsService.disableJoinLink();
   }
 }

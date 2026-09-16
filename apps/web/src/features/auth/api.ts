@@ -20,7 +20,6 @@ export async function acceptInvitation(token: string, password: string): Promise
 }
 
 export interface JoinInput {
-  token: string
   email: string
   firstName: string
   lastName: string

@@ -3,7 +3,6 @@ import { apiClient } from '@/lib/api-client'
 export interface ClubSettings {
   id: string
   fffTeamUrl: string | null
-  joinToken: string | null
   updatedAt: string
 }
 
@@ -14,16 +13,6 @@ export async function fetchSettings(): Promise<ClubSettings> {
 
 export async function updateSettings(fffTeamUrl: string): Promise<ClubSettings> {
   const { data } = await apiClient.patch<ClubSettings>('/settings', { fffTeamUrl })
-  return data
-}
-
-export async function regenerateJoinLink(): Promise<ClubSettings> {
-  const { data } = await apiClient.post<ClubSettings>('/settings/join-link')
-  return data
-}
-
-export async function disableJoinLink(): Promise<ClubSettings> {
-  const { data } = await apiClient.delete<ClubSettings>('/settings/join-link')
   return data
 }
 

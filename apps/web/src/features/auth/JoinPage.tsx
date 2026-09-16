@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import { Button } from '@/components/ui/button'
@@ -11,9 +11,7 @@ import { join } from './api'
 const PENDING_JOIN_EMAIL_KEY = 'pending-join-email'
 
 export function JoinPage() {
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const token = searchParams.get('token') ?? ''
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -26,18 +24,16 @@ export function JoinPage() {
   useEffect(() => {
     const pendingEmail = localStorage.getItem(PENDING_JOIN_EMAIL_KEY)
     if (pendingEmail) {
-      navigate(`/join/waiting?email=${encodeURIComponent(pendingEmail)}&token=${token}`, {
-        replace: true,
-      })
+      navigate(`/join/waiting?email=${encodeURIComponent(pendingEmail)}`, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const mutation = useMutation({
-    mutationFn: () => join({ token, firstName, lastName, email, password }),
+    mutationFn: () => join({ firstName, lastName, email, password }),
     onSuccess: () => {
       localStorage.setItem(PENDING_JOIN_EMAIL_KEY, email)
-      navigate(`/join/waiting?email=${encodeURIComponent(email)}&token=${token}`)
+      navigate(`/join/waiting?email=${encodeURIComponent(email)}`)
     },
   })
 
@@ -58,10 +54,7 @@ export function JoinPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!token ? (
-            <p className="text-destructive text-sm">Lien invalide.</p>
-          ) : (
-            <form
+          <form
               className="flex flex-col gap-4"
               onSubmit={(e) => {
                 e.preventDefault()
@@ -136,8 +129,7 @@ export function JoinPage() {
               <Button type="submit" disabled={!passwordsMatch || mutation.isPending}>
                 {mutation.isPending ? 'Création...' : 'Créer mon compte'}
               </Button>
-            </form>
-          )}
+          </form>
         </CardContent>
       </Card>
     </div>
