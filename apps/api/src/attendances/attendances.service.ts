@@ -5,6 +5,7 @@ import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
 import { pickNextWaitlisted, priorityRank } from './attendance-cap';
 
@@ -35,6 +36,8 @@ export class AttendancesService {
     private readonly sessionsRepository: Repository<TrainingSession>,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(TrainingTeamAssignment)
+    private readonly assignmentsRepository: Repository<TrainingTeamAssignment>,
   ) {}
 
   findBySession(trainingSessionId: string): Promise<Attendance[]> {
@@ -207,7 +210,47 @@ export class AttendancesService {
         )
       : [];
 
+    await this.autoAssignToTeamIfNeeded(trainingSessionId, userId, attendance);
+
     return attendance;
+  }
+
+  /** Whenever someone ends up effectively present-and-confirmed — a fresh declaration, a
+   * coach's force-present correction (setForPlayer, bypassing the lock), or a waitlist
+   * promotion freeing up their slot — and teams already exist for the session, place them
+   * on whichever team is currently smallest. Without this, a player becoming present after
+   * the 1h30-before-kickoff auto-generation had no way onto a team at all short of a coach
+   * manually adding them one by one in "Modifier les équipes". No-op if there are no teams
+   * yet (nothing to place them on to), or they're already assigned. */
+  private async autoAssignToTeamIfNeeded(
+    trainingSessionId: string,
+    userId: string,
+    attendance: Pick<Attendance, 'status' | 'confirmed'>,
+  ): Promise<void> {
+    if (attendance.status !== AttendanceStatus.PRESENT || !attendance.confirmed) return;
+
+    const existingAssignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId },
+    });
+    if (existingAssignments.length === 0) return;
+    if (existingAssignments.some((a) => a.userId === userId)) return;
+
+    const teamCount = Math.max(2, Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1);
+    const teamCounts = new Array(teamCount).fill(0);
+    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
+    let minTeam = 0;
+    for (let i = 1; i < teamCount; i++) {
+      if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
+    }
+
+    await this.assignmentsRepository.save(
+      this.assignmentsRepository.create({
+        trainingSessionId,
+        userId,
+        guestLabel: null,
+        teamIndex: minTeam,
+      }),
+    );
   }
 
   /** Called by TrainingsService whenever a session's effective cap might have just gone up
@@ -276,6 +319,7 @@ export class AttendancesService {
             newConfirmedGuestCount: nextPlayer.confirmedGuestCount,
           }),
         );
+        await this.autoAssignToTeamIfNeeded(trainingSessionId, nextPlayer.userId, nextPlayer);
         continue;
       }
 

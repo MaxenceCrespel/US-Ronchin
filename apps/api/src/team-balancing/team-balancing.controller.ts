@@ -10,6 +10,7 @@ import { TeamBalancingService } from './team-balancing.service';
 import { GenerateTeamsDto } from './dto/generate-teams.dto';
 import { MovePlayerDto } from './dto/move-player.dto';
 import { AddWalkInDto } from './dto/add-walk-in.dto';
+import { AddPlayerDto } from './dto/add-player.dto';
 import { LinkPastTrainingsDto } from './dto/link-past-trainings.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -97,6 +98,17 @@ export class TeamBalancingController {
   @Post('walk-in')
   async addWalkIn(@Param('sessionId') sessionId: string, @Body() dto: AddWalkInDto) {
     const teams = await this.teamBalancingService.addWalkIn(sessionId, dto);
+    return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
+  }
+
+  // Force-adds a specific roster player (marks them PRESENT along the way) — the coach
+  // saying someone's coming even though they never answered, or answered something else.
+  // See TeamBalancingService.addPlayerToTeam.
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Post('add-player')
+  async addPlayer(@Param('sessionId') sessionId: string, @Body() dto: AddPlayerDto) {
+    const teams = await this.teamBalancingService.addPlayerToTeam(sessionId, dto.userId);
     return teams.map((t) => ({ ...t, user: t.user ? sanitizeUser(t.user) : null }));
   }
 

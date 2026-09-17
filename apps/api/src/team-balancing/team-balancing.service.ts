@@ -565,6 +565,69 @@ export class TeamBalancingService {
     return this.getTeams(sessionId);
   }
 
+  /** Coach force-adds a specific roster player who never responded (or declared something
+   * else) straight onto a team — the flip side of removeFromTeam. Marks them PRESENT (the
+   * coach placing them on a team already says as much — same meaning as if they'd ticked it
+   * themselves) and drops them on whichever team is currently smallest, same placement rule
+   * as a last-minute arrival in confirmFinalTeams. Requires teams to already exist: this
+   * is a one-off correction to an existing split, not a way to build one from scratch. */
+  async addPlayerToTeam(sessionId: string, userId: string): Promise<TrainingTeamAssignment[]> {
+    const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
+    if (!session) {
+      throw new NotFoundException('Séance introuvable');
+    }
+
+    const existingAssignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId: sessionId },
+    });
+    if (existingAssignments.length === 0) {
+      throw new BadRequestException(
+        "Aucune équipe générée pour cette séance — génère-les d'abord.",
+      );
+    }
+    if (existingAssignments.some((a) => a.userId === userId)) {
+      throw new BadRequestException('Ce joueur est déjà dans une équipe.');
+    }
+
+    let attendance = await this.attendancesRepository.findOne({
+      where: { trainingSessionId: sessionId, userId },
+    });
+    if (attendance) {
+      attendance.status = AttendanceStatus.PRESENT;
+      attendance.respondedAt = new Date();
+    } else {
+      attendance = this.attendancesRepository.create({
+        trainingSessionId: sessionId,
+        userId,
+        status: AttendanceStatus.PRESENT,
+        respondedAt: new Date(),
+      });
+    }
+    await this.attendancesRepository.save(attendance);
+
+    const teamCount = Math.max(
+      DEFAULT_TEAM_COUNT,
+      Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1,
+    );
+    const teamCounts = new Array(teamCount).fill(0);
+    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
+    let minTeam = 0;
+    for (let i = 1; i < teamCount; i++) {
+      if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
+    }
+
+    await this.assignmentsRepository.save(
+      this.assignmentsRepository.create({
+        trainingSessionId: sessionId,
+        userId,
+        guestLabel: null,
+        teamIndex: minTeam,
+      }),
+    );
+
+    return this.getTeams(sessionId);
+  }
+
   /** Someone who trained as an unlinked guest before creating their own account (e.g. a
    * teammate added them by name on Tuesday and Thursday; they only install the app Friday)
    * — surfaces every past guest slot whose name matches, across every session, so the coach

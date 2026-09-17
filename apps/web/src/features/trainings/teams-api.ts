@@ -65,6 +65,20 @@ export async function addWalkIn(
   return data
 }
 
+/** Force-adds a specific roster player, marking them PRESENT along the way — the coach
+ * saying someone's coming even though they never answered the poll (or answered something
+ * else). The flip side of removeFromTeam. */
+export async function addPlayerToTeam(
+  sessionId: string,
+  userId: string,
+): Promise<TrainingTeamAssignment[]> {
+  const { data } = await apiClient.post<TrainingTeamAssignment[]>(
+    `/training-sessions/${sessionId}/teams/add-player`,
+    { userId },
+  )
+  return data
+}
+
 export interface UnlinkedGuestMatch {
   assignmentId: string
   sessionId: string

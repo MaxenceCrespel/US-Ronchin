@@ -72,6 +72,7 @@ import type {
 import { isRosterPlayer } from '@/lib/roster'
 import { getMatchCategory, MATCH_CATEGORY_BORDER, MATCH_CATEGORY_LABELS } from '@/lib/match-category'
 import {
+  coachSetAttendance,
   createTraining,
   deleteSession,
   deleteTraining,
@@ -86,6 +87,7 @@ import {
   validateAttendance,
 } from './api'
 import {
+  addPlayerToTeam,
   addWalkIn,
   confirmFinalTeams,
   deleteTeams,
@@ -678,8 +680,9 @@ function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
 
 /** Once teams exist and before the session has ended: move people between teams (arriving
  * late, sorting out who gets which chasuble color), drop someone who said "Présent" but
- * isn't actually there, or régénérer from scratch — all available right up until the
- * session ends, since a coach arriving at training needs the full toolkit, not just a
+ * isn't actually there, force-add or force-mark-absent a roster player who never answered
+ * (or answered something else), or régénérer from scratch — all available right up until
+ * the session ends, since a coach arriving at training needs the full toolkit, not just a
  * preview. No walk-in here: adding someone unplanned is a post-training correction against
  * actual attendance, which doesn't exist yet — see ManageSessionDialog below, once the
  * session has ended, for that plus pointage and score. */
@@ -708,8 +711,33 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
     },
   })
 
+  // Anyone on the roster who never answered (or answered something other than "Présent")
+  // and isn't already on a team — the coach forcing "il vient" or "il vient pas" for them,
+  // same meaning as if they'd answered themselves.
+  const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers, enabled: open })
+  const attendancesQuery = useQuery({
+    queryKey: ['attendances', sessionId],
+    queryFn: () => fetchAttendances(sessionId),
+    enabled: open,
+  })
+  const addPresentMutation = useMutation({
+    mutationFn: (userId: string) => addPlayerToTeam(sessionId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
+    },
+  })
+  const forceAbsentMutation = useMutation({
+    mutationFn: (userId: string) => coachSetAttendance(sessionId, userId, 'ABSENT'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] }),
+  })
+
   const teams = teamsQuery.data ?? []
   const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
+  const teamUserIds = new Set(teams.filter((t) => t.user).map((t) => t.user!.id))
+  const otherRosterPlayers = (playersQuery.data ?? [])
+    .filter((p) => isRosterPlayer(p) && !teamUserIds.has(p.id))
+    .map((p) => ({ player: p, declared: attendancesQuery.data?.find((a) => a.userId === p.id)?.status ?? null }))
 
   return (
     <>
@@ -766,6 +794,49 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
             </div>
           ))}
         </div>
+        {otherRosterPlayers.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+            <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+              Autres joueurs du roster
+            </p>
+            <ul className="flex flex-col divide-y">
+              {otherRosterPlayers.map(({ player, declared }) => (
+                <li key={player.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      {player.firstName} {player.lastName}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {declared ? `Déclaré ${ATTENDANCE_STATUS_LABELS[declared].toLowerCase()}` : 'Aucune réponse'}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      title="Marquer présent et ajouter à l'équipe"
+                      aria-label="Marquer présent et ajouter à l'équipe"
+                      disabled={addPresentMutation.isPending}
+                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-40"
+                      onClick={() => addPresentMutation.mutate(player.id)}
+                    >
+                      <Check className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Marquer absent"
+                      aria-label="Marquer absent"
+                      disabled={forceAbsentMutation.isPending}
+                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                      onClick={() => forceAbsentMutation.mutate(player.id)}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Button
           type="button"
           size="sm"
