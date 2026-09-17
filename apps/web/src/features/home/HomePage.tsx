@@ -456,10 +456,14 @@ export function HomePage() {
   // weekly training cadence — recomputed daily since todayKey changes, so the query
   // key stays stable within a day (no refetch loop).
   const upcomingRangeEndKey = format(addDays(new Date(), 60), 'yyyy-MM-dd')
+  // A few days back too — not for the "À venir" list (upcomingSessions below still filters
+  // to startTime >= now), just so a just-ended or recently-missed pointage réel can show up
+  // in "À traiter" the same way a missing match result does.
+  const pastRangeStartKey = format(addDays(new Date(), -3), 'yyyy-MM-dd')
 
   const sessionsQuery = useQuery({
-    queryKey: ['training-sessions', todayKey, upcomingRangeEndKey],
-    queryFn: () => fetchSessions(todayKey, upcomingRangeEndKey),
+    queryKey: ['training-sessions', pastRangeStartKey, upcomingRangeEndKey],
+    queryFn: () => fetchSessions(pastRangeStartKey, upcomingRangeEndKey),
   })
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
   const playerStatsQuery = useQuery({
@@ -638,6 +642,32 @@ export function HomePage() {
         return !attendances.some((a) => a.userId === user?.id && a.status)
       })
 
+  // Mirrors the backend's own "pointage à faire" push notification
+  // (PushNotificationsScheduler.handleMissingAttendanceReminders): a non-cancelled session
+  // whose end time has passed with no pointage réel recorded for anyone yet. That
+  // notification only ever fires once per session (so it can't be relied on to still be
+  // sitting in someone's notification tray), and here it's rendered from the always-current
+  // attendance data instead of a fire-and-forget push, so it doesn't need any of the
+  // scheduler's once-only bookkeeping.
+  const sessionsNeedingPointage = (sessionsQuery.data ?? [])
+    .filter((s) => !s.cancelled && new Date(`${s.date}T${s.endTime}`).getTime() <= Date.now())
+    .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+  const pastSessionAttendanceQueries = useQueries({
+    queries: isCoach
+      ? sessionsNeedingPointage.map((s) => ({
+          queryKey: ['attendances', s.id],
+          queryFn: () => fetchAttendances(s.id),
+        }))
+      : [],
+  })
+  const trainingsNeedingPointage = isCoach
+    ? sessionsNeedingPointage.filter((_s, i) => {
+        const attendances = pastSessionAttendanceQueries[i]?.data
+        if (!attendances) return false
+        return !attendances.some((a) => a.actualStatus)
+      })
+    : []
+
   interface ActionItem {
     id: string
     icon: ComponentType<{ className?: string }>
@@ -670,6 +700,22 @@ export function HomePage() {
                 icon: Trophy,
                 label: `+${matchesNeedingResult.length - 3} autre${matchesNeedingResult.length - 3 > 1 ? 's' : ''} match${matchesNeedingResult.length - 3 > 1 ? 's' : ''} à renseigner`,
                 to: '/matches',
+              },
+            ]
+          : []),
+        ...trainingsNeedingPointage.slice(0, 3).map((s) => ({
+          id: s.id,
+          icon: ClipboardCheck,
+          label: `Pointage à faire — entraînement du ${formatDate(s.date)}`,
+          to: `/trainings?session=${s.id}`,
+        })),
+        ...(trainingsNeedingPointage.length > 3
+          ? [
+              {
+                id: 'more-pointage',
+                icon: ClipboardCheck,
+                label: `+${trainingsNeedingPointage.length - 3} autre${trainingsNeedingPointage.length - 3 > 1 ? 's' : ''} pointage${trainingsNeedingPointage.length - 3 > 1 ? 's' : ''} à faire`,
+                to: '/trainings',
               },
             ]
           : []),
