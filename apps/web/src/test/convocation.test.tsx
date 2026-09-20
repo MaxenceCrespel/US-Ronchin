@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
-import { fakeApi, meta, type Role } from './fake-api'
+import { fakeApi, fixtures, meta, type Role } from './fake-api'
 
 const settle = (ms = 400) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 
@@ -92,5 +92,76 @@ describe('convocation (player view)', () => {
     await open('player')
     expect(screen.queryByText('Convocation et composition')).toBeNull()
     expect(document.body.textContent).toMatch(/Tu es convoqué|Tu n'es pas retenu/)
+  })
+})
+
+describe('convocation — first announcement and formation change', () => {
+  async function openFresh() {
+    const user = userEvent.setup()
+    const match = fixtures.roles.coach[`/matches/${meta.upcomingMatchId}`] as Record<string, unknown>
+    const attendance = (fixtures.roles.coach[`/matches/${meta.upcomingMatchId}/attendance`] as Record<string, unknown>[]).map((a) => ({ ...a, called: false }))
+    renderApp(`/matches/${meta.upcomingMatchId}`, 'coach')
+    fakeApi.on('GET', new RegExp(`/matches/${meta.upcomingMatchId}$`), { ...match, convocationAnnouncedAt: null })
+    fakeApi.on('GET', /attendance$/, attendance)
+    fakeApi.on('GET', /lineup$/, { formation: null, slots: null, validatedAt: null })
+    await settle(800)
+    return user
+  }
+
+  it('nothing is announced yet: the lineup is locked and the convocation reads "À faire"', async () => {
+    await openFresh()
+    expect(screen.getByRole('button', { name: /^Composition de départ/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Convocation/ }).textContent).toContain('À faire')
+  })
+
+  it('selects players and announces for the first time after confirming', async () => {
+    const user = await openFresh()
+    await user.click(screen.getByRole('button', { name: /^Convocation/ }))
+    const dialog = await screen.findByRole('dialog')
+    const announce = within(dialog).getByRole('button', { name: 'Annoncer la convocation' })
+    expect(announce).toBeDisabled() // nobody selected yet
+    const rows = within(dialog).getAllByRole('button').filter((b) => /First\d+ Last\d+/.test(b.textContent ?? ''))
+    for (const row of rows.slice(0, 11)) await user.click(row)
+    await user.click(announce)
+    await screen.findByText('Annoncer la convocation ?')
+    await user.click(screen.getByRole('button', { name: 'Annoncer' }))
+    await waitFor(() => expect(fakeApi.called('PUT', /convocation$/)).toHaveLength(1))
+    expect((fakeApi.called('PUT', /convocation$/)[0].data as { calledUserIds: string[] }).calledUserIds).toHaveLength(11)
+  })
+
+  it('changing the system reflows the pitch and un-validates the lineup', async () => {
+    const user = userEvent.setup()
+    renderApp(`/matches/${meta.upcomingMatchId}`, 'coach')
+    await settle(800)
+    await user.click(screen.getByRole('button', { name: /^Composition de départ/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: /Composition validée/ })).toBeDisabled()
+    within(dialog).getByRole('combobox').focus()
+    await user.keyboard('{Enter}{ArrowDown}{Enter}')
+    await settle()
+    const validate = within(dialog).getByRole('button', { name: 'Valider la composition' })
+    expect(validate).toBeEnabled()
+    await user.click(validate)
+    await waitFor(() => expect(fakeApi.called('PUT', /lineup$/)).toHaveLength(1))
+    expect((fakeApi.called('PUT', /lineup$/)[0].data as { formation: string }).formation).not.toBe('4-4-2 à plat')
+  })
+
+  it('a swap on the pitch is sent with the validation', async () => {
+    const user = userEvent.setup()
+    renderApp(`/matches/${meta.upcomingMatchId}`, 'coach')
+    await settle(800)
+    await user.click(screen.getByRole('button', { name: /^Composition de départ/ }))
+    const dialog = await screen.findByRole('dialog')
+    const pitch = dialog.querySelector('.aspect-\\[3\\/4\\]') as HTMLElement
+    pitch.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON() {} })
+    const dots = [...dialog.querySelectorAll('button.touch-none')] as HTMLElement[]
+    const before = dots.map((d) => d.title)
+    fireEvent.pointerDown(dots[1], { pointerId: 1 })
+    const target = dots[2].parentElement as HTMLElement
+    fireEvent.pointerMove(pitch, { clientX: parseFloat(target.style.left), clientY: parseFloat(target.style.top) })
+    fireEvent.pointerUp(pitch)
+    await settle()
+    const after = ([...dialog.querySelectorAll('button.touch-none')] as HTMLElement[]).map((d) => d.title)
+    expect(after).not.toEqual(before)
   })
 })

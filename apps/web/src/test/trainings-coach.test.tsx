@@ -152,3 +152,36 @@ describe('training management', () => {
     await waitFor(() => expect(fakeApi.called('DELETE', /^\/trainings\/.+/)).toHaveLength(1))
   })
 })
+
+describe('special session states', () => {
+  it('a cancelled session says so and cannot be answered', async () => {
+    const sessions = fixtures.roles.coach['/training-sessions'] as Record<string, unknown>[]
+    await openUpcoming(() => {
+      fakeApi.on(
+        'GET',
+        /^\/training-sessions$/,
+        sessions.map((s) => (s.id === meta.upcomingSessionId ? { ...s, cancelled: true } : s)),
+      )
+    })
+    expect(document.body.textContent).toMatch(/Annulée/)
+  })
+
+  it('creates a one-off training with a date', async () => {
+    const user = userEvent.setup()
+    renderApp('/trainings', 'coach')
+    await settle()
+    await user.click(screen.getByRole('button', { name: 'Gérer les entraînements' }))
+    const dialog = await screen.findByRole('dialog')
+    within(dialog).getAllByRole('combobox')[0].focus()
+    await user.keyboard('{Enter}{ArrowDown}{Enter}')
+    await settle()
+    await user.type(dialog.querySelector('#title') as HTMLElement, 'Match interne')
+    await user.type(dialog.querySelector('#location') as HTMLElement, 'Gymnase')
+    fireEvent.change(dialog.querySelector('#startTime') as HTMLElement, { target: { value: '18:00' } })
+    fireEvent.change(dialog.querySelector('#endTime') as HTMLElement, { target: { value: '19:30' } })
+    fireEvent.change(dialog.querySelector('#startDate') as HTMLElement, { target: { value: '2026-11-05' } })
+    await user.click(within(dialog).getByRole('button', { name: "Créer l'entraînement" }))
+    await waitFor(() => expect(fakeApi.called('POST', /^\/trainings$/).length).toBeGreaterThan(0))
+    expect(fakeApi.called('POST', /^\/trainings$/)[0].data).toMatchObject({ title: 'Match interne', type: 'ONE_OFF' })
+  })
+})

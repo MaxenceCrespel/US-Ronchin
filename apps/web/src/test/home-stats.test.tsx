@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
-import { fakeApi, type Role } from './fake-api'
+import { fakeApi, fixtures, type Role } from './fake-api'
 
 const settle = (ms = 500) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 
@@ -102,5 +102,41 @@ describe('stats page', () => {
     await user.keyboard('{Enter}{ArrowDown}{Enter}')
     await settle()
     expect(fakeApi.called('GET', /stats\/(players|team)/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('home page — situations', () => {
+  const today = new Date().toISOString().slice(5, 10)
+
+  it('reminds the club of a birthday', async () => {
+    const users = (fixtures.roles.coach['/users'] as Record<string, unknown>[]).map((u, i) => (i === 3 ? { ...u, birthDate: `1990-${today}`, firstName: 'Fêté' } : u))
+    renderApp('/', 'player')
+    fakeApi.on('GET', /^\/users$/, users)
+    await settle(800)
+    expect(document.body.textContent).toMatch(/anniversaire/i)
+  })
+
+  it('asks the coach for a match result that is still missing', async () => {
+    const matches = fixtures.roles.coach['/matches'] as Record<string, unknown>[]
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+    renderApp('/', 'coach')
+    fakeApi.on('GET', /^\/matches$/, [{ ...matches[0], id: 'late', date: yesterday, status: 'SCHEDULED', opponent: 'FC Retard', scoreHome: null, scoreAway: null }, ...matches])
+    await settle(800)
+    expect(document.body.textContent).toMatch(/FC Retard/)
+  })
+
+  it('asks the coach for a pointage that is missing', async () => {
+    renderApp('/', 'coach')
+    await settle(800)
+    expect(document.body.textContent).toMatch(/Pointage|pointage|À traiter/)
+  })
+
+  it('answers the next match from the home card', async () => {
+    const user = userEvent.setup()
+    renderApp('/', 'player')
+    await settle(800)
+    const buttons = screen.getAllByRole('button', { name: 'Présent' })
+    await user.click(buttons.at(-1)!)
+    await waitFor(() => expect(fakeApi.called('PUT', /attendance$/).length).toBeGreaterThan(0))
   })
 })

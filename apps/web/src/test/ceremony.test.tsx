@@ -60,4 +60,25 @@ describe('season awards ceremony', () => {
     await playThrough(onDone, 20)
     expect(onDone).toHaveBeenCalled()
   }, 60_000)
+
+  it.each([0, 3, 9, 11])('plays the personal rewind for player #%i', async (idx) => {
+    const onDone = vi.fn()
+    const rich = { ...team } as TeamStats
+    render(
+      <AwardsCeremony
+        season="2026-2027"
+        categories={[
+          category({ results: [{ userId: 'a', firstName: 'A', lastName: 'One', votes: 3 }, { userId: 'b', firstName: 'B', lastName: 'Two', votes: 3 }] }),
+          category({ id: 'c3', key: 'none', title: 'Sans vote', results: [], totalVotes: 0 }),
+          category({ id: 'c4', key: 'null', title: 'Résultats masqués', results: null }),
+        ]}
+        teamStats={rich}
+        roster={[]}
+        myStats={players[idx]}
+        onDone={onDone}
+      />,
+    )
+    await playThrough(onDone)
+    expect(onDone).toHaveBeenCalled()
+  }, 120_000)
 })
