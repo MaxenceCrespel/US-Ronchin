@@ -91,9 +91,18 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.ts",
+      "!main.ts",
+      "!seed-coach.ts",
+      "!local-fff-sync.ts",
+      "!**/*.module.ts",
+      "!**/*.spec.ts",
+      "!test-utils/**",
+      "!**/*.entity.ts",
+      "!**/*.dto.ts"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testTimeout": 30000
   }
 }

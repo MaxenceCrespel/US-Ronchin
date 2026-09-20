@@ -193,6 +193,7 @@ export class MatchesController {
     return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
   }
 
+  @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Put(':id/convocation')
   async setConvocation(@Param('id') id: string, @Body() dto: SetConvocationDto) {
@@ -200,12 +201,14 @@ export class MatchesController {
     return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
   }
 
+  @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Get(':id/lineup')
   getLineup(@Param('id') id: string) {
     return this.matchesService.getLineup(id);
   }
 
+  @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Put(':id/lineup')
   setLineup(@Param('id') id: string, @Body() dto: SetLineupDto) {
