@@ -18,6 +18,7 @@ export default defineConfig({
     testTimeout: 15000,
     coverage: {
       provider: 'v8',
+      thresholds: { statements: 78, lines: 78, functions: 70, branches: 62 },
       include: ['src/**/*.{ts,tsx}'],
       // Trophy3D is three.js scene description — nothing to assert without a GPU; tour-demo-data is static sample data
       exclude: ['src/features/awards/Trophy3D.tsx', 'src/lib/tour-demo-data.ts', 'src/test/**', 'src/main.tsx', 'src/components/ui/**', 'src/**/*.d.ts', 'src/**/*.test.{ts,tsx}'],

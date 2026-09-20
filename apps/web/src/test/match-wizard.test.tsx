@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
-import { fakeApi, meta, type Role } from './fake-api'
+import { fakeApi, fixtures, meta, type Role } from './fake-api'
 
 const settle = (ms = 400) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 const byText = (re: RegExp) => screen.getAllByRole('button').find((b) => re.test(b.textContent ?? ''))!
@@ -189,5 +189,26 @@ describe('played match — player view', () => {
   it('the coach sees the summary too', async () => {
     await openPlayed('coach', 2)
     expect(document.body.textContent).toContain('Match nul')
+  })
+})
+
+describe('linking a guest to an account (coach, played match)', () => {
+  it('a player entered by name can be linked once he has an account', async () => {
+    const user = userEvent.setup()
+    const users = fixtures.roles.coach['/users'] as Record<string, unknown>[]
+    const newcomer = { ...users.find((u) => u.role === 'PLAYER'), id: 'newcomer-1', firstName: 'Nouveau', lastName: 'Compte', email: 'n@x.io', role: 'PLAYER', status: 'ACTIVE' }
+    renderApp(`/matches/${meta.matchIds[0]}`, 'coach')
+    fakeApi.on('GET', /^\/users$/, [...users, newcomer])
+    await settle(900)
+    await user.click(screen.getAllByText('Lier à un compte')[0])
+    const combo = screen.getAllByRole('combobox').at(-1)!
+    combo.focus()
+    await user.keyboard('{Enter}{ArrowDown}{Enter}')
+    await settle()
+    const confirm = screen.getAllByRole('button').find((b) => (b.textContent ?? '').trim() === 'OK' && !b.hasAttribute('disabled'))
+    expect(confirm).toBeDefined()
+    await user.click(confirm!)
+    await waitFor(() => expect(fakeApi.called('PATCH', /composition\/.+\/link$/)).toHaveLength(1))
+    expect(fakeApi.called('PATCH', /link$/)[0].data).toHaveProperty('userId')
   })
 })

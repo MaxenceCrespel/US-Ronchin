@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "cy:open": "cypress open",
     "cy:run": "cypress run",
-    "test": "vitest run"
+    "test": "vitest run --coverage --maxWorkers=2"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

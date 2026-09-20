@@ -110,3 +110,42 @@ describe('players page (admin)', () => {
     await screen.findByRole('dialog')
   })
 })
+
+describe('players page — approvals and filters', () => {
+  it('a pending sign-up shows "À valider" and can be approved', async () => {
+    const users = fixtures.roles.coach['/users'] as Record<string, unknown>[]
+    const pending = { ...users[0], id: 'pending-x', firstName: 'Attente', lastName: 'Zzz', status: 'PENDING', email: 'p@x.io', accountActivated: true }
+    const user = userEvent.setup()
+    renderApp('/players', 'coach')
+    fakeApi.on('GET', /^\/users$/, [...users, pending])
+    await settle(900)
+    expect(screen.getAllByText('À valider').length).toBeGreaterThan(0)
+    await user.click(screen.getAllByRole('button', { name: 'Approuver' })[0])
+    await waitFor(() => expect(fakeApi.called('PATCH', /pending-x\/approve$/)).toHaveLength(1))
+  })
+
+  it('filters the list by role', async () => {
+    const user = await openPlayers()
+    const before = screen.getAllByRole('row').length
+    const roleFilter = screen.getAllByRole('combobox').at(-1)!
+    roleFilter.focus()
+    await user.keyboard('{Enter}{ArrowDown}{Enter}')
+    await settle()
+    expect(screen.getAllByRole('row').length).not.toBe(before)
+  })
+
+  it('filters by licence status', async () => {
+    const user = await openPlayers()
+    const before = screen.getAllByRole('row').length
+    screen.getAllByRole('combobox')[0].focus()
+    await user.keyboard('{Enter}{ArrowDown}{Enter}')
+    await settle()
+    expect(screen.getAllByRole('row').length).not.toBe(before)
+  })
+
+  it('a player sees the squad but no management controls', async () => {
+    await openPlayers('player')
+    expect(screen.queryByRole('button', { name: 'Copier le lien' })).toBeNull()
+    expect(document.querySelector('svg.lucide-trash-2')).toBeNull()
+  })
+})
