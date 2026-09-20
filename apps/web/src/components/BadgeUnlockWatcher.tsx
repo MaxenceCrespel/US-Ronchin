@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/lib/auth-store'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
@@ -15,6 +15,7 @@ export function BadgeUnlockWatcher() {
   const user = useAuthStore((s) => s.user)
   const tourActive = useOnboardingUiStore((s) => s.active)
   const [queue, setQueue] = useState<BadgeStatus[]>([])
+  const queuedRef = useRef<Record<string, number>>({})
 
   const badgesQuery = useQuery({
     queryKey: ['badges', user?.id],
@@ -39,15 +40,32 @@ export function BadgeUnlockWatcher() {
       return
     }
 
+    // "Seen" is only recorded once the reveal has actually been played through (see
+    // handleDone) — recording it here, at detection time, meant a reveal that couldn't be
+    // tapped (or an app closed mid-reveal) still marked the badge as celebrated, so it
+    // never replayed. queuedRef keeps the 60s poll from re-queuing what's already waiting.
     const seen = loadSeenBadges(user.id)
-    const newlyEarned = earned.filter((b) => b.count > (seen[b.key] ?? 0))
+    const newlyEarned = earned.filter(
+      (b) => b.count > Math.max(seen[b.key] ?? 0, queuedRef.current[b.key] ?? 0),
+    )
     if (newlyEarned.length > 0) {
-      saveSeenBadges(user.id, Object.fromEntries(earned.map((b) => [b.key, b.count])))
+      for (const b of newlyEarned) queuedRef.current[b.key] = b.count
       setQueue((prev) => [...prev, ...newlyEarned])
     }
   }, [badgesQuery.data, user, tourActive])
 
   if (queue.length === 0) return null
 
-  return <BadgePackReveal queue={queue} onDone={() => setQueue([])} />
+  const handleDone = () => {
+    if (user) {
+      saveSeenBadges(user.id, {
+        ...loadSeenBadges(user.id),
+        ...Object.fromEntries(queue.map((b) => [b.key, b.count])),
+      })
+    }
+    queuedRef.current = {}
+    setQueue([])
+  }
+
+  return <BadgePackReveal queue={queue} onDone={handleDone} />
 }

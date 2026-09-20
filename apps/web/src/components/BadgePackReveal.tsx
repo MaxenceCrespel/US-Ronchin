@@ -162,8 +162,13 @@ export function BadgePackReveal({ queue, onDone }: { queue: BadgeStatus[]; onDon
   const revealed = phase === 'revealed'
 
   return (
+    // pointer-events-auto: this mounts at the app root, outside any Radix dialog, and a
+    // modal Dialog (e.g. the mandatory "Notes/Vote obligatoire" one on the match page)
+    // sets pointer-events: none on <body> for everything outside itself. A badge unlocked
+    // by that very submit lands here while the modal is still open/closing — without this
+    // override the "Touche pour révéler" tap is silently swallowed.
     <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 overflow-hidden bg-black px-4"
+      className="pointer-events-auto fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-6 overflow-hidden bg-black px-4"
       data-tier={cfg.tier}
     >
       {queue.length > 1 && (
