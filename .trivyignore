@@ -170,6 +170,15 @@ CVE-2026-74860
 # reached, same reachability argument as the rest of source 1.
 CVE-2026-82049
 
+# CVE-2026-8328 (Python ftplib: FTP connection redirection via ftpcp(), HIGH) — same four
+# packages (libpython3.11-minimal, libpython3.11-stdlib, python3.11, python3.11-minimal),
+# same installed version 3.11.2-6+deb12u8, Status: affected with no Fixed Version, same
+# source (Chrome's Recommends chain, not the bare base image) as CVE-2026-82049 immediately
+# above — just another newly-assigned CVE against that unchanged, unpatched build.
+# Unreachable on top of that: nothing here ever runs Python, let alone ftplib or an FTP
+# connection — the API is Node.js only and the scraper only speaks HTTPS to one fixed domain.
+CVE-2026-8328
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
