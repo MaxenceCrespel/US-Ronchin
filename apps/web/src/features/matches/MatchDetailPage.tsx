@@ -1042,7 +1042,10 @@ export function MatchDetailPage() {
   // Undefined while loading defaults to "applies" so the step never flickers past before
   // we actually know whether a defender played — same fail-safe as the other two gates.
   const defenseBossApplies = defenseBossQuery.data ? defenseBossQuery.data.hasEligibleTargets : true
-  const hasVotedDefenseBoss = defenseBossQuery.data?.myVoteCompositionId != null
+  // A blank vote (vote blanc) is a vote too — it stores no composition id, so checking only
+  // myVoteCompositionId left this step mandatory forever after voting blanc.
+  const hasVotedDefenseBoss =
+    defenseBossQuery.data?.myVoteCompositionId != null || (defenseBossQuery.data?.myVoteIsBlank ?? false)
   const defenseBossRevealed = defenseBossQuery.data?.revealed ?? false
   const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
   const needsRatings = !ratingsSubmitted

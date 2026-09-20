@@ -567,7 +567,9 @@ export function HomePage() {
         const needsMotmVote = !hasVotedMotm && !motmRevealed
 
         const defenseBossApplies = defenseBossQueries[i]?.data?.hasEligibleTargets ?? true
-        const hasVotedDefenseBoss = defenseBossQueries[i]?.data?.myVoteCompositionId != null
+        const hasVotedDefenseBoss =
+          defenseBossQueries[i]?.data?.myVoteCompositionId != null ||
+          (defenseBossQueries[i]?.data?.myVoteIsBlank ?? false)
         const defenseBossRevealed = defenseBossQueries[i]?.data?.revealed ?? false
         const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
 
