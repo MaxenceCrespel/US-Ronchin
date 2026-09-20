@@ -83,11 +83,11 @@ describe('schedulers (real stack)', () => {
     });
 
     it('nudges non-respondents once, within 3h of a training', async () => {
+      // pinned to 14:00 Paris so the test never straddles midnight, whenever CI happens to run
+      at('2026-09-21T12:00:00Z');
       const sessions = t.repo(TrainingSession);
-      const now = new Date();
-      const hhmm = (d: Date) => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d).replace(':', ':');
       const soon = await sessions.save(
-        sessions.create({ date: parisDateOnly(now), startTime: hhmm(new Date(now.getTime() + 90 * 60_000)), endTime: '23:59', location: 'x' }),
+        sessions.create({ date: '2026-09-21', startTime: '15:00', endTime: '16:30', location: 'x' }),
       );
       await t.repo(Attendance).save(t.repo(Attendance).create({ trainingSessionId: soon.id, userId: players[0].user.id, status: AttendanceStatus.PRESENT, respondedAt: new Date() }));
       const s = t.get<PushNotificationsScheduler>(PushNotificationsScheduler);
@@ -212,10 +212,9 @@ describe('schedulers (real stack)', () => {
     });
 
     it('generates teams by itself 1h30 before kickoff, once', async () => {
+      at('2026-09-22T12:00:00Z'); // 14:00 Paris
       const sessions = t.repo(TrainingSession);
-      const now = new Date();
-      const hhmm = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(now.getTime() + 60 * 60_000));
-      const session = await sessions.save(sessions.create({ date: parisDateOnly(now), startTime: hhmm, endTime: '23:59', location: 'x' }));
+      const session = await sessions.save(sessions.create({ date: '2026-09-22', startTime: '15:00', endTime: '16:30', location: 'x' }));
       const att = t.repo(Attendance);
       for (const p of players) await att.save(att.create({ trainingSessionId: session.id, userId: p.user.id, status: AttendanceStatus.PRESENT, respondedAt: new Date() }));
       const s = t.get<TeamBalancingScheduler>(TeamBalancingScheduler);
