@@ -19,7 +19,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/test/**', 'src/main.tsx', 'src/components/ui/**', 'src/**/*.d.ts', 'src/**/*.test.{ts,tsx}'],
+      // Trophy3D is three.js scene description — nothing to assert without a GPU; tour-demo-data is static sample data
+      exclude: ['src/features/awards/Trophy3D.tsx', 'src/lib/tour-demo-data.ts', 'src/test/**', 'src/main.tsx', 'src/components/ui/**', 'src/**/*.d.ts', 'src/**/*.test.{ts,tsx}'],
     },
   },
   server: {
