@@ -67,6 +67,8 @@ import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevel
 import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
+import { DEFAULT_FORMATION, FORMATIONS } from './formations'
+import { MatchConvocationCard } from './MatchConvocationCard'
 import {
   addEvent,
   deleteEvent,
@@ -77,6 +79,7 @@ import {
   fetchDefenseBoss,
   fetchMatchAttendance,
   fetchMotm,
+  fetchMatchLineup,
   fetchMyRatings,
   fetchRatingsSubmitted,
   fetchRatingsSummary,
@@ -89,24 +92,6 @@ import {
   voteDefenseBoss,
   voteMotm,
 } from './api'
-
-interface FormationRow {
-  ratio: number
-  y: number
-}
-
-const FORMATIONS: Record<string, { label: string; rows: FormationRow[] }> = {
-  '4-4-2': { label: '4-4-2', rows: [{ ratio: 4, y: 70 }, { ratio: 4, y: 45 }, { ratio: 2, y: 18 }] },
-  '4-3-3': { label: '4-3-3', rows: [{ ratio: 4, y: 70 }, { ratio: 3, y: 45 }, { ratio: 3, y: 18 }] },
-  '3-5-2': { label: '3-5-2', rows: [{ ratio: 3, y: 72 }, { ratio: 5, y: 45 }, { ratio: 2, y: 18 }] },
-  '3-4-3': { label: '3-4-3', rows: [{ ratio: 3, y: 72 }, { ratio: 4, y: 45 }, { ratio: 3, y: 18 }] },
-  '5-3-2': { label: '5-3-2', rows: [{ ratio: 5, y: 75 }, { ratio: 3, y: 45 }, { ratio: 2, y: 18 }] },
-  '4-2-3-1': {
-    label: '4-2-3-1',
-    rows: [{ ratio: 4, y: 72 }, { ratio: 2, y: 55 }, { ratio: 3, y: 35 }, { ratio: 1, y: 15 }],
-  },
-}
-const DEFAULT_FORMATION = '4-4-2'
 
 /** Largest-remainder split — keeps sensible row sizes even when the squad isn't exactly 11. */
 function shuffle<T>(arr: T[]): T[] {
@@ -869,6 +854,30 @@ export function MatchDetailPage() {
     queryFn: () => fetchMatchAttendance(matchId),
   })
 
+  const lineupQuery = useQuery({
+    queryKey: ['match-lineup', matchId],
+    queryFn: () => fetchMatchLineup(matchId),
+    enabled: isCoach,
+  })
+
+  // No composition saved yet: start from the starting XI the coach validated before the
+  // match instead of an empty sheet — they then only correct what actually changed.
+  const lineupPrefilledRef = useRef(false)
+  useEffect(() => {
+    const lineup = lineupQuery.data
+    if (lineupPrefilledRef.current || !lineup?.slots?.length || !lineup.validatedAt) return
+    if (compositionQuery.data === undefined || compositionQuery.data.length > 0) return
+    lineupPrefilledRef.current = true
+    const map: Record<string, { played: boolean; starter: boolean; spectator: boolean }> = {}
+    for (const a of attendanceQuery.data ?? []) {
+      if (a.called) map[a.userId] = { played: true, starter: lineup.slots.includes(a.userId), spectator: false }
+    }
+    setSelectedPlayers(map)
+    setSlotOrder(lineup.slots)
+    if (lineup.formation && FORMATIONS[lineup.formation]) setFormation(lineup.formation)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineupQuery.data, compositionQuery.data, attendanceQuery.data])
+
   const attendanceMutation = useMutation({
     mutationFn: (vars: { status: AttendanceStatus; guests: { firstName: string; lastName?: string }[] }) =>
       setMyMatchAttendance(matchId, vars.status, vars.guests),
@@ -1231,6 +1240,22 @@ export function MatchDetailPage() {
                 </Button>
               ))}
             </div>
+            {match.convocationAnnouncedAt && myMatchAttendance?.status === 'PRESENT' && (
+              <div
+                className={cn(
+                  'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium',
+                  myMatchAttendance.called
+                    ? 'border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                    : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {myMatchAttendance.called ? (
+                  <>Tu es convoqué pour ce match — sois à l'heure !</>
+                ) : (
+                  <>Tu n'es pas retenu pour ce match cette fois.</>
+                )}
+              </div>
+            )}
             {matchTimeHasPassed && (
               <p className="text-muted-foreground text-xs">
                 Le match a commencé — la présence ne peut plus être modifiée.
@@ -2686,6 +2711,7 @@ export function MatchDetailPage() {
         <>
           {scoreCard}
           {presenceCard}
+          {isCoach && match.status !== 'PLAYED' && <MatchConvocationCard match={match} />}
         </>
       )}
     </div>

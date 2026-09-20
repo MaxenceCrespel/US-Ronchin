@@ -141,6 +141,8 @@ export interface MatchAttendance {
   status: AttendanceStatus
   guestCount: number
   guests: MatchAttendanceGuest[]
+  /** Set by the coach's convocation — only meaningful once Match.convocationAnnouncedAt is set. */
+  called: boolean
   respondedAt: string
 }
 
@@ -168,6 +170,8 @@ export interface Match {
    * wizard — voting (MOTM, patron de la défense, notes) only unlocks once this is set,
    * not just when status flips to PLAYED (that happens earlier, at score entry alone). */
   resultConfirmedAt: string | null
+  /** Set when the coach first announces the convocation. */
+  convocationAnnouncedAt: string | null
   createdBy: string
 }
 
@@ -570,4 +574,11 @@ export interface TrainingRankingEntry {
   wins: number
   draws: number
   losses: number
+}
+
+/** The coach's pre-match starting XI — `slots` are user ids in formation order (index 0 = goalkeeper). */
+export interface MatchLineup {
+  formation: string | null
+  slots: string[] | null
+  validatedAt: string | null
 }

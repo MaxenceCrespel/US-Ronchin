@@ -18,6 +18,7 @@ import { UserRole } from '../users/entities/user.entity';
 import { MatchesService } from './matches.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
+import { SetConvocationDto, SetLineupDto } from './dto/set-convocation.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
 import { LinkCompositionGuestDto } from './dto/link-composition-guest.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
@@ -190,6 +191,25 @@ export class MatchesController {
   async getAttendance(@Param('id') id: string) {
     const attendances = await this.matchesService.getAttendance(id);
     return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
+  }
+
+  @Roles(UserRole.COACH)
+  @Put(':id/convocation')
+  async setConvocation(@Param('id') id: string, @Body() dto: SetConvocationDto) {
+    const attendances = await this.matchesService.setConvocation(id, dto);
+    return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
+  }
+
+  @Roles(UserRole.COACH)
+  @Get(':id/lineup')
+  getLineup(@Param('id') id: string) {
+    return this.matchesService.getLineup(id);
+  }
+
+  @Roles(UserRole.COACH)
+  @Put(':id/lineup')
+  setLineup(@Param('id') id: string, @Body() dto: SetLineupDto) {
+    return this.matchesService.setLineup(id, dto);
   }
 
   @Put(':id/attendance')

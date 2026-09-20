@@ -4,6 +4,7 @@ import type {
   GoalType,
   Match,
   MatchAttendance,
+  MatchLineup,
   MatchComposition,
   MatchEvent,
   MatchEventType,
@@ -233,4 +234,27 @@ export async function fetchDefenseBoss(matchId: string): Promise<DefenseBossResp
 /** Omit votedForId entirely for a "vote blanc" (deliberate abstention). */
 export async function voteDefenseBoss(matchId: string, votedForId?: string): Promise<void> {
   await apiClient.put(`/matches/${matchId}/defense-boss`, { votedForId })
+}
+
+export async function setMatchConvocation(
+  matchId: string,
+  calledUserIds: string[],
+): Promise<MatchAttendance[]> {
+  const { data } = await apiClient.put<MatchAttendance[]>(`/matches/${matchId}/convocation`, {
+    calledUserIds,
+  })
+  return data
+}
+
+export async function fetchMatchLineup(matchId: string): Promise<MatchLineup> {
+  const { data } = await apiClient.get<MatchLineup>(`/matches/${matchId}/lineup`)
+  return data
+}
+
+export async function saveMatchLineup(
+  matchId: string,
+  lineup: { formation: string; slots: string[]; validate: boolean },
+): Promise<MatchLineup> {
+  const { data } = await apiClient.put<MatchLineup>(`/matches/${matchId}/lineup`, lineup)
+  return data
 }

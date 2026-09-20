@@ -92,6 +92,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
       scoreAway: 1,
       status: 'PLAYED',
       resultConfirmedAt: null,
+      convocationAnnouncedAt: null,
       createdBy: me.id,
     },
     {
@@ -109,6 +110,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
       scoreAway: 1,
       status: 'PLAYED',
       resultConfirmedAt: null,
+      convocationAnnouncedAt: null,
       createdBy: me.id,
     },
     {
@@ -126,6 +128,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
       scoreAway: 0,
       status: 'PLAYED',
       resultConfirmedAt: null,
+      convocationAnnouncedAt: null,
       createdBy: me.id,
     },
     {
@@ -143,6 +146,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
       scoreAway: null,
       status: 'SCHEDULED',
       resultConfirmedAt: null,
+      convocationAnnouncedAt: null,
       createdBy: me.id,
     },
   ]

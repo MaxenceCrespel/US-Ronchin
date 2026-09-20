@@ -40,6 +40,11 @@ export class MatchAttendance {
   @Column({ name: 'guest_count', type: 'int', default: 0 })
   guestCount: number;
 
+  /** Set by the coach's convocation (see MatchesService.setConvocation) — only ever true for a
+   * player who answered PRESENT. Meaningless until Match.convocationAnnouncedAt is set. */
+  @Column({ default: false })
+  called: boolean;
+
   @OneToMany(() => MatchAttendanceGuest, (guest) => guest.matchAttendance)
   guests: MatchAttendanceGuest[];
 

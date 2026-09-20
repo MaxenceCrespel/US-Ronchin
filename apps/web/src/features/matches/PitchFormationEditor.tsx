@@ -6,6 +6,8 @@ export interface FormationPlayer {
   firstName: string
   lastName: string
   shirtNumber: number | null
+  /** Shown in the bubble instead of the shirt number/initials (e.g. a position code). */
+  label?: string
   x: number
   y: number
 }
@@ -35,10 +37,14 @@ export function PitchFormationEditor({
   players,
   onSwap,
   readOnly,
+  pickMode,
 }: {
   players: FormationPlayer[]
   onSwap: (draggedUserId: string, targetUserId: string) => void
   readOnly?: boolean
+  /** When set, tapping a player picks him (for a substitution) instead of starting a drag;
+   * players outside `fitIds` are dimmed, the others highlighted. */
+  pickMode?: { onPick: (userId: string) => void; fitIds: Set<string> }
 }) {
   const [drag, setDrag] = useState<{ userId: string; x: number; y: number } | null>(null)
 
@@ -64,7 +70,7 @@ export function PitchFormationEditor({
 
   return (
     <div
-      className="relative mx-auto aspect-[3/4] w-full max-w-sm touch-none overflow-hidden rounded-xl border-2 border-white/50 bg-gradient-to-b from-emerald-600 to-emerald-700 select-none"
+      className="relative mx-auto aspect-[3/4] w-full max-w-sm touch-pan-y overflow-hidden rounded-xl border-2 border-white/50 bg-gradient-to-b from-emerald-600 to-emerald-700 select-none"
       onPointerMove={updateFromPointer}
       onPointerUp={endDrag}
       onPointerCancel={() => setDrag(null)}
@@ -78,6 +84,7 @@ export function PitchFormationEditor({
         const isDragging = drag?.userId === p.userId
         const pos = isDragging ? drag : p
         const band = bandForY(p.y)
+        const fits = pickMode?.fitIds.has(p.userId) ?? false
         return (
           <div
             key={p.userId}
@@ -85,6 +92,7 @@ export function PitchFormationEditor({
             className={cn(
               'absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-0.5',
               isDragging ? 'z-10 transition-none' : 'transition-[left,top] duration-200',
+              pickMode && !fits && 'opacity-30',
             )}
           >
             <button
@@ -92,18 +100,24 @@ export function PitchFormationEditor({
               disabled={readOnly}
               onPointerDown={(e) => {
                 if (readOnly) return
+                if (pickMode) {
+                  pickMode.onPick(p.userId)
+                  return
+                }
                 e.currentTarget.setPointerCapture(e.pointerId)
                 setDrag({ userId: p.userId, x: p.x, y: p.y })
               }}
               title={`${p.firstName} ${p.lastName}`}
               className={cn(
-                'flex size-9 items-center justify-center rounded-full border-2 text-xs font-bold text-white shadow-md',
-                !readOnly && 'cursor-grab active:cursor-grabbing',
+                'flex size-9 touch-none items-center justify-center rounded-full border-2 text-xs font-bold text-white shadow-md',
+                !readOnly && !pickMode && 'cursor-grab active:cursor-grabbing',
+                pickMode && 'cursor-pointer',
                 isDragging && 'scale-110',
+                pickMode && fits && 'animate-pulse ring-4 ring-white',
                 BAND_COLOR[band],
               )}
             >
-              {p.shirtNumber ?? `${p.firstName[0]}${p.lastName[0]}`}
+              {p.label ?? p.shirtNumber ?? `${p.firstName[0]}${p.lastName[0]}`}
             </button>
             <span className="pointer-events-none max-w-16 truncate rounded bg-black/40 px-1 text-[9px] font-medium text-white">
               {p.firstName}

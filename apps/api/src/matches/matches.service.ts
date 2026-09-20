@@ -15,6 +15,7 @@ import { PlayerPosition } from '../users/entities/user.entity';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
+import { SetConvocationDto, SetLineupDto } from './dto/set-convocation.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { UpdateMatchEventDto } from './dto/update-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
@@ -498,6 +499,107 @@ export class MatchesService {
       where: { matchId },
       relations: { user: true, guests: true },
     });
+  }
+
+  /** Coach announces (or updates) who's called among the players who answered PRESENT. Only
+   * players whose status actually changes get a push: on the first announcement everyone
+   * present is told (called / not retained), afterwards only the added and withdrawn ones —
+   * and a player pulled from the XI drops out of the saved lineup, which then needs a new
+   * validation. */
+  async setConvocation(matchId: string, dto: SetConvocationDto): Promise<MatchAttendance[]> {
+    const match = await this.findById(matchId);
+    if (match.status === MatchStatus.PLAYED) {
+      throw new BadRequestException('Le match est déjà joué — la convocation est figée.');
+    }
+    const attendances = await this.attendancesRepository.find({ where: { matchId } });
+    const present = attendances.filter((a) => a.status === AttendanceStatus.PRESENT);
+    const presentIds = new Set(present.map((a) => a.userId));
+    const nextCalled = new Set(dto.calledUserIds);
+    for (const id of nextCalled) {
+      if (!presentIds.has(id)) {
+        throw new BadRequestException('Seuls les joueurs présents peuvent être convoqués.');
+      }
+    }
+
+    const firstAnnouncement = match.convocationAnnouncedAt === null;
+    const added: string[] = [];
+    const removed: string[] = [];
+    const notRetained: string[] = [];
+    for (const a of attendances) {
+      const willBeCalled = nextCalled.has(a.userId);
+      if (willBeCalled && !a.called) added.push(a.userId);
+      if (!willBeCalled && a.called && a.status === AttendanceStatus.PRESENT) removed.push(a.userId);
+      if (!willBeCalled && firstAnnouncement && a.status === AttendanceStatus.PRESENT) {
+        notRetained.push(a.userId);
+      }
+      if (a.called !== willBeCalled) {
+        a.called = willBeCalled;
+        await this.attendancesRepository.save(a);
+      }
+    }
+
+    match.convocationAnnouncedAt = match.convocationAnnouncedAt ?? new Date();
+    const lineup = await this.getLineup(matchId);
+    if (lineup.slots && lineup.slots.some((id) => !nextCalled.has(id))) {
+      match.lineupSlots = lineup.slots.filter((id) => nextCalled.has(id));
+      match.lineupValidatedAt = null;
+    }
+    await this.matchesRepository.save(match);
+
+    const url = `/matches/${matchId}`;
+    await this.pushNotificationsService.sendToUsers(added, {
+      title: 'Tu es convoqué !',
+      body: `Tu es convoqué pour le match contre ${match.opponent}. Sois à l'heure !`,
+      url,
+    });
+    await this.pushNotificationsService.sendToUsers(notRetained, {
+      title: 'Convocation',
+      body: `Tu n'es pas retenu pour le match contre ${match.opponent} cette fois.`,
+      url,
+    });
+    await this.pushNotificationsService.sendToUsers(removed, {
+      title: 'Convocation annulée',
+      body: `Le coach a mis à jour la convocation pour le match contre ${match.opponent} : tu n'es plus convoqué.`,
+      url,
+    });
+    return this.getAttendance(matchId);
+  }
+
+  async getLineup(
+    matchId: string,
+  ): Promise<{ formation: string | null; slots: string[] | null; validatedAt: Date | null }> {
+    const match = await this.matchesRepository.findOne({
+      where: { id: matchId },
+      select: { id: true, lineupFormation: true, lineupSlots: true, lineupValidatedAt: true },
+    });
+    if (!match) throw new NotFoundException('Match introuvable');
+    return {
+      formation: match.lineupFormation,
+      slots: match.lineupSlots,
+      validatedAt: match.lineupValidatedAt,
+    };
+  }
+
+  /** Saves the coach's starting XI (draft, or validated with `validate`). Slots must all be
+   * called players — the composition step at the end of the match starts from this. */
+  async setLineup(matchId: string, dto: SetLineupDto) {
+    const match = await this.findById(matchId);
+    if (match.convocationAnnouncedAt === null) {
+      throw new BadRequestException("Annonce d'abord la convocation.");
+    }
+    if (dto.slots.length > 11) {
+      throw new BadRequestException('Une composition compte 11 joueurs au maximum.');
+    }
+    const called = await this.attendancesRepository.find({ where: { matchId, called: true } });
+    const calledIds = new Set(called.map((a) => a.userId));
+    if (dto.slots.some((id) => !calledIds.has(id))) {
+      throw new BadRequestException('Seuls les joueurs convoqués peuvent être titulaires.');
+    }
+    match.lineupFormation = dto.formation;
+    match.lineupSlots = dto.slots;
+    match.lineupValidatedAt = dto.validate ? new Date() : null;
+    await this.matchesRepository.save(match);
+    return this.getLineup(matchId);
   }
 
   async setMyAttendance(

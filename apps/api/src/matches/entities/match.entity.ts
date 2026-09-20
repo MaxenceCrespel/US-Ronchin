@@ -76,6 +76,23 @@ export class Match {
   @Column({ name: 'result_confirmed_at', type: 'timestamptz', nullable: true })
   resultConfirmedAt: Date | null;
 
+  /** Set the first time the coach announces the convocation — from then on every present
+   * player can see whether they're called (MatchAttendance.called). */
+  @Column({ name: 'convocation_announced_at', type: 'timestamptz', nullable: true })
+  convocationAnnouncedAt: Date | null;
+
+  /** The coach's pre-match starting XI. Coach-only working data (select: false keeps it out of
+   * every public match payload) — read through MatchesService.getLineup. `lineupSlots` is
+   * the ordered user ids, index 0 = goalkeeper, same model as the composition step's slotOrder. */
+  @Column({ name: 'lineup_formation', type: 'varchar', nullable: true, select: false })
+  lineupFormation: string | null;
+
+  @Column({ name: 'lineup_slots', type: 'jsonb', nullable: true, select: false })
+  lineupSlots: string[] | null;
+
+  @Column({ name: 'lineup_validated_at', type: 'timestamptz', nullable: true, select: false })
+  lineupValidatedAt: Date | null;
+
   @Column({ name: 'created_by', type: 'uuid', nullable: true })
   createdBy: string | null;
 
