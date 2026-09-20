@@ -1555,11 +1555,11 @@ export function SessionCard({
     },
   })
 
-  // Attendance is locked from 1h30 before kickoff — the same moment teams get
-  // auto-generated. Distinct from isPast (the "Terminé" badge below): that one only cares
-  // whether the session has actually started, not the earlier lock threshold.
+  // Presence can be changed right up until the session starts — teams generated earlier just
+  // follow (see AttendancesService.syncTeamMembership: placed on a team if there's room,
+  // waitlisted if not). Same instant as isPast; kept as its own name for the lock's meaning.
   const isPast = new Date(`${date}T${startTime}`).getTime() <= Date.now()
-  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 90 * 60_000 <= Date.now()
+  const hasStarted = isPast
   // "Gérer la séance" (pointage réel, équipe jouée, score) only makes sense once training
   // is actually over — same moment PushNotificationsScheduler.handleMissingAttendanceReminders
   // nudges the coach/admin if nobody's pointed yet. Before that, GenerateTeamsDialog /
@@ -1725,7 +1725,7 @@ export function SessionCard({
             />
             {hasStarted && (
               <p className="text-muted-foreground text-xs">
-                Les équipes ont été générées — la présence ne peut plus être modifiée.
+                L'entraînement a commencé — la présence ne peut plus être modifiée.
               </p>
             )}
             {mutation.isError && (

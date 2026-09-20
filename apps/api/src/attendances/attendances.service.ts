@@ -83,17 +83,17 @@ export class AttendancesService {
       where: { trainingSessionId, userId },
     });
 
-    // Locked from 1h30 before kickoff — the same moment the teams get auto-generated
-    // from declared presence, a late status flip would desync the teams from who's
-    // actually shown up. A last-minute +1 doesn't have that problem the same way — it
-    // doesn't change who the coach thinks is coming, just adds a body — so it's still
-    // allowed past the lock as long as the status itself isn't changing; the coach can
-    // regenerate teams afterwards to fold the guest in.
-    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime() - 90 * 60_000;
+    // Locked once the session starts. Teams are auto-generated earlier (1h30 before), but a
+    // late declaration still has to work: a player turning PRESENT after that is placed on a
+    // team (or waitlisted if the cap is full) by syncTeamMembership below, and turning
+    // ABSENT/INCERTAIN takes them back off it — so nothing here needs the status frozen
+    // ahead of kickoff. A +1 is still allowed past the lock as long as the status itself
+    // isn't changing.
+    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime();
     const statusChanged = !attendance || attendance.status !== status;
     if (!bypassLock && Date.now() >= lockAt && statusChanged) {
       throw new BadRequestException(
-        "Les équipes ont été générées, tu ne peux plus modifier ta présence",
+        "L'entraînement a commencé, tu ne peux plus modifier ta présence",
       );
     }
 
@@ -210,24 +210,31 @@ export class AttendancesService {
         )
       : [];
 
-    await this.autoAssignToTeamIfNeeded(trainingSessionId, userId, attendance);
+    await this.syncTeamMembership(trainingSessionId, userId, attendance);
 
     return attendance;
   }
 
-  /** Whenever someone ends up effectively present-and-confirmed — a fresh declaration, a
-   * coach's force-present correction (setForPlayer, bypassing the lock), or a waitlist
-   * promotion freeing up their slot — and teams already exist for the session, place them
-   * on whichever team is currently smallest. Without this, a player becoming present after
-   * the 1h30-before-kickoff auto-generation had no way onto a team at all short of a coach
-   * manually adding them one by one in "Modifier les équipes". No-op if there are no teams
-   * yet (nothing to place them on to), or they're already assigned. */
-  private async autoAssignToTeamIfNeeded(
+  /** Keeps the team split in step with a declared status once teams exist for the session.
+   * Effectively present — a confirmed PRESENT (not waitlisted), or the coach's pointage réel
+   * when there is one, exactly as generateTeams reads it — and not yet on a team: placed on
+   * whichever team is currently smallest. No longer effectively present (turned ABSENT /
+   * INCERTAIN, or bumped to the waitlist): their slot is taken off the team, which the
+   * waitlist promotion that follows can then hand to the next person. No-op when no teams
+   * exist yet. */
+  private async syncTeamMembership(
     trainingSessionId: string,
     userId: string,
-    attendance: Pick<Attendance, 'status' | 'confirmed'>,
+    attendance: Pick<Attendance, 'status' | 'confirmed' | 'actualStatus'>,
   ): Promise<void> {
-    if (attendance.status !== AttendanceStatus.PRESENT || !attendance.confirmed) return;
+    const effectivelyPresent =
+      attendance.actualStatus != null
+        ? attendance.actualStatus === AttendanceStatus.PRESENT
+        : attendance.status === AttendanceStatus.PRESENT && attendance.confirmed;
+    if (!effectivelyPresent) {
+      await this.assignmentsRepository.delete({ trainingSessionId, userId });
+      return;
+    }
 
     const existingAssignments = await this.assignmentsRepository.find({
       where: { trainingSessionId },
@@ -319,7 +326,7 @@ export class AttendancesService {
             newConfirmedGuestCount: nextPlayer.confirmedGuestCount,
           }),
         );
-        await this.autoAssignToTeamIfNeeded(trainingSessionId, nextPlayer.userId, nextPlayer);
+        await this.syncTeamMembership(trainingSessionId, nextPlayer.userId, nextPlayer);
         continue;
       }
 
@@ -389,6 +396,8 @@ export class AttendancesService {
     evicted.confirmed = false;
     evicted.confirmedGuestCount = 0;
     await this.attendancesRepository.save(evicted);
+    // Now waitlisted: off their team too, or they'd keep a place the arriving player took.
+    await this.syncTeamMembership(trainingSessionId, evicted.userId, evicted);
 
     await this.statusChangesRepository.save(
       this.statusChangesRepository.create({

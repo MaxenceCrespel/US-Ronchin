@@ -88,9 +88,9 @@ function UpcomingSessionCard({
     },
   })
 
-  // Same 30-min-before-kickoff lock as the dedicated Entraînements page — teams get
-  // auto-generated at that point, so a later change would desync them from reality.
-  const hasStarted = new Date(`${date}T${startTime}`).getTime() - 30 * 60_000 <= Date.now()
+  // Same lock as the dedicated Entraînements page and the API: presence can change until the
+  // session starts (teams generated earlier follow along, see syncTeamMembership).
+  const hasStarted = new Date(`${date}T${startTime}`).getTime() <= Date.now()
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
   const [guests, setGuests] = useState<GuestNameInput[]>([])
@@ -157,7 +157,7 @@ function UpcomingSessionCard({
           />
           {hasStarted && (
             <p className="text-muted-foreground text-xs">
-              Les équipes ont été générées — la présence ne peut plus être modifiée.
+              L'entraînement a commencé — la présence ne peut plus être modifiée.
             </p>
           )}
           {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
