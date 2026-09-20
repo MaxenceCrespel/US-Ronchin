@@ -22,6 +22,7 @@ require('dotenv').config({ quiet: true });
 
 process.env.JWT_ACCESS_SECRET ??= 'test-access-secret-not-used-anywhere-else-1234567890';
 process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret-not-used-anywhere-else-1234567890';
+process.env.FFF_SYNC_API_KEY ??= 'test-sync-api-key';
 process.env.DB_HOST ??= 'localhost';
 process.env.DB_PORT ??= '5432';
 process.env.DB_USER ??= 'ronchin';
@@ -56,7 +57,9 @@ function adminClient(database: string): Client {
  * dropped in close()), so specs can run in parallel workers without touching each other or
  * the dev/prod data. Same global prefix + ValidationPipe as main.ts, so requests behave
  * exactly like the real API. */
-export async function createTestApp(): Promise<TestApp> {
+export async function createTestApp(
+  overrides: { provide: unknown; useValue: unknown }[] = [],
+): Promise<TestApp> {
   const baseDb = process.env.DB_NAME ?? 'ronchin_us_app';
   const testDb = `ronchin_test_${process.pid}_${randomBytes(4).toString('hex')}`;
 
@@ -66,7 +69,9 @@ export async function createTestApp(): Promise<TestApp> {
   await admin.end();
   process.env.DB_NAME = testDb;
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+  for (const o of overrides) builder = builder.overrideProvider(o.provide as never).useValue(o.useValue);
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
