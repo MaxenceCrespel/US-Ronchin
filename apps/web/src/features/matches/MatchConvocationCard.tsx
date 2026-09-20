@@ -563,9 +563,9 @@ function autoFill(formation: string, kept: string[], called: MatchAttendance[]):
   }
   for (let i = kept.length; i < wanted.length && result.length < target; i++) {
     const code = wanted[i]
-    take((a) => positionCodes(a.user.positions).includes(code)) ||
-      take((a) => bandForPosition(a.user.positions?.[0]) === bandOfCode(code)) ||
-      take(() => true)
+    if (take((a) => positionCodes(a.user.positions).includes(code))) continue
+    if (take((a) => bandForPosition(a.user.positions?.[0]) === bandOfCode(code))) continue
+    take(() => true)
   }
   return result
 }

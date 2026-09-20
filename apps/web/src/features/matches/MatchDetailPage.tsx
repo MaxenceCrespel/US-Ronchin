@@ -64,11 +64,11 @@ import { isRosterPlayer } from '@/lib/roster'
 import { fetchPlayers } from '@/features/players/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
-import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import { DEFAULT_FORMATION, FORMATIONS } from './formations'
 import { MatchConvocationCard } from './MatchConvocationCard'
+import { FinalScore, ScoreEditor } from './MatchScore'
 import {
   addEvent,
   deleteEvent,
@@ -507,20 +507,20 @@ export function MatchDetailPage() {
     }
   }, [matchQuery.data, compositionQuery.data])
 
-  const [scoreHome, setScoreHome] = useState('')
-  const [scoreAway, setScoreAway] = useState('')
+  const [scoreHome, setScoreHome] = useState(0)
+  const [scoreAway, setScoreAway] = useState(0)
   useEffect(() => {
     if (matchQuery.data) {
-      setScoreHome(matchQuery.data.scoreHome?.toString() ?? '')
-      setScoreAway(matchQuery.data.scoreAway?.toString() ?? '')
+      setScoreHome(matchQuery.data.scoreHome ?? 0)
+      setScoreAway(matchQuery.data.scoreAway ?? 0)
     }
   }, [matchQuery.data])
 
   const scoreMutation = useMutation({
     mutationFn: () =>
       updateMatch(matchId, {
-        scoreHome: scoreHome ? Number(scoreHome) : undefined,
-        scoreAway: scoreAway ? Number(scoreAway) : undefined,
+        scoreHome,
+        scoreAway,
         status: 'PLAYED',
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match', matchId] }),
@@ -1190,30 +1190,26 @@ export function MatchDetailPage() {
             </form>
           </CardContent>
         )}
-        <CardContent className="flex items-center gap-3">
-          <Input
-            className="w-16"
-            type="number"
-            min={0}
-            value={scoreHome}
-            onChange={(e) => setScoreHome(e.target.value)}
-            disabled={!isCoach || !matchTimeHasPassed}
-          />
-          <span>-</span>
-          <Input
-            className="w-16"
-            type="number"
-            min={0}
-            value={scoreAway}
-            onChange={(e) => setScoreAway(e.target.value)}
-            disabled={!isCoach || !matchTimeHasPassed}
-          />
-          {isCoach && matchTimeHasPassed && (
-            <Button size="sm" onClick={() => scoreMutation.mutate()} disabled={scoreMutation.isPending}>
-              Enregistrer le score
-            </Button>
-          )}
-        </CardContent>
+        {isCoach && matchTimeHasPassed && (
+          <CardContent>
+            <ScoreEditor
+              match={match}
+              scoreHome={scoreHome}
+              scoreAway={scoreAway}
+              onChange={(next) => {
+                setScoreHome(next.scoreHome)
+                setScoreAway(next.scoreAway)
+              }}
+              onSave={() => scoreMutation.mutate()}
+              saving={scoreMutation.isPending}
+              saved={
+                match.status === 'PLAYED' &&
+                match.scoreHome === scoreHome &&
+                match.scoreAway === scoreAway
+              }
+            />
+          </CardContent>
+        )}
       </Card>
   )
 
@@ -2361,10 +2357,7 @@ export function MatchDetailPage() {
         <MatchMetaLines match={match} />
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <p className="flex items-center gap-3 text-3xl font-bold">
-          {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
-          <MatchResultBadge match={match} />
-        </p>
+        <FinalScore match={match} />
 
         {motmWinners.length > 0 ? (
           <div className="flex flex-col gap-2.5">
