@@ -64,6 +64,9 @@ jobs:
           name: code-coverage-reports
           path: apps/api/coverage/lcov-report/
 
+      - name: Tests unitaires (frontend)
+        run: npm test --workspace=web
+
       - name: Lint et build du frontend
         run: |
           npm run lint --workspace=web
