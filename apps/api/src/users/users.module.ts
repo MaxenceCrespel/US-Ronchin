@@ -5,6 +5,7 @@ import { PlayerSeparationRule } from './entities/player-separation-rule.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { UsersService } from './users.service';
+import { UserAvatarController } from './user-avatar.controller';
 import { UsersController } from './users.controller';
 import { PlayerSeparationRulesService } from './player-separation-rules.service';
 import { PlayerSeparationRulesController } from './player-separation-rules.controller';
@@ -15,7 +16,7 @@ import { PushNotificationsModule } from '../push-notifications/push-notification
     TypeOrmModule.forFeature([User, PlayerSeparationRule, Attendance, MatchComposition]),
     PushNotificationsModule,
   ],
-  controllers: [UsersController, PlayerSeparationRulesController],
+  controllers: [UsersController, UserAvatarController, PlayerSeparationRulesController],
   providers: [UsersService, PlayerSeparationRulesService],
   exports: [UsersService],
 })

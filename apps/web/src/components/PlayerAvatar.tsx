@@ -6,7 +6,7 @@ function initials(firstName?: string, lastName?: string) {
 }
 
 const SIZE_CLASSES = {
-  sm: 'size-7 text-[10px]',
+  sm: 'size-7 text-xs',
   md: 'size-9 text-sm',
   lg: 'size-14 text-lg',
   xl: 'size-24 text-2xl',

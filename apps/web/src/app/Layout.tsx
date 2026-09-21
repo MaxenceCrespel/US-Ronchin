@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -11,13 +11,18 @@ import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
 import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
-import { AwardsCeremonyWatcher } from '@/features/awards/AwardsCeremonyWatcher'
-import { MonthlyTrophyUnlockWatcher } from '@/features/awards/MonthlyTrophyUnlockWatcher'
-import { MatchTrophyUnlockWatcher } from '@/features/matches/MatchTrophyUnlockWatcher'
-import { TrophySnapshotHost } from '@/features/awards/TrophySnapshot'
-import { OnboardingTour } from '@/components/OnboardingTour'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
+import { OfflineBanner } from '@/components/OfflineBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
+import { SkipLink, SrHeading } from '@/lib/route-meta'
+
+// Full-screen celebrations and the tour are rarely on screen — keep their (heavy) code out of
+// the first load.
+const AwardsCeremonyWatcher = lazy(() => import('@/features/awards/AwardsCeremonyWatcher').then((m) => ({ default: m.AwardsCeremonyWatcher })))
+const MonthlyTrophyUnlockWatcher = lazy(() => import('@/features/awards/MonthlyTrophyUnlockWatcher').then((m) => ({ default: m.MonthlyTrophyUnlockWatcher })))
+const MatchTrophyUnlockWatcher = lazy(() => import('@/features/matches/MatchTrophyUnlockWatcher').then((m) => ({ default: m.MatchTrophyUnlockWatcher })))
+const TrophySnapshotHost = lazy(() => import('@/features/awards/TrophySnapshot').then((m) => ({ default: m.TrophySnapshotHost })))
+const OnboardingTour = lazy(() => import('@/components/OnboardingTour').then((m) => ({ default: m.OnboardingTour })))
 
 const navItems: {
   to: string
@@ -57,13 +62,16 @@ export function Layout() {
 
   return (
     <div className="flex min-h-svh">
+      <SkipLink />
       <BadgeUnlockWatcher />
       <MandatoryVotePopup />
-      <AwardsCeremonyWatcher />
-      <MonthlyTrophyUnlockWatcher />
-      <MatchTrophyUnlockWatcher />
-      <TrophySnapshotHost />
-      <OnboardingTour />
+      <Suspense fallback={null}>
+        <AwardsCeremonyWatcher />
+        <MonthlyTrophyUnlockWatcher />
+        <MatchTrophyUnlockWatcher />
+        <TrophySnapshotHost />
+        <OnboardingTour />
+      </Suspense>
 
       {sidebarOpen && (
         <div
@@ -166,11 +174,13 @@ export function Layout() {
             </Button>
           </div>
         </header>
+        <OfflineBanner />
         <VoteReminderBanner />
         <InstallAppBanner />
         <NotificationPrompt />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
+            <SrHeading />
             <Outlet />
           </div>
         </main>

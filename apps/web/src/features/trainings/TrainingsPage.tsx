@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -59,6 +60,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
+import { optimisticAttendance } from '@/lib/optimistic-attendance'
+import { AttendanceMark } from '@/components/AttendanceMark'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
 import { FootballSpinner } from '@/components/FootballSpinner'
 import type {
@@ -146,6 +149,7 @@ export function AttendanceToggle({
           type="button"
           disabled={disabled}
           onClick={() => onChange(status)}
+          aria-pressed={value === status}
           className={attendanceSegmentClass(status, value === status)}
         >
           {ATTENDANCE_STATUS_LABELS[status]}
@@ -289,7 +293,7 @@ function ManageTrainingsDialog() {
             <div className="flex flex-col gap-1.5">
               <Label>Type</Label>
               <Select value={type} onValueChange={(v) => setType(v as TrainingType)}>
-                <SelectTrigger className="bg-background w-full">
+                <SelectTrigger aria-label="Type d'entraînement" className="bg-background w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -314,7 +318,7 @@ function ManageTrainingsDialog() {
               <div className="flex flex-col gap-1.5">
                 <Label>Jour de la semaine</Label>
                 <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger className="bg-background w-full">
+                  <SelectTrigger aria-label="Jour de la semaine" className="bg-background w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -385,6 +389,7 @@ function ManageTrainingsDialog() {
                 id="maxPresentPlayers"
                 className="bg-background"
                 type="number"
+                inputMode="numeric"
                 min={2}
                 placeholder="ex. 16 pour du 8v8"
                 value={maxPresentPlayers}
@@ -515,7 +520,7 @@ function TeamsSection({
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Équipes</p>
+      <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Équipes</p>
       <div className="grid grid-cols-2 gap-2">
         {TEAM_LABELS.map((label, teamIndex) => (
           <div
@@ -671,7 +676,7 @@ function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
           {generateMutation.isPending ? 'Génération...' : 'Générer maintenant'}
         </Button>
         {generateMutation.isError && (
-          <p className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
+          <p role="alert" className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
         )}
       </DialogContent>
     </Dialog>
@@ -796,7 +801,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
         </div>
         {otherRosterPlayers.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
-            <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Autres joueurs du roster
             </p>
             <ul className="flex flex-col divide-y">
@@ -1052,7 +1057,7 @@ function ManageSessionDialog({
           <ClipboardCheck className="size-3.5" />
           <span className="flex flex-col items-start leading-tight">
             <span className="font-semibold">Gérer la séance</span>
-            <span className="text-[10px] opacity-70">{statusLine.label} · {statusLine.small}</span>
+            <span className="text-xs opacity-70">{statusLine.label} · {statusLine.small}</span>
           </span>
           {players.length > 0 && (
             <Badge variant={allPointed ? 'default' : 'secondary'} className="ml-auto">
@@ -1078,7 +1083,7 @@ function ManageSessionDialog({
                   disabled={!canGoStep(s)}
                   onClick={() => canGoStep(s) && setStep(s)}
                   className={cn(
-                    'flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-bold transition-colors',
+                    'flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors',
                     s === step
                       ? 'border-club-blue bg-club-blue text-white'
                       : done
@@ -1088,7 +1093,7 @@ function ManageSessionDialog({
                 >
                   {done && s !== step ? '✓' : s}
                 </button>
-                <span className={cn('text-[10.5px] font-semibold', s === step ? 'text-foreground' : 'text-muted-foreground')}>
+                <span className={cn('text-xs font-semibold', s === step ? 'text-foreground' : 'text-muted-foreground')}>
                   {MANAGE_STEP_LABELS[s]}
                 </span>
                 {i < 2 && <div className={cn('h-0.5 flex-1', done ? 'bg-emerald-500' : 'bg-border')} />}
@@ -1205,7 +1210,7 @@ function ManageSessionDialog({
                   Générer maintenant
                 </Button>
                 {generateMutation.isError && (
-                  <p className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
+                  <p role="alert" className="text-destructive text-xs">Aucun joueur « Présent » pour générer des équipes.</p>
                 )}
               </div>
             ) : (
@@ -1216,7 +1221,7 @@ function ManageSessionDialog({
                   Ajuste-les si besoin — déplace, retire, ajoute quelqu'un qui n'était pas prévu.
                 </p>
                 {confirmTeamsMutation.isError && (
-                  <p className="text-destructive text-xs">
+                  <p role="alert" className="text-destructive text-xs">
                     Échec de la mise à jour des équipes — réessaie ou vérifie ta connexion.
                   </p>
                 )}
@@ -1306,7 +1311,7 @@ function ManageSessionDialog({
                           onChange={(e) => setWalkInLastName(e.target.value)}
                         />
                         <Select value={walkInPosition} onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}>
-                          <SelectTrigger className="h-7 w-32 text-xs">
+                          <SelectTrigger aria-label="Poste du joueur" className="h-7 w-32 text-xs">
                             <SelectValue placeholder="Poste (optionnel)" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1330,7 +1335,7 @@ function ManageSessionDialog({
                           Annuler
                         </Button>
                       </div>
-                      {walkInMutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+                      {walkInMutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(walkInMutation.error, "Échec — réessaie.")}</p>}
                     </>
                   )}
                 </div>
@@ -1370,6 +1375,7 @@ function ManageSessionDialog({
                 <span className="text-xs font-semibold">{TEAM_LABELS[0]}</span>
                 <Input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   value={scoreInput0}
                   onChange={(e) => setScoreInput0(e.target.value)}
@@ -1383,6 +1389,7 @@ function ManageSessionDialog({
                 <span className="text-xs font-semibold">{TEAM_LABELS[1]}</span>
                 <Input
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   value={scoreInput1}
                   onChange={(e) => setScoreInput1(e.target.value)}
@@ -1517,9 +1524,12 @@ export function SessionCard({
   const mutation = useMutation({
     mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
       setMyAttendance(sessionId, vars.status, vars.guests),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
-    },
+    ...optimisticAttendance<Attendance, { status: AttendanceStatus; guests: GuestNameInput[] }>(
+      queryClient,
+      ['attendances', sessionId],
+      currentUser ?? null,
+      (u) => ({ id: `optimistic-${u.id}`, trainingSessionId: sessionId, userId: u.id, user: u, status: 'PRESENT', actualStatus: null, guestCount: 0, guests: [], confirmed: true, confirmedGuestCount: 0, respondedAt: new Date().toISOString() }) as Attendance,
+    ),
   })
 
   const invalidateSessions = () => {
@@ -1676,6 +1686,7 @@ export function SessionCard({
             <div className="flex flex-col gap-1">
               <Input
                 type="number"
+                inputMode="numeric"
                 min={2}
                 placeholder="Nombre de présents max pour cette séance (optionnel)"
                 value={editMaxPresentPlayers}
@@ -1729,7 +1740,7 @@ export function SessionCard({
               </p>
             )}
             {mutation.isError && (
-              <p className="text-destructive text-xs">Échec — réessaie.</p>
+              <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>
             )}
             {myAttendance?.status === 'PRESENT' && !myAttendance.confirmed && (
               <p className="text-amber-600 text-xs font-medium">
@@ -1790,7 +1801,7 @@ export function SessionCard({
                     onValueChange={(v) => setNewGuestPosition(v as PlayerSubPosition)}
                     disabled={hasStarted}
                   >
-                    <SelectTrigger className="h-7 w-32 text-xs">
+                    <SelectTrigger aria-label="Poste du joueur invité" className="h-7 w-32 text-xs">
                       <SelectValue placeholder="Poste (optionnel)" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1840,6 +1851,7 @@ export function SessionCard({
                   variant={a.confirmed ? ATTENDANCE_STATUS_VARIANTS[a.status!] : 'outline'}
                   className="animate-pop-in"
                 >
+                  <AttendanceMark status={a.status} />
                   {a.user.firstName} {a.user.lastName[0]}.
                   {!a.confirmed && ' (attente)'}
                 </Badge>,
@@ -1856,7 +1868,7 @@ export function SessionCard({
                     >
                       {g.firstName}
                       {g.lastName ? ` ${g.lastName}` : ''}
-                      <span className={guestConfirmed ? 'text-white/80' : 'text-muted-foreground'}>
+                      <span className={guestConfirmed ? 'text-white' : 'text-muted-foreground'}>
                         {' '}
                         · invité de {a.user.firstName}
                       </span>
@@ -1905,7 +1917,7 @@ export function SessionCard({
           // attendance controls above — previously the pointage trigger was a tiny
           // collapsed text link buried at the bottom of an otherwise undifferentiated stack.
           <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3">
-            <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Espace coach
             </p>
             <div className="flex flex-wrap gap-2">
@@ -2043,7 +2055,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
               </p>
             )}
             {mutation.isError && (
-              <p className="text-destructive text-xs">Échec — réessaie.</p>
+              <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>
             )}
             {isFriendly && myAttendance?.status && (
               <div className="flex flex-col gap-1.5 text-xs">
@@ -2118,6 +2130,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
           <div className="flex flex-wrap gap-1.5">
             {attendanceQuery.data.map((a) => (
               <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
+                <AttendanceMark status={a.status} />
                 {a.user.firstName} {a.user.lastName[0]}.
                 {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
               </Badge>
@@ -2334,6 +2347,7 @@ export function TrainingsPage() {
                 variant="ghost"
                 size="icon"
                 className="size-8 rounded-full"
+                aria-label="Semaine précédente"
                 onClick={() => setWeekStart((d) => subWeeks(d, 1))}
               >
                 <ChevronLeft className="size-4" />
@@ -2342,6 +2356,7 @@ export function TrainingsPage() {
                 variant="ghost"
                 size="icon"
                 className="size-8 rounded-full"
+                aria-label="Semaine suivante"
                 onClick={() => setWeekStart((d) => addWeeks(d, 1))}
               >
                 <ChevronRight className="size-4" />
@@ -2361,13 +2376,8 @@ export function TrainingsPage() {
               return (
                 <div
                   key={key}
-                  role="button"
-                  tabIndex={0}
                   data-tour={daySessions.length > 0 ? 'training-day-with-session' : undefined}
                   onClick={() => setSelectedDate(key)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') setSelectedDate(key)
-                  }}
                   className={cn(
                     'flex min-h-32 cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-2 text-left align-top transition-all duration-150',
                     selected
@@ -2376,10 +2386,20 @@ export function TrainingsPage() {
                     today && !selected && 'ring-club-blue/60 ring-2',
                   )}
                 >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedDate(key)
+                    }}
+                    aria-pressed={selected}
+                    aria-label={format(day, 'EEEE d MMMM', { locale: fr })}
+                    className="flex flex-col items-stretch gap-1.5 rounded-lg outline-none focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-1"
+                  >
                   <span
                     className={cn(
-                      'text-center text-[11px] font-semibold tracking-wide uppercase',
-                      selected ? 'text-white/80' : 'text-muted-foreground',
+                      'text-center text-xs font-semibold tracking-wide uppercase',
+                      selected ? 'text-white' : 'text-muted-foreground',
                     )}
                   >
                     {format(day, 'EEE', { locale: fr })}
@@ -2396,6 +2416,7 @@ export function TrainingsPage() {
                   >
                     {format(day, 'd')}
                   </span>
+                  </button>
                   <div className="flex flex-col gap-1">
                     {daySessions.map((s) => (
                       <button
@@ -2406,7 +2427,7 @@ export function TrainingsPage() {
                           setActiveSessionId(s.id)
                         }}
                         className={cn(
-                          'flex items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-left text-[10px] font-medium transition-all duration-150 hover:scale-105',
+                          'flex min-h-7 items-center gap-1 truncate rounded-full px-2 py-1 text-left text-xs font-medium transition-all duration-150 hover:scale-105',
                           s.cancelled
                             ? 'bg-muted text-muted-foreground line-through'
                             : selected
@@ -2427,7 +2448,7 @@ export function TrainingsPage() {
                           setActiveMatchId(m.id)
                         }}
                         className={cn(
-                          'flex items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-left text-[10px] font-medium transition-all duration-150 hover:scale-105',
+                          'flex min-h-7 items-center gap-1 truncate rounded-full px-2 py-1 text-left text-xs font-medium transition-all duration-150 hover:scale-105',
                           selected
                             ? 'bg-white/20 text-white hover:bg-white/30'
                             : 'bg-club-gold/25 text-amber-900 hover:bg-club-gold/40',

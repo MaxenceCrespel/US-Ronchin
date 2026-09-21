@@ -65,6 +65,7 @@ export function JoinPage() {
                 <Label htmlFor="firstName">Prénom</Label>
                 <Input
                   id="firstName"
+                  autoComplete="given-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   required
@@ -74,6 +75,7 @@ export function JoinPage() {
                 <Label htmlFor="lastName">Nom</Label>
                 <Input
                   id="lastName"
+                  autoComplete="family-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   required
@@ -84,6 +86,7 @@ export function JoinPage() {
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -94,6 +97,7 @@ export function JoinPage() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -105,24 +109,27 @@ export function JoinPage() {
                 <Input
                   id="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
+                  aria-invalid={confirmPassword.length > 0 && !passwordsMatch}
+                  aria-describedby={confirmPassword.length > 0 && !passwordsMatch ? 'confirm-error' : undefined}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                 />
               </div>
               {confirmPassword.length > 0 && !passwordsMatch && (
-                <p className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
+                <p id="confirm-error" role="alert" className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
               )}
               {mutation.isError &&
                 (isAxiosError(mutation.error) && mutation.error.response?.status === 409 ? (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     Un compte existe déjà avec cet email.{' '}
                     <Link to={`/login?email=${encodeURIComponent(email)}`} className="underline">
                       Se connecter
                     </Link>
                   </p>
                 ) : (
-                  <p className="text-destructive text-sm">
+                  <p role="alert" className="text-destructive text-sm">
                     Impossible de créer le compte (lien invalide ou désactivé).
                   </p>
                 ))}

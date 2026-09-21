@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom/vitest'
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeAll, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
+
+// The recorded API fixtures were taken on 20 Sept 2026 (evening): freeze the clock there so
+// "upcoming" and "past" stay what they were when recorded, whatever day the tests run.
+vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-20T18:00:00Z') })
 
 afterEach(() => {
   cleanup()
@@ -51,3 +55,36 @@ vi.mock('@/features/awards/Trophy3D', async (importOriginal) => ({
   CategoryTrophyScene: () => null,
   TrophySnapshotQueueCanvas: () => null,
 }))
+
+// Pages and overlays are code-split in the app; load them up front so a test's first render
+// doesn't race the dynamic import.
+await Promise.all([
+  import('@/features/profile/ProfilePage'),
+  import('@/features/profile/EditProfilePage'),
+  import('@/features/profile/BadgesPage'),
+  import('@/features/profile/NotificationsPage'),
+  import('@/features/profile/PasswordPage'),
+  import('@/features/profile/ClubSettingsPage'),
+  import('@/features/profile/CompleteProfilePage'),
+  import('@/features/profile/FixPositionsPage'),
+  import('@/features/admin/AdminKpisPage'),
+  import('@/features/trainings/TrainingsPage'),
+  import('@/features/players/PlayersPage'),
+  import('@/features/matches/MatchesPage'),
+  import('@/features/matches/MatchDetailPage'),
+  import('@/features/stats/StatsPage'),
+  import('@/features/awards/TrophyCasePage'),
+  import('@/features/pdf-import/ImportMatchPdfPage'),
+  import('@/features/awards/AwardsCeremonyWatcher'),
+  import('@/features/awards/MonthlyTrophyUnlockWatcher'),
+  import('@/features/matches/MatchTrophyUnlockWatcher'),
+  import('@/features/awards/TrophySnapshot'),
+  import('@/components/OnboardingTour'),
+])
+
+// React.lazy only settles after a first render attempt: do that once per file for every code-split
+// page so the tests' own first render isn't the one that pays for it.
+beforeAll(async () => {
+  const { warmUpLazyPages } = await import('./render-app')
+  await warmUpLazyPages()
+}, 60_000)

@@ -119,7 +119,7 @@ export function PitchFormationEditor({
             >
               {p.label ?? p.shirtNumber ?? `${p.firstName[0]}${p.lastName[0]}`}
             </button>
-            <span className="pointer-events-none max-w-16 truncate rounded bg-black/40 px-1 text-[9px] font-medium text-white">
+            <span className="pointer-events-none max-w-16 truncate rounded bg-black/40 px-1 text-xs font-medium text-white">
               {p.firstName}
             </span>
           </div>

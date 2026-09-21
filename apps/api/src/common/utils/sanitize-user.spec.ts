@@ -19,3 +19,21 @@ describe('sanitizeUser', () => {
     ).toBe(false);
   });
 });
+
+describe('avatar address', () => {
+  it('hands out a versioned address instead of the picture itself', () => {
+    const a = sanitizeUser({ id: 'u1', passwordHash: 'x', avatarUrl: 'data:image/jpeg;base64,AAAA' } as User);
+    expect(a.avatarUrl).toMatch(/^\/api\/users\/u1\/avatar\?v=[0-9a-f]{10}$/);
+    expect(JSON.stringify(a)).not.toContain('base64');
+  });
+
+  it('changes the version when the picture changes and stays stable otherwise', () => {
+    const v = (data: string) => sanitizeUser({ id: 'u1', passwordHash: 'x', avatarUrl: data } as User).avatarUrl;
+    expect(v('data:image/jpeg;base64,AAAA')).toBe(v('data:image/jpeg;base64,AAAA'));
+    expect(v('data:image/jpeg;base64,AAAA')).not.toBe(v('data:image/jpeg;base64,BBBB'));
+  });
+
+  it('has no address without a picture', () => {
+    expect(sanitizeUser({ id: 'u1', passwordHash: null, avatarUrl: null } as User).avatarUrl).toBeNull();
+  });
+});

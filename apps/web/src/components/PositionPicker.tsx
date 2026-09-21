@@ -57,7 +57,7 @@ export function PositionPicker({
               onValueChange={(v) => setSlot(index, v === NONE ? '' : (v as PlayerSubPosition))}
               disabled={disabled}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger aria-label={label} className="w-full">
                 <SelectValue placeholder="Sélectionner" />
               </SelectTrigger>
               <SelectContent>

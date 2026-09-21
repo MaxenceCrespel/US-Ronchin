@@ -116,7 +116,16 @@ describe('users, auth, settings, awards, admin tools (real stack)', () => {
       const png = await sharp({ create: { width: 400, height: 300, channels: 3, background: '#0089cf' } }).png().toBuffer();
       const up = await t.http().post('/api/users/me/avatar').set(as(player)).attach('file', png, { filename: 'a.png', contentType: 'image/png' });
       expect(up.status).toBe(201);
-      expect(up.body.avatarUrl).toMatch(/^data:image\/jpeg;base64,/);
+      // the API hands out an address, never the image itself (keeps user lists light)
+      expect(up.body.avatarUrl).toMatch(new RegExp(`^/api/users/${player.user.id}/avatar\\?v=[0-9a-f]{10}$`));
+      expect(JSON.stringify((await t.http().get('/api/users').set(as(coach))).body)).not.toContain('data:image');
+      const image = await t.http().get(up.body.avatarUrl); // no token: an <img> tag can't send one
+      expect(image.status).toBe(200);
+      expect(image.headers['content-type']).toBe('image/jpeg');
+      expect(image.headers['cache-control']).toContain('immutable');
+      expect(image.body.length).toBeGreaterThan(100);
+      expect((await t.http().get(`/api/users/${other.user.id}/avatar`)).status).toBe(404);
+      expect((await t.http().get('/api/users/not-a-uuid/avatar')).status).toBe(400);
       expect((await t.http().post('/api/users/me/avatar').set(as(player))).status).toBe(400);
       const notImage = await t.http().post('/api/users/me/avatar').set(as(player)).attach('file', Buffer.from('hello'), { filename: 'a.txt', contentType: 'text/plain' });
       expect(notImage.status).toBe(400);

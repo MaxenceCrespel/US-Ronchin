@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
@@ -76,7 +77,7 @@ function ClubJoinQrCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Input readOnly value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
+          <Input readOnly aria-label="Lien pour créer un compte" value={joinUrl} onFocus={(e) => e.target.select()} className="flex-1" />
           <Button
             type="button"
             variant="outline"
@@ -207,7 +208,7 @@ function EditPlayerDialog({ player }: { player: User }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" className="size-7">
+        <Button size="icon" variant="ghost" className="size-7" aria-label={`Modifier ${player.firstName} ${player.lastName}`}>
           <Pencil className="size-3.5" />
         </Button>
       </DialogTrigger>
@@ -227,7 +228,7 @@ function EditPlayerDialog({ player }: { player: User }) {
           <div className="flex flex-col gap-1.5">
             <Label>Rôle</Label>
             <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger aria-label="Rôle" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -275,7 +276,7 @@ function EditPlayerDialog({ player }: { player: User }) {
               value={seniorityTier ?? 'NONE'}
               onValueChange={(v) => setSeniorityTier(v === 'NONE' ? null : (v as SeniorityTier))}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger aria-label="Ancienneté au club" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -302,7 +303,7 @@ function EditPlayerDialog({ player }: { player: User }) {
           {temporaryPassword ? (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
-                <Input readOnly value={temporaryPassword} onFocus={(e) => e.target.select()} />
+                <Input readOnly aria-label="Mot de passe provisoire" value={temporaryPassword} onFocus={(e) => e.target.select()} />
                 <Button
                   type="button"
                   variant="outline"
@@ -337,7 +338,7 @@ function EditPlayerDialog({ player }: { player: User }) {
                   : 'Réinitialiser le mot de passe'}
               </Button>
               {resetPasswordMutation.isError && (
-                <p className="text-destructive text-sm">
+                <p role="alert" className="text-destructive text-sm">
                   {isAxiosError(resetPasswordMutation.error) &&
                   resetPasswordMutation.error.response?.data &&
                   typeof resetPasswordMutation.error.response.data === 'object' &&
@@ -495,7 +496,7 @@ function DeletePlayerDialog({ player }: { player: User }) {
       }}
     >
       <DialogTrigger asChild>
-        <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive size-7">
+        <Button size="icon" variant="ghost" className="text-destructive hover:text-destructive size-7" aria-label={`Supprimer ${fullName}`}>
           <Trash2 className="size-3.5" />
         </Button>
       </DialogTrigger>
@@ -523,7 +524,7 @@ function DeletePlayerDialog({ player }: { player: User }) {
             />
           </div>
           {mutation.isError && (
-            <p className="text-destructive text-sm">Échec de la suppression. Réessaie.</p>
+            <p role="alert" className="text-destructive text-sm">{errorMessage(mutation.error, "Échec de la suppression. Réessaie.")}</p>
           )}
           <div className="flex gap-2">
             <Button
@@ -585,7 +586,7 @@ function InvitePlayerDialog() {
             <p className="text-sm">
               Compte créé. Transmets ce lien au joueur pour qu'il active son compte :
             </p>
-            <Input readOnly value={invitationUrl} onFocus={(e) => e.target.select()} />
+            <Input readOnly aria-label="Lien d'invitation" value={invitationUrl} onFocus={(e) => e.target.select()} />
             <Button onClick={() => setOpen(false)}>Fermer</Button>
           </div>
         ) : (
@@ -633,7 +634,7 @@ function InvitePlayerDialog() {
               <Label htmlFor="isLicensed">Joueur licencié FFF</Label>
             </div>
             {inviteMutation.isError && (
-              <p className="text-destructive text-sm">
+              <p role="alert" className="text-destructive text-sm">
                 Impossible de créer l'invitation (email déjà utilisé ?).
               </p>
             )}
@@ -752,7 +753,7 @@ export function PlayersPage() {
               />
             </div>
             <Select value={licenseFilter} onValueChange={(v) => setLicenseFilter(v as LicenseFilter)}>
-              <SelectTrigger className="w-full sm:w-44">
+              <SelectTrigger aria-label="Filtrer par licence" className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -764,7 +765,7 @@ export function PlayersPage() {
               </SelectContent>
             </Select>
             <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as RoleFilter)}>
-              <SelectTrigger className="w-full sm:w-44">
+              <SelectTrigger aria-label="Filtrer par rôle" className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

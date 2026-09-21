@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -239,7 +240,7 @@ export function ImportMatchPdfPage() {
               <p className="text-muted-foreground text-sm">Analyse du PDF en cours...</p>
             )}
             {uploadMutation.isError && (
-              <p className="text-destructive text-sm">
+              <p role="alert" className="text-destructive text-sm">
                 Impossible d'analyser ce PDF. Vérifie qu'il s'agit bien d'une feuille de match
                 FFF.
               </p>
@@ -267,7 +268,7 @@ export function ImportMatchPdfPage() {
               <div className="flex flex-col gap-1.5">
                 <Label>Domicile / Extérieur</Label>
                 <Select value={homeAway} onValueChange={(v) => setHomeAway(v as MatchHomeAway)}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger aria-label="Domicile ou extérieur" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -294,6 +295,7 @@ export function ImportMatchPdfPage() {
                   <Input
                     id="scoreHome"
                     type="number"
+                    inputMode="numeric"
                     className="w-20"
                     value={scoreHome}
                     onChange={(e) => setScoreHome(e.target.value)}
@@ -304,6 +306,7 @@ export function ImportMatchPdfPage() {
                   <Input
                     id="scoreAway"
                     type="number"
+                    inputMode="numeric"
                     className="w-20"
                     value={scoreAway}
                     onChange={(e) => setScoreAway(e.target.value)}
@@ -346,7 +349,7 @@ export function ImportMatchPdfPage() {
                             )
                           }
                         >
-                          <SelectTrigger className="w-56">
+                          <SelectTrigger aria-label="Compte du joueur de la feuille" className="w-56">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -386,7 +389,7 @@ export function ImportMatchPdfPage() {
                         )
                       }
                     >
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger aria-label="Buteur" className="w-48">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -425,7 +428,7 @@ export function ImportMatchPdfPage() {
                         )
                       }
                     >
-                      <SelectTrigger className="w-48">
+                      <SelectTrigger aria-label="Joueur sanctionné" className="w-48">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -447,7 +450,7 @@ export function ImportMatchPdfPage() {
                         )
                       }
                     >
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger aria-label="Type de carton" className="w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -471,7 +474,7 @@ export function ImportMatchPdfPage() {
               {confirmMutation.isPending ? 'Import en cours...' : "Confirmer l'import"}
             </Button>
             {confirmMutation.isError && (
-              <p className="text-destructive text-sm">Échec de l'import, réessaie.</p>
+              <p role="alert" className="text-destructive text-sm">{errorMessage(confirmMutation.error, "Échec de l'import, réessaie.")}</p>
             )}
           </div>
         </>

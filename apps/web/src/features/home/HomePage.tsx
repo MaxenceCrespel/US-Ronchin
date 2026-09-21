@@ -1,9 +1,11 @@
+import { errorMessage } from '@/lib/error-message'
 import { useEffect, useMemo, useState } from 'react'
 import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake } from 'lucide-react'
+import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +15,7 @@ import { MatchResultBadge } from '@/components/MatchResultBadge'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { pluralize } from '@/lib/utils'
-import type { AttendanceStatus, MatchSource } from '@/lib/types'
+import type { Attendance, AttendanceStatus, MatchAttendance, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import {
@@ -83,9 +85,12 @@ function UpcomingSessionCard({
   const mutation = useMutation({
     mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
       setMyAttendance(sessionId, vars.status, vars.guests),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
-    },
+    ...optimisticAttendance<Attendance, { status: AttendanceStatus; guests: GuestNameInput[] }>(
+      queryClient,
+      ['attendances', sessionId],
+      currentUser,
+      (u) => ({ id: `optimistic-${u.id}`, trainingSessionId: sessionId, userId: u.id, user: u, status: 'PRESENT', actualStatus: null, guestCount: 0, guests: [], confirmed: true, confirmedGuestCount: 0, respondedAt: new Date().toISOString() }) as Attendance,
+    ),
   })
 
   // Same lock as the dedicated Entraînements page and the API: presence can change until the
@@ -160,7 +165,7 @@ function UpcomingSessionCard({
               L'entraînement a commencé — la présence ne peut plus être modifiée.
             </p>
           )}
-          {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {mutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>}
           {myAttendance?.status === 'PRESENT' && !myAttendance.confirmed && (
             <p className="text-amber-600 text-xs font-medium">
               Séance complète — tu es sur liste d'attente, tu seras confirmé automatiquement si
@@ -287,7 +292,12 @@ function UpcomingMatchCard({
   const mutation = useMutation({
     mutationFn: (vars: { status: AttendanceStatus; guests: GuestNameInput[] }) =>
       setMyMatchAttendance(matchId, vars.status, vars.guests),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', matchId] }),
+    ...optimisticAttendance<MatchAttendance, { status: AttendanceStatus; guests: GuestNameInput[] }>(
+      queryClient,
+      ['match-attendance', matchId],
+      currentUser,
+      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], called: false, respondedAt: new Date().toISOString() }),
+    ),
   })
 
   // Same rationale as training sessions: locked from 30 min before kickoff, the moment
@@ -350,7 +360,7 @@ function UpcomingMatchCard({
               Le match a commencé — la présence ne peut plus être modifiée.
             </p>
           )}
-          {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {mutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>}
           {isFriendly && myAttendance?.status && (
             <div className="flex flex-col gap-1.5 text-xs">
               <span className="text-muted-foreground">
@@ -906,7 +916,7 @@ export function HomePage() {
                       {topScorer.firstName} {topScorer.lastName}
                     </p>
                   </div>
-                  <Badge className="bg-club-gold text-white">
+                  <Badge className="bg-club-gold text-black">
                     {topScorer.goals} {pluralize('but', topScorer.goals)}
                   </Badge>
                 </CardContent>
@@ -921,7 +931,7 @@ export function HomePage() {
                       {mostDecisive.firstName} {mostDecisive.lastName}
                     </p>
                   </div>
-                  <Badge className="bg-club-gold text-white">
+                  <Badge className="bg-club-gold text-black">
                     {mostDecisive.goals + mostDecisive.assists}{' '}
                     {pluralize('pt', mostDecisive.goals + mostDecisive.assists)}
                   </Badge>

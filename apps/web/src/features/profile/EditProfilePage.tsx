@@ -102,7 +102,7 @@ export function EditProfilePage() {
               </button>
             )}
             {avatarMutation.isError && (
-              <span className="text-destructive text-xs">
+              <span role="alert" className="text-destructive text-xs">
                 Échec de l'envoi — réessaie avec une autre photo.
               </span>
             )}
@@ -145,6 +145,7 @@ export function EditProfilePage() {
                 <Input
                   id="jerseyNumber"
                   type="number"
+                  inputMode="numeric"
                   min={0}
                   max={99}
                   value={jerseyNumber}
@@ -158,7 +159,7 @@ export function EditProfilePage() {
                   value={preferredFoot}
                   onValueChange={(v) => setPreferredFoot(v as PreferredFoot)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger aria-label="Pied fort" className="w-full">
                     <SelectValue placeholder="Sélectionner" />
                   </SelectTrigger>
                   <SelectContent>

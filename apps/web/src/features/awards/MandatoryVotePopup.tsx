@@ -232,7 +232,7 @@ export function MandatoryVotePopup() {
           <span className="border-club-gold/40 bg-club-gold/10 flex size-11 items-center justify-center rounded-full border">
             <Trophy className="text-club-gold size-5" />
           </span>
-          <p className="text-club-gold text-[11px] font-semibold tracking-[0.2em] uppercase">
+          <p className="text-club-gold text-xs font-semibold tracking-[0.2em] uppercase">
             {flow.source === 'season'
               ? `Trophées ${periodLabel ? `· ${periodLabel}` : 'de la saison'}`
               : `Trophées du mois${periodLabel ? ` · ${periodLabel}` : ''}`}

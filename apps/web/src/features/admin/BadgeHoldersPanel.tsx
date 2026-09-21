@@ -39,12 +39,12 @@ function BadgeMedal({ group, onOpen }: { group: BadgeHolderGroup; onOpen: () => 
           {group.emoji}
         </div>
         {earned && (
-          <span className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none">
+          <span className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs font-bold leading-none">
             {group.holders.length}
           </span>
         )}
       </div>
-      <span className="w-20 text-[11px] leading-tight font-semibold">{group.title}</span>
+      <span className="w-20 text-xs leading-tight font-semibold">{group.title}</span>
     </button>
   )
 }
@@ -153,7 +153,7 @@ export function BadgeHoldersPanel() {
               {activeBadge?.emoji}
             </div>
             {activeBadge && (
-              <span className={cn('text-[10px] font-bold tracking-wide uppercase', RARITY_TEXT[activeBadge.rarity])}>
+              <span className={cn('text-xs font-bold tracking-wide uppercase', RARITY_TEXT[activeBadge.rarity])}>
                 {RARITY_LABELS[activeBadge.rarity]}
               </span>
             )}
@@ -209,7 +209,7 @@ export function BadgeHoldersPanel() {
             {addingHolder ? (
               <div className="flex items-center gap-1.5">
                 <Select value={pickedUserId} onValueChange={setPickedUserId}>
-                  <SelectTrigger className="h-8 flex-1 text-sm">
+                  <SelectTrigger aria-label="Choisir un joueur" className="h-8 flex-1 text-sm">
                     <SelectValue placeholder="Choisir un joueur" />
                   </SelectTrigger>
                   <SelectContent>
@@ -255,7 +255,7 @@ export function BadgeHoldersPanel() {
               </Button>
             )}
             {(grantMutation.isError || revokeMutation.isError || revokeAllMutation.isError) && (
-              <p className="text-destructive text-center text-xs">Échec — réessaie.</p>
+              <p role="alert" className="text-destructive text-center text-xs">Échec — réessaie.</p>
             )}
           </div>
         </DialogContent>

@@ -47,7 +47,7 @@ export function VoteProgress({
       <div
         className={cn(
           'text-muted-foreground flex flex-wrap items-center justify-between gap-x-3 gap-y-1',
-          compact ? 'text-[11px]' : 'text-xs',
+          compact ? 'text-xs' : 'text-xs',
         )}
       >
         <span>

@@ -2,25 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
+import { openDay as openCalendarDay, pastSessionDate, upcomingSessionDate } from './calendar'
 import { fakeApi, fixtures, meta } from './fake-api'
 
 const settle = (ms = 400) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 const btn = (root: HTMLElement | Document, re: RegExp) =>
   [...root.querySelectorAll('button')].find((b) => re.test((b.textContent ?? '').trim())) as HTMLElement | undefined
 
-async function openDay(week: 'next' | 'prev', dayIndex: number, before?: () => void) {
+async function openDay(week: 'next' | 'prev', before?: () => void) {
   const user = userEvent.setup()
   renderApp('/trainings', 'coach')
   before?.()
   await settle()
-  await user.click(screen.getAllByRole('button')[week === 'next' ? 8 : 7])
-  await settle()
-  await user.click(screen.getAllByRole('button')[dayIndex])
-  await settle()
+  await openCalendarDay(user, week === 'next' ? upcomingSessionDate() : pastSessionDate())
   return user
 }
-const openUpcoming = (before?: () => void) => openDay('next', 9, before)
-const openPast = () => openDay('prev', 16)
+const openUpcoming = (before?: () => void) => openDay('next', before)
+const openPast = () => openDay('prev')
 
 describe('team adjustment dialog', () => {
   it('moves a player to the other team', async () => {

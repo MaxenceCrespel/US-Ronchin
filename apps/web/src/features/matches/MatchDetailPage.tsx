@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -48,6 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
+import { AttendanceMark } from '@/components/AttendanceMark'
 import { attendanceButtonClass } from '@/lib/attendance-styles'
 import { useCelebration } from '@/lib/useCelebration'
 import { Confetti } from '@/components/Confetti'
@@ -56,6 +58,7 @@ import type {
   AttendanceStatus,
   GoalType,
   Match,
+  MatchAttendance,
   MatchEventType,
   MatchHomeAway,
 } from '@/lib/types'
@@ -67,6 +70,9 @@ import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevel
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import { DEFAULT_FORMATION, FORMATIONS } from './formations'
+import { optimisticAttendance } from '@/lib/optimistic-attendance'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { PositionLegend } from '@/components/PositionLegend'
 import { MatchConvocationCard } from './MatchConvocationCard'
 import { FinalScore, ScoreEditor } from './MatchScore'
 import {
@@ -246,7 +252,7 @@ function LinkGuestButton({ matchId, compositionId }: { matchId: string; composit
   return (
     <div className="flex items-center gap-1.5">
       <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-        <SelectTrigger className="h-7 w-36 text-xs">
+        <SelectTrigger aria-label="Compte à lier" className="h-7 w-36 text-xs">
           <SelectValue placeholder="Choisir un compte" />
         </SelectTrigger>
         <SelectContent>
@@ -267,7 +273,7 @@ function LinkGuestButton({ matchId, compositionId }: { matchId: string; composit
         OK
       </Button>
       {mutation.isError && (
-        <p className="text-destructive text-xs">Échec — réessaie.</p>
+        <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>
       )}
     </div>
   )
@@ -439,6 +445,7 @@ export function MatchDetailPage() {
   }
 
   const [editingMatch, setEditingMatch] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editOpponent, setEditOpponent] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editKickOffTime, setEditKickOffTime] = useState('')
@@ -881,7 +888,12 @@ export function MatchDetailPage() {
   const attendanceMutation = useMutation({
     mutationFn: (vars: { status: AttendanceStatus; guests: { firstName: string; lastName?: string }[] }) =>
       setMyMatchAttendance(matchId, vars.status, vars.guests),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['match-attendance', matchId] }),
+    ...optimisticAttendance<MatchAttendance, { status: AttendanceStatus; guests: { firstName: string; lastName?: string }[] }>(
+      queryClient,
+      ['match-attendance', matchId],
+      user ?? null,
+      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], called: false, respondedAt: new Date().toISOString() }),
+    ),
   })
 
   // Guests only make sense for a friendly — an officially licensed match can't field an
@@ -1086,11 +1098,7 @@ export function MatchDetailPage() {
                     variant="ghost"
                     className="text-destructive hover:text-destructive size-7"
                     disabled={deleteMatchMutation.isPending}
-                    onClick={() => {
-                      if (confirm(`Supprimer le match contre ${match.opponent} ?`)) {
-                        deleteMatchMutation.mutate()
-                      }
-                    }}
+                    onClick={() => setConfirmingDelete(true)}
                     aria-label="Supprimer le match"
                   >
                     <Trash2 className="size-3.5" />
@@ -1144,7 +1152,7 @@ export function MatchDetailPage() {
                   value={editHomeAway}
                   onValueChange={(v) => setEditHomeAway(v as MatchHomeAway)}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger aria-label="Domicile ou extérieur" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1164,7 +1172,7 @@ export function MatchDetailPage() {
               <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <Label>Type de pelouse (optionnel)</Label>
                 <Select value={editSurface} onValueChange={setEditSurface}>
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger aria-label="Type de pelouse" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1213,6 +1221,19 @@ export function MatchDetailPage() {
       </Card>
   )
 
+  const deleteMatchDialog = (
+    <ConfirmDialog
+      open={confirmingDelete}
+      onOpenChange={setConfirmingDelete}
+      title={`Supprimer le match contre ${match.opponent} ?`}
+      description="Le match, sa composition, ses événements, ses votes et ses notes seront définitivement supprimés."
+      confirmLabel="Supprimer"
+      destructive
+      isPending={deleteMatchMutation.isPending}
+      onConfirm={() => deleteMatchMutation.mutate()}
+    />
+  )
+
   const presenceCard = match.status !== 'PLAYED' && (
         <Card>
           <CardHeader>
@@ -1228,6 +1249,7 @@ export function MatchDetailPage() {
                   key={status}
                   size="sm"
                   variant="outline"
+                  aria-pressed={myMatchAttendance?.status === status}
                   className={attendanceButtonClass(status, myMatchAttendance?.status === status)}
                   disabled={attendanceMutation.isPending || matchTimeHasPassed}
                   onClick={() => attendanceMutation.mutate({ status, guests: matchGuests })}
@@ -1241,7 +1263,7 @@ export function MatchDetailPage() {
                 className={cn(
                   'flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm font-medium',
                   myMatchAttendance.called
-                    ? 'border-emerald-600/30 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                    ? 'border-emerald-600/30 bg-emerald-50 text-emerald-700'
                     : 'bg-muted text-muted-foreground',
                 )}
               >
@@ -1258,7 +1280,7 @@ export function MatchDetailPage() {
               </p>
             )}
             {attendanceMutation.isError && (
-              <p className="text-destructive text-xs">Échec — réessaie.</p>
+              <p role="alert" className="text-destructive text-xs">{errorMessage(attendanceMutation.error, "Échec — réessaie.")}</p>
             )}
             {isFriendlyMatch && myMatchAttendance?.status && (
               <div className="flex flex-col gap-1.5 text-xs">
@@ -1338,6 +1360,7 @@ export function MatchDetailPage() {
               <div className="flex flex-wrap gap-1.5">
                 {attendanceQuery.data.map((a) => (
                   <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
+                    <AttendanceMark status={a.status} />
                     {a.user.firstName} {a.user.lastName[0]}.
                     {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                   </Badge>
@@ -1378,7 +1401,9 @@ export function MatchDetailPage() {
             <Users className="text-club-blue size-4" />
             Étape 1/3 — Présence
           </CardTitle>
-          <CardDescription>Choisis le statut de chaque joueur pour ce match.</CardDescription>
+          <CardDescription>
+            Choisis le statut de chaque joueur pour ce match. Rempl. = remplaçant, Spect. = présent sans jouer.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* A real <table> forces every column to a fixed width across the whole row, so on
@@ -1507,8 +1532,9 @@ export function MatchDetailPage() {
         <CardContent>
           {formationPlayers.length > 0 ? (
             <div className="flex flex-col gap-2">
+              <PositionLegend />
               <Select value={formation} onValueChange={setFormation}>
-                <SelectTrigger className="w-28 self-end">
+                <SelectTrigger aria-label="Système de jeu" className="w-28 self-end">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1528,7 +1554,7 @@ export function MatchDetailPage() {
           )}
 
           {compositionMutation.isError && (
-            <p className="text-destructive mt-2 text-sm">
+            <p role="alert" className="text-destructive mt-2 text-sm">
               Échec de l'enregistrement de la composition. Réessaie — si ça persiste,
               vérifie ta connexion ou reconnecte-toi.
             </p>
@@ -1814,6 +1840,7 @@ export function MatchDetailPage() {
                         <Input
                           autoFocus
                           type="number"
+                          inputMode="numeric"
                           min={0}
                           max={130}
                           value={minuteDraft}
@@ -2325,7 +2352,7 @@ export function MatchDetailPage() {
                     stale composition) looked exactly like a frozen page, with nothing telling
                     the player their notes hadn't actually been sent. */}
                 {submitRatingsMutation.isError && (
-                  <p className="text-destructive text-xs">
+                  <p role="alert" className="text-destructive text-xs">
                     {isAxiosError(submitRatingsMutation.error) &&
                     submitRatingsMutation.error.response?.data &&
                     typeof submitRatingsMutation.error.response.data === 'object' &&
@@ -2637,6 +2664,7 @@ export function MatchDetailPage() {
     <div className="flex flex-col gap-8">
       <Confetti active={motmCelebration || defenseBossCelebration} />
       {voteModal}
+      {deleteMatchDialog}
 
       {isCoach && matchTimeHasPassed && (
         <Button

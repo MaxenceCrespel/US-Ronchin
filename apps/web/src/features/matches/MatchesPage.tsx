@@ -267,7 +267,7 @@ export function MatchesPage() {
                     value={homeAway}
                     onValueChange={(v) => setHomeAway(v as MatchHomeAway)}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger aria-label="Domicile ou extérieur" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -283,7 +283,7 @@ export function MatchesPage() {
                 <div className="flex flex-col gap-1.5">
                   <Label>Type de pelouse (optionnel)</Label>
                   <Select value={surface} onValueChange={setSurface}>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger aria-label="Type de pelouse" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -320,6 +320,7 @@ export function MatchesPage() {
             variant="ghost"
             size="icon"
             className="size-8 rounded-full"
+            aria-label="Mois précédent"
             onClick={() => setSelectedMonth((d) => subMonths(d, 1))}
           >
             <ChevronLeft className="size-4" />
@@ -328,6 +329,7 @@ export function MatchesPage() {
             variant="ghost"
             size="icon"
             className="size-8 rounded-full"
+            aria-label="Mois suivant"
             onClick={() => setSelectedMonth((d) => addMonths(d, 1))}
           >
             <ChevronRight className="size-4" />

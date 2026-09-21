@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -250,7 +251,7 @@ function PlayerDetailDialog({
             {addingRule ? (
               <div className="flex items-center gap-1.5">
                 <Select value={pickedUserId} onValueChange={setPickedUserId}>
-                  <SelectTrigger className="h-8 flex-1 text-sm">
+                  <SelectTrigger aria-label="Choisir un joueur" className="h-8 flex-1 text-sm">
                     <SelectValue placeholder="Choisir un joueur" />
                   </SelectTrigger>
                   <SelectContent>
@@ -296,7 +297,7 @@ function PlayerDetailDialog({
               </Button>
             )}
             {createRuleMutation.isError && (
-              <p className="text-destructive text-xs">Échec — réessaie.</p>
+              <p role="alert" className="text-destructive text-xs">{errorMessage(createRuleMutation.error, "Échec — réessaie.")}</p>
             )}
           </TabsContent>
         </Tabs>

@@ -72,7 +72,7 @@ export function NotificationSettingsCard() {
           >
             {enabled ? 'Désactiver les notifications' : 'Activer les notifications'}
           </Button>
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          {error && <p role="alert" className="text-destructive text-sm">{error}</p>}
         </CardContent>
       )}
     </Card>

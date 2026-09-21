@@ -49,7 +49,7 @@ export function ClubSettingsCard() {
             />
             <p className="text-muted-foreground text-xs">
               Exemple :{' '}
-              <code className="text-[11px]">
+              <code className="text-xs">
                 https://epreuves.fff.fr/competition/club/500112-ronchin-us-3/equipe/2026_248_SEM_12/resultat-calendrier
               </code>
             </p>

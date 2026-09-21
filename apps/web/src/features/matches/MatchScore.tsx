@@ -88,7 +88,7 @@ export function ScoreEditor({
         </span>
         <span
           className={cn(
-            'text-[10px] font-bold tracking-wide uppercase',
+            'text-xs font-bold tracking-wide uppercase',
             s.isUs ? 'text-club-blue' : 'text-muted-foreground',
           )}
         >
@@ -145,6 +145,9 @@ export function ScoreEditor({
           {left.name} <b>{value(left)}</b> – <b>{value(right)}</b> {right.name}
         </span>
       </div>
+      <span role="status" className="sr-only">
+        {saved ? 'Score enregistré' : ''}
+      </span>
       {saved ? (
         <Button
           disabled

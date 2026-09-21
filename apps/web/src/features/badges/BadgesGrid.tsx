@@ -81,12 +81,12 @@ function BadgeMedal({ badge, onOpen }: { badge: BadgeStatus; onOpen: () => void 
           {badge.emoji}
         </div>
         {badge.earned && badge.count > 1 && (
-          <span className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none">
+          <span className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs font-bold leading-none">
             ×{badge.count}
           </span>
         )}
       </div>
-      <span className="w-20 text-[11px] leading-tight font-semibold">{badge.title}</span>
+      <span className="w-20 text-xs leading-tight font-semibold">{badge.title}</span>
     </button>
   )
 }
@@ -173,7 +173,7 @@ export function BadgesGrid({
             {activeBadge && (
               <span
                 className={cn(
-                  'text-[10px] font-bold tracking-wide uppercase',
+                  'text-xs font-bold tracking-wide uppercase',
                   RARITY_TEXT[activeBadge.rarity],
                 )}
               >

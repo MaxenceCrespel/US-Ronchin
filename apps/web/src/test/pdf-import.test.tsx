@@ -99,9 +99,10 @@ describe('match sheet import page', () => {
   it('reports a failed import', async () => {
     const user = await upload()
     fakeApi.on('GET', /^\/matches$/, [])
-    fakeApi.on('POST', /^\/matches$/, { message: 'boom' }, 500)
+    fakeApi.on('POST', /^\/matches$/, { message: 'Un match existe déjà à cette date' }, 400)
     await user.click(screen.getByRole('button', { name: /Confirmer l'import/ }))
-    expect(await screen.findByText(/Échec de l'import/)).toBeInTheDocument()
+    // the server's own explanation is shown, not a generic "réessaie"
+    expect(await screen.findByText('Un match existe déjà à cette date')).toBeInTheDocument()
   })
 
   it('reports an unreadable PDF', async () => {

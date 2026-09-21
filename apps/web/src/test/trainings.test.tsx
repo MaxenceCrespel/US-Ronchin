@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
+import { openDay as openCalendarDay, pastSessionDate, upcomingSessionDate } from './calendar'
 import { fakeApi, meta, type Role } from './fake-api'
 
 const settle = (ms = 400) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
@@ -12,10 +13,7 @@ async function openUpcoming(role: Role = 'coach') {
   const user = userEvent.setup()
   renderApp('/trainings', role)
   await settle()
-  await user.click(screen.getAllByRole('button')[8]) // next week
-  await settle()
-  await user.click(screen.getAllByRole('button')[9]) // Monday 21
-  await settle()
+  await openCalendarDay(user, upcomingSessionDate())
   return user
 }
 
@@ -24,10 +22,7 @@ async function openPast(role: Role = 'coach') {
   const user = userEvent.setup()
   renderApp('/trainings', role)
   await settle()
-  await user.click(screen.getAllByRole('button')[7]) // previous week
-  await settle()
-  await user.click(screen.getAllByRole('button')[16]) // Sunday 13
-  await settle()
+  await openCalendarDay(user, pastSessionDate())
   return user
 }
 

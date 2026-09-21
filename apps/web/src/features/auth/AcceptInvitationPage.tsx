@@ -42,7 +42,7 @@ export function AcceptInvitationPage() {
         </CardHeader>
         <CardContent>
           {!token ? (
-            <p className="text-destructive text-sm">Lien d'invitation invalide.</p>
+            <p role="alert" className="text-destructive text-sm">Lien d'invitation invalide.</p>
           ) : (
             <form
               className="flex flex-col gap-4"
@@ -56,6 +56,7 @@ export function AcceptInvitationPage() {
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -67,16 +68,19 @@ export function AcceptInvitationPage() {
                 <Input
                   id="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
+                  aria-invalid={confirmPassword.length > 0 && !passwordsMatch}
+                  aria-describedby={confirmPassword.length > 0 && !passwordsMatch ? 'confirm-error' : undefined}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                 />
               </div>
               {confirmPassword.length > 0 && !passwordsMatch && (
-                <p className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
+                <p id="confirm-error" role="alert" className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
               )}
               {mutation.isError && (
-                <p className="text-destructive text-sm">
+                <p role="alert" className="text-destructive text-sm">
                   Impossible d'activer le compte (lien expiré ou déjà utilisé).
                 </p>
               )}

@@ -4,9 +4,9 @@ import type { AttendanceStatus } from './types'
 const BASE = 'transition-all duration-150 hover:scale-105 active:scale-95'
 
 const ACTIVE_CLASSES: Record<AttendanceStatus, string> = {
-  PRESENT: 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 animate-pop-in',
-  MAYBE: 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 animate-pop-in',
-  ABSENT: 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700 animate-pop-in',
+  PRESENT: 'bg-emerald-700 text-white border-emerald-700 hover:bg-emerald-800 animate-pop-in',
+  MAYBE: 'bg-amber-500 text-amber-950 border-amber-500 hover:bg-amber-400 animate-pop-in',
+  ABSENT: 'bg-rose-700 text-white border-rose-700 hover:bg-rose-800 animate-pop-in',
 }
 
 const INACTIVE_CLASSES: Record<AttendanceStatus, string> = {
@@ -20,9 +20,9 @@ export function attendanceButtonClass(status: AttendanceStatus, active: boolean)
 }
 
 const SEGMENT_ACTIVE_CLASSES: Record<AttendanceStatus, string> = {
-  PRESENT: 'bg-emerald-600 text-white shadow-sm',
-  MAYBE: 'bg-amber-500 text-white shadow-sm',
-  ABSENT: 'bg-rose-600 text-white shadow-sm',
+  PRESENT: 'bg-emerald-700 text-white shadow-sm',
+  MAYBE: 'bg-amber-500 text-amber-950 shadow-sm',
+  ABSENT: 'bg-rose-700 text-white shadow-sm',
 }
 
 export function attendanceSegmentClass(status: AttendanceStatus, active: boolean) {

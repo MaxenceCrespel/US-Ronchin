@@ -56,6 +56,7 @@ export function LoginPage() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -65,13 +66,14 @@ export function LoginPage() {
               <Label htmlFor="password">Mot de passe</Label>
               <PasswordInput
                 id="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             {mutation.isError && (
-              <p className="text-destructive text-sm">
+              <p role="alert" className="text-destructive text-sm">
                 {isAxiosError(mutation.error) && mutation.error.response?.status === 403
                   ? (mutation.error.response.data as { message?: string })?.message
                   : 'Email ou mot de passe incorrect.'}

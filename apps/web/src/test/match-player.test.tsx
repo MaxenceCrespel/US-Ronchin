@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
@@ -77,28 +77,30 @@ describe('friendly match presence (+1 guests)', () => {
 })
 
 describe('coach deleting a match', () => {
-  it('asks the browser to confirm, then deletes', async () => {
+  async function askDelete() {
     const user = userEvent.setup()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderApp(M0(), 'coach')
     await settle(800)
     await user.click(screen.getByRole('button', { name: 'Configurer le match' }))
     await settle()
     await user.click(screen.getByRole('button', { name: 'Supprimer le match' }))
-    expect(confirmSpy).toHaveBeenCalled()
+    return user
+  }
+
+  it('asks for confirmation in an app dialog, then deletes', async () => {
+    const user = await askDelete()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.textContent).toMatch(/Supprimer le match contre Opponent 0/)
+    expect(fakeApi.called('DELETE', /^\/matches\/.+/)).toHaveLength(0)
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }))
     await waitFor(() => expect(fakeApi.called('DELETE', /^\/matches\/.+/)).toHaveLength(1))
-    confirmSpy.mockRestore()
   })
 
-  it('does nothing when the coach declines', async () => {
-    const user = userEvent.setup()
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    renderApp(M0(), 'coach')
-    await settle(800)
-    await user.click(screen.getByRole('button', { name: 'Configurer le match' }))
+  it('does nothing when the coach cancels', async () => {
+    const user = await askDelete()
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Annuler' }))
     await settle()
-    await user.click(screen.getByRole('button', { name: 'Supprimer le match' }))
     expect(fakeApi.called('DELETE', /^\/matches\/.+/)).toHaveLength(0)
-    confirmSpy.mockRestore()
   })
 })

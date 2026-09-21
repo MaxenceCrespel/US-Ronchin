@@ -54,7 +54,7 @@ export function FixPositionsPage() {
               {mutation.isPending ? 'Enregistrement...' : 'Continuer'}
             </Button>
             {mutation.isError && (
-              <span className="text-destructive text-sm">
+              <span role="alert" className="text-destructive text-sm">
                 Une erreur est survenue, réessaie.
               </span>
             )}

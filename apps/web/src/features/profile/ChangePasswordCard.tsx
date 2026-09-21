@@ -37,6 +37,7 @@ export function ChangePasswordCard() {
             <Label htmlFor="currentPassword">Mot de passe actuel</Label>
             <PasswordInput
               id="currentPassword"
+              autoComplete="current-password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
@@ -46,6 +47,7 @@ export function ChangePasswordCard() {
             <Label htmlFor="newPassword">Nouveau mot de passe (8 caractères min.)</Label>
             <PasswordInput
               id="newPassword"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -56,16 +58,19 @@ export function ChangePasswordCard() {
             <Label htmlFor="confirmNewPassword">Confirmer le nouveau mot de passe</Label>
             <PasswordInput
               id="confirmNewPassword"
+              autoComplete="new-password"
+              aria-invalid={confirmPassword.length > 0 && !passwordsMatch}
+              aria-describedby={confirmPassword.length > 0 && !passwordsMatch ? 'confirm-error' : undefined}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
           </div>
           {confirmPassword.length > 0 && !passwordsMatch && (
-            <p className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
+            <p id="confirm-error" role="alert" className="text-destructive text-sm">Les mots de passe ne correspondent pas.</p>
           )}
           {mutation.isError && (
-            <p className="text-destructive text-sm">
+            <p role="alert" className="text-destructive text-sm">
               {isAxiosError(mutation.error) && mutation.error.response?.status === 401
                 ? 'Mot de passe actuel incorrect.'
                 : "Impossible de changer le mot de passe."}

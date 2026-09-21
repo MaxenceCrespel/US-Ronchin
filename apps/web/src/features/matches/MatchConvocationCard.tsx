@@ -1,3 +1,4 @@
+import { errorMessage } from '@/lib/error-message'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ClipboardList, Megaphone } from 'lucide-react'
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { PositionLegend } from '@/components/PositionLegend'
 import { cn } from '@/lib/utils'
 import type { Match, MatchAttendance, PlayerSubPosition } from '@/lib/types'
 import { fetchMatchAttendance, fetchMatchLineup, saveMatchLineup, setMatchConvocation } from './api'
@@ -68,7 +70,7 @@ function BandTiles({ counts }: { counts: Record<Band, number> }) {
 
 /** A finished step reads green — same treatment on the entry button and inside the dialogs. */
 const DONE_CLASS =
-  'border-emerald-600 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/60'
+  'border-emerald-600 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-700'
 
 function fullName(a: MatchAttendance) {
   return `${a.user.firstName} ${a.user.lastName}`.trim()
@@ -134,6 +136,7 @@ export function MatchConvocationCard({ match }: { match: Match }) {
           disabled={!announced}
           onClick={() => setDialog('lineup')}
         />
+        <PositionLegend />
       </CardContent>
 
       <ConvocationDialog
@@ -305,7 +308,7 @@ function ConvocationDialog({
               )
             })}
           </div>
-          {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+          {mutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>}
           {announced && changes === 0 ? (
             <Button disabled className={cn('w-full', DONE_CLASS, 'disabled:opacity-100')}>
               <Check className="size-4" /> Convocation annoncée
@@ -454,7 +457,7 @@ function LineupDialog({
                 setValidated(false)
               }}
             >
-              <SelectTrigger className="w-40">
+              <SelectTrigger aria-label="Système de jeu" className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -523,7 +526,7 @@ function LineupDialog({
             </div>
           </div>
         </div>
-        {mutation.isError && <p className="text-destructive text-xs">Échec — réessaie.</p>}
+        {mutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(mutation.error, "Échec — réessaie.")}</p>}
         {validated ? (
           <Button disabled className={cn('w-full', DONE_CLASS, 'disabled:opacity-100')}>
             <Check className="size-4" /> Composition validée

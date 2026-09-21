@@ -45,7 +45,7 @@ export function JoinWaitingPage() {
         </CardHeader>
         <CardContent>
           {!email ? (
-            <p className="text-destructive text-center text-sm">Lien invalide.</p>
+            <p role="alert" className="text-destructive text-center text-sm">Lien invalide.</p>
           ) : status === 'ACTIVE' ? (
             <div className="flex flex-col items-center gap-3 py-4 text-center">
               <CheckCircle2 className="size-10 text-emerald-600" />

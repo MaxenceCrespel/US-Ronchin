@@ -464,7 +464,7 @@ export function StatsPage() {
         <h1 className="text-xl font-semibold">Statistiques</h1>
         {seasonsQuery.data && (
           <Select value={activeSeason} onValueChange={setSeason}>
-            <SelectTrigger size="sm">
+            <SelectTrigger aria-label="Saison" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -148,7 +148,7 @@ export function ProfilePage() {
                   {levelQuery.data && (
                     <span
                       className={cn(
-                        'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase',
+                        'shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tracking-wide uppercase',
                         TIER_BADGE_CLASS[levelQuery.data.tier],
                       )}
                     >

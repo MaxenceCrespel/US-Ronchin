@@ -74,7 +74,7 @@ export function CompleteProfilePage() {
                 value={preferredFoot}
                 onValueChange={(v) => setPreferredFoot(v as PreferredFoot)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger aria-label="Pied fort" className="w-full">
                   <SelectValue placeholder="Sélectionner" />
                 </SelectTrigger>
                 <SelectContent>
@@ -103,7 +103,7 @@ export function CompleteProfilePage() {
                 {mutation.isPending ? 'Enregistrement...' : 'Continuer'}
               </Button>
               {mutation.isError && (
-                <span className="text-destructive text-sm">
+                <span role="alert" className="text-destructive text-sm">
                   Une erreur est survenue, vérifie les champs et réessaie.
                 </span>
               )}
