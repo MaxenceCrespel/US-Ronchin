@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Star, Trophy, Users, X } from 'lucide-react'
+import { CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/lib/types'
@@ -12,7 +12,6 @@ import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
 import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
 import { PlayerRatingsReminder } from '@/features/players/PlayerRatingsReminder'
-import { usePendingPlayerRatings } from '@/features/players/usePendingPlayerRatings'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
@@ -39,7 +38,6 @@ const navItems: {
   { to: '/matches', label: 'Matchs', icon: ShieldHalf, tour: 'nav-matches' },
   { to: '/stats', label: 'Stats', icon: Trophy, tour: 'nav-stats' },
   { to: '/players', label: 'Effectif', icon: Users, tour: 'nav-players' },
-  { to: '/player-ratings', label: 'Noter les joueurs', icon: Star, tour: 'nav-player-ratings', roles: ['COACH', 'SUPERADMIN'] },
   { to: '/admin', label: 'Admin', icon: Gauge, tour: 'nav-admin', roles: ['SUPERADMIN'] },
 ]
 
@@ -50,19 +48,6 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       ? 'bg-white text-club-blue-dark shadow-sm'
       : 'text-white/85 hover:bg-white/15 hover:text-white',
   )
-
-/** Stays visible next to "Noter les joueurs" for as long as any player is left unrated —
- * even after the reminder modal/banner have been dismissed for the session, so the coach
- * always has a persistent count to go by, not just a one-off interruption. */
-function PlayerRatingsNavBadge() {
-  const { missing } = usePendingPlayerRatings()
-  if (missing.length === 0) return null
-  return (
-    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white">
-      {missing.length}
-    </span>
-  )
-}
 
 export function Layout() {
   const user = useAuthStore((s) => s.user)
@@ -137,8 +122,7 @@ export function Layout() {
               data-tour={tour}
             >
               <Icon className="size-4 shrink-0" />
-              <span className="flex-1">{label}</span>
-              {to === '/player-ratings' && <PlayerRatingsNavBadge />}
+              <span>{label}</span>
             </NavLink>
           ))}
         </nav>

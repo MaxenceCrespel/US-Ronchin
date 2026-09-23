@@ -1,5 +1,6 @@
 import { errorMessage } from '@/lib/error-message'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import {
@@ -11,6 +12,7 @@ import {
   Pencil,
   QrCode,
   Search,
+  Star,
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
@@ -727,7 +729,17 @@ export function PlayersPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Effectif</h1>
-        {isCoach && <InvitePlayerDialog />}
+        <div className="flex flex-wrap items-center gap-2">
+          {isCoach && (
+            <Button variant="outline" asChild>
+              <Link to="/player-ratings">
+                <Star className="size-4" aria-hidden="true" />
+                Noter les joueurs
+              </Link>
+            </Button>
+          )}
+          {isCoach && <InvitePlayerDialog />}
+        </div>
       </div>
 
       {isCoach && <ClubJoinQrCard />}

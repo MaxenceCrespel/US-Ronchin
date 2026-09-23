@@ -26,10 +26,10 @@ describe('player ratings reminder', () => {
     expect(await screen.findByRole('heading', { name: 'Noter les joueurs' })).toBeInTheDocument()
   })
 
-  it('shows the pending count as a badge on the sidebar entry', async () => {
+  it('has no standing entry in the sidebar — only the reminder gets you there', async () => {
     renderApp('/', 'coach')
     await settle()
-    expect(screen.getByText(String(playerCount))).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Noter les joueurs' })).not.toBeInTheDocument()
   })
 
   it('never shows the reminder to a player', async () => {
