@@ -8,6 +8,7 @@ import {
   format,
   isSameDay,
   isToday,
+  isYesterday,
   startOfWeek,
   subWeeks,
 } from 'date-fns'
@@ -557,10 +558,18 @@ function TeamsSection({
   )
 }
 
+function attendanceHistoryDayLabel(date: Date): string {
+  if (isToday(date)) return "Aujourd'hui"
+  if (isYesterday(date)) return 'Hier'
+  return format(date, 'EEEE d MMMM', { locale: fr })
+}
+
 /** Chronological trail of every declared-status change for a session — see
  * AttendanceStatusChange. Exists to settle "I never touched it" disputes (e.g. a player
  * ending up on the waitlist despite believing their status never changed) with actual
- * evidence instead of guessing from the current state alone. */
+ * evidence instead of guessing from the current state alone. Grouped by day with a header
+ * between each — a bare "19:42" followed by "10:23" reads as the same evening getting later
+ * without one, when it's actually the next morning. */
 function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(false)
   const historyQuery = useQuery({
@@ -610,19 +619,29 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
           <p className="text-muted-foreground text-sm">Aucun changement enregistré.</p>
         ) : (
           <ul className="flex flex-col gap-2.5 text-sm">
-            {historyQuery.data.map((entry) => (
-              <li key={entry.id} className="flex items-start gap-2.5">
-                <span className="text-muted-foreground w-12 shrink-0 text-xs">
-                  {format(new Date(entry.createdAt), 'HH:mm')}
-                </span>
-                <span>
-                  <strong className="font-medium">
-                    {entry.user.firstName} {entry.user.lastName}
-                  </strong>{' '}
-                  <span className="text-muted-foreground">{describe(entry)}</span>
-                </span>
-              </li>
-            ))}
+            {historyQuery.data.map((entry, index) => {
+              const entryDate = new Date(entry.createdAt)
+              const previousDate = index > 0 ? new Date(historyQuery.data[index - 1].createdAt) : null
+              const isNewDay = !previousDate || !isSameDay(entryDate, previousDate)
+              return (
+                <li key={entry.id} className="flex flex-col gap-2.5">
+                  {isNewDay && (
+                    <p className={cn('text-muted-foreground text-xs font-semibold uppercase', index > 0 && 'mt-1 border-t pt-2.5')}>
+                      {attendanceHistoryDayLabel(entryDate)}
+                    </p>
+                  )}
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-muted-foreground w-12 shrink-0 text-xs">{format(entryDate, 'HH:mm')}</span>
+                    <span>
+                      <strong className="font-medium">
+                        {entry.user.firstName} {entry.user.lastName}
+                      </strong>{' '}
+                      <span className="text-muted-foreground">{describe(entry)}</span>
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </DialogContent>
