@@ -179,6 +179,23 @@ CVE-2026-82049
 # connection — the API is Node.js only and the scraper only speaks HTTPS to one fixed domain.
 CVE-2026-8328
 
+# CVE-2026-93990 (Expat: XML injection via malformed UTF-16 input, HIGH) hits libexpat1 at
+# the installed 2.5.0-1+deb12u3 — Status: affected, no Fixed Version. Different source from
+# the rest of this file's Chrome-Recommends/base-image entries: libexpat1 is explicitly
+# listed in apps/api/Dockerfile's own `apt-get install --no-install-recommends` block, one of
+# the shared libraries headless Chrome (`channel: 'chrome'`) actually links against at
+# runtime — not something pulled in incidentally. Re-verified 2026-09-23: a fresh `docker run
+# node:22-bookworm-slim` doesn't have libexpat1 installed at all (so it's genuinely this
+# Dockerfile's own explicit dependency, not the base image), and `apt-cache policy libexpat1`
+# in it shows 2.5.0-1+deb12u3 as both the current security-channel candidate and the version
+# already installed in our built image — nothing newer for `apt-get upgrade` (already run in
+# the Dockerfile) to move to; no Debian bookworm fix published yet. Unreachable regardless:
+# exploiting malformed-UTF-16 XML injection needs attacker-controlled XML/SVG content actually
+# reaching Chrome's parser, and the FFF scraper only ever visits one fixed, trusted FFF domain
+# over HTTPS in pure headless mode — never attacker- or user-supplied URLs or files, same
+# reachability argument as this file's libxml2/Python entries above.
+CVE-2026-93990
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
