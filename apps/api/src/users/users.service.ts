@@ -9,6 +9,7 @@ import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { PlayerRatingsService } from './player-ratings.service';
 
 const SALT_ROUNDS = 10;
 
@@ -52,6 +53,7 @@ export class UsersService {
     @InjectRepository(MatchComposition)
     private readonly compositionsRepository: Repository<MatchComposition>,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly playerRatingsService: PlayerRatingsService,
   ) {}
 
   /** Most regular/assiduous first — real training presences (coach-validated when available)
@@ -163,7 +165,12 @@ export class UsersService {
   async approve(userId: string): Promise<User> {
     const user = await this.findById(userId);
     user.status = UserStatus.ACTIVE;
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+    // Fire-and-forget-ish: notifies coaches who'd already finished rating everyone that
+    // there's now one more player to rate — see the method's own doc comment for why only
+    // those coaches, not every coach.
+    void this.playerRatingsService.notifyCoachesOfNewPlayer(saved.id);
+    return saved;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {

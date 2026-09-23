@@ -346,6 +346,16 @@ export interface AccountLevel {
   nextTierScore: number | null
 }
 
+/** A single player as seen from the currently-signed-in coach's rating list — `rating` is
+ * always THIS coach's own note, never the computed skillScore or another coach's opinion
+ * (see the API's PlayerRatingsController: a coach only ever reads their own ratings back). */
+export interface PlayerToRate {
+  userId: string
+  firstName: string
+  lastName: string
+  rating: number | null
+}
+
 export interface PlayerRating {
   id: string
   matchId: string

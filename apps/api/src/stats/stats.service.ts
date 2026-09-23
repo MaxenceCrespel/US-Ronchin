@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { PlayerPosition, User } from '../users/entities/user.entity';
+import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { Match, MatchHomeAway, MatchStatus } from '../matches/entities/match.entity';
 import { GoalType, MatchEvent, MatchEventType } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
@@ -22,33 +23,50 @@ import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from
 import { parisToday } from '../common/utils/paris-time';
 
 // skillScore weights — see getPlayerStats() below for the full breakdown. Sum of the
-// positive components is 115 (60 + 25 + 5 + 5 + 20), leaving headroom before the
+// positive components is 105 (50 + 10 + 10 + 5 + 30), leaving headroom before the
 // discipline penalty (capped at -10) so a spotless record can still round up to 100 while
 // a heavily carded one has real room to drop — the final clamp keeps it within [0, 100].
-const RATING_WEIGHT = 60;
-const PERFORMANCE_WEIGHT = 25;
-const ASSIDUITY_WEIGHT = 5;
+// Split roughly 60/40 between match-based components (rating 50 + performance 10) and
+// training-based ones (scrimmage ranking 30 + assiduity 10), per club decision: results on
+// the pitch weigh more, but showing up and working at training still counts for real.
+const RATING_WEIGHT = 50;
+const PERFORMANCE_WEIGHT = 10; // kept deliberately small — a single decisive match
+  // shouldn't alone outweigh a season of match ratings (see PERFORMANCE_CONFIDENCE_PRIOR_WEIGHT)
+const ASSIDUITY_WEIGHT = 10;
 const DISTINCTIONS_CAP = 5; // one point per MOTM/patron de la défense, capped here
-const TRAINING_RANKING_WEIGHT = 20; // scrimmage results — see trainingRankingComponent below
+const TRAINING_RANKING_WEIGHT = 30; // scrimmage results — see trainingRankingComponent below
 const DISCIPLINE_CAP = 10; // max deduction, however many cards
 const YELLOW_CARD_PENALTY = 2;
 const RED_CARD_PENALTY = 5;
 const OWN_GOAL_PENALTY = 5; // as costly as a red card — it directly hands the opponent a goal
 const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half as much
-const RATING_CONFIDENCE_PRIOR_WEIGHT = 3; // pseudo-count pulling a thin sample toward neutral
-const RATING_NEUTRAL = 5; // midpoint of the 0-10 scale, the confidence prior's target
+// Confidence-prior weights below are pseudo-counts pulling a thin sample toward the CLUB'S
+// OWN average for that component (computed once per getPlayerStats() call, see
+// computeClubAverages) rather than a fixed neutral value — a thin sample regresses toward
+// what's actually normal at this club, not toward an arbitrary midpoint. Ratings need the
+// largest prior (25 notes felt right in practice): a couple of generous 9/10s from a small
+// sample shouldn't alone crown someone. Performance and training get a lighter touch.
+const RATING_CONFIDENCE_PRIOR_WEIGHT = 5; // kN
+const PERFORMANCE_CONFIDENCE_PRIOR_WEIGHT = 3; // kP
+const TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT = 1; // kE
 // "Assidu du mois"/"Vainqueur d'entraînement" need a real sample to judge fairly — a month
 // with only one or two trainings (holidays, a short break) would let a single session decide
 // the whole trophy. "Joueur du mois" doesn't use this: it's gated on at least one *match*
 // instead (see MonthlyAwardScheduler.openIfNeeded), a different kind of evidence entirely.
 const MIN_TRAININGS_FOR_STAT_TROPHY = 4;
-// Same damping idea as ratings, applied to points-per-training-session instead of
-// points-per-match — a single lucky scrimmage win shouldn't alone put someone at the top
-// just because they've only been to one training. Neutral prior = a draw (1 point), the
-// same "nobody really won" baseline pointsForResult itself uses.
-const TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT = 3;
-const TRAINING_RANKING_NEUTRAL_POINTS = 1;
 const DAY_MS = 86_400_000;
+
+// A coach/admin's own 1-10 read on a player (CoachPlayerRating, averaged across every coach
+// who's rated them) seeds the score: with no match history at all it's the whole score
+// (times COACH_RATING_NO_MATCH_CAP — see below); as matches pile up, the player's own
+// record takes over. COACH_RATING_PRIOR_WEIGHT is the blend's pseudo-count, in the same
+// units as matchesPlayed — "trust the coach's read as much as ~4 matches' worth of
+// evidence" — so a single match barely dents it, but a full season overrides it entirely.
+const COACH_RATING_PRIOR_WEIGHT = 4;
+// A coach's rating alone, with zero matches played, only counts for 60% of its 0-100 value
+// — the level is meant to reflect what a player has actually shown on the pitch, not just
+// a promise. It rises to 100% as soon as there's a single match to weigh it against.
+const COACH_RATING_NO_MATCH_CAP = 0.6;
 
 export interface PlayerStats {
   userId: string;
@@ -183,6 +201,8 @@ export class StatsService {
     private readonly sessionsRepository: Repository<TrainingSession>,
     @InjectRepository(TrainingTeamAssignment)
     private readonly teamAssignmentsRepository: Repository<TrainingTeamAssignment>,
+    @InjectRepository(CoachPlayerRating)
+    private readonly coachRatingsRepository: Repository<CoachPlayerRating>,
   ) {}
 
   private resolveSeasonBounds(season?: string): SeasonBounds | null {
@@ -327,6 +347,7 @@ export class StatsService {
       motmCounts,
       patronDefenseCounts,
       presenceStreaks,
+      coachRatings,
     ] = await Promise.all([
         this.usersRepository.find(),
         this.eventsRepository.find(),
@@ -342,7 +363,23 @@ export class StatsService {
         this.getMotmCounts(bounds),
         this.getPatronDefenseCounts(bounds),
         this.getPresenceStreaks(bounds),
+        // Never season-scoped — a coach's read on a player's level isn't a per-season stat,
+        // it's their current best guess, always all-time.
+        this.coachRatingsRepository.find(),
       ]);
+
+    // One averaged 1-10 read per player across every coach who's rated them — see
+    // COACH_RATING_PRIOR_WEIGHT below for how it blends into skillScore.
+    const coachRatingsByPlayerId = new Map<string, number[]>();
+    for (const r of coachRatings) {
+      const list = coachRatingsByPlayerId.get(r.playerId) ?? [];
+      list.push(Number(r.rating));
+      coachRatingsByPlayerId.set(r.playerId, list);
+    }
+    const coachAverageByPlayerId = new Map<string, number>();
+    for (const [playerId, list] of coachRatingsByPlayerId) {
+      coachAverageByPlayerId.set(playerId, list.reduce((sum, v) => sum + v, 0) / list.length);
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     const matchById = new Map(matches.map((m) => [m.id, m]));
@@ -390,7 +427,11 @@ export class StatsService {
       attendanceBySession.set(a.trainingSessionId, byUser);
     }
 
-    return users.map((user) => {
+    // Pass 1: every per-user ingredient that doesn't depend on a club-wide average — the
+    // shrink formulas below (see computeClubAverages) need the club's own means as their
+    // target, so those means must be computed from everyone's raw numbers FIRST, then fed
+    // back into each individual's damped score in pass 2.
+    const raw = users.map((user) => {
       const matchesPlayed = compositions.filter((c) => c.userId === user.id).length;
       // A CSC is not a positive contribution — excluded from the goal tally, counted
       // separately, and turned into a discipline-style penalty on the skill score below.
@@ -460,82 +501,37 @@ export class StatsService {
       const patronDefenseCount = patronDefenseCounts.get(user.id) ?? 0;
 
       const trainingPoints = trainingPointsByUserId.get(user.id) ?? [];
+      const trainingPointsSum = trainingPoints.reduce((sum, p) => sum + p, 0);
 
-      // No basis for a score at all → stays null, not "assume average" (a never-rated
-      // player used to show ~35/100 from the old DEFAULT_RATING fallback, indistinguishable
-      // from an actually middling player). But that only holds when there's truly nothing
-      // to go on — a player with no match rating yet but a real training-scrimmage record
-      // still has a genuine signal, so either one is enough to compute a score. The rating
-      // component itself already damps to a neutral 5/10 when userRatings is empty (see the
-      // confidence prior below), so no separate fallback value is needed here.
-      let skillScore: number | null = null;
-      if (averageRating !== null || trainingPoints.length > 0) {
-        // Recency-weighted, confidence-damped rating: a match 6 months ago counts half as
-        // much as one today, and a thin sample (few ratings) gets pulled toward a neutral
-        // 5/10 rather than trusted outright — 1 lucky 10/10 shouldn't swing the score alone.
-        let weightedSum = 0;
-        let weightSum = 0;
-        for (const r of userRatings) {
-          const matchDate = matchDateById.get(r.matchId);
-          const daysAgo = matchDate ? (Date.now() - new Date(matchDate).getTime()) / DAY_MS : 0;
-          const weight = Math.pow(0.5, Math.max(daysAgo, 0) / RATING_RECENCY_HALF_LIFE_DAYS);
-          weightedSum += r.rating * weight;
-          weightSum += weight;
-        }
-        const dampedRating =
-          (weightedSum + RATING_NEUTRAL * RATING_CONFIDENCE_PRIOR_WEIGHT) /
-          (weightSum + RATING_CONFIDENCE_PRIOR_WEIGHT);
-        const ratingComponent = (dampedRating / 10) * RATING_WEIGHT;
-
-        // Goalkeepers/defenders are judged on clean-sheet rate instead of goals+assists,
-        // which structurally favours attackers — but only once there's an actual defensive
-        // track record to judge; otherwise fall back to the standard involvement measure.
-        let performanceComponent: number;
-        if (defensiveMatchesStarted > 0) {
-          performanceComponent = (cleanSheets / defensiveMatchesStarted) * PERFORMANCE_WEIGHT;
-        } else {
-          const involvementPerMatch = matchesPlayed > 0 ? (goals + assists) / matchesPlayed : 0;
-          performanceComponent = Math.min(involvementPerMatch, 1) * PERFORMANCE_WEIGHT;
-        }
-
-        const disciplinePenalty = Math.min(
-          (yellowCards * YELLOW_CARD_PENALTY +
-            redCards * RED_CARD_PENALTY +
-            ownGoals * OWN_GOAL_PENALTY) /
-            Math.max(matchesPlayed, 1),
-          DISCIPLINE_CAP,
-        );
-        const assiduityBonus = (trainingAttendanceRate ?? 0) * ASSIDUITY_WEIGHT;
-        const distinctionsBonus = Math.min(motmCount + patronDefenseCount, DISTINCTIONS_CAP);
-
-        // Average scrimmage points per training attended, not the raw cumulative total —
-        // a strong player who wins every time but only makes 3 sessions a month otherwise
-        // scores lower than a weak one carried to wins 4 times a month, purely because the
-        // second one showed up more. Damped toward a neutral "draw" the same way the match
-        // rating is, so one lucky win with a single training on record doesn't alone put
-        // someone at the top of this component.
-        const trainingPointsSum = trainingPoints.reduce((sum, p) => sum + p, 0);
-        const dampedTrainingPoints =
-          (trainingPointsSum + TRAINING_RANKING_NEUTRAL_POINTS * TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT) /
-          (trainingPoints.length + TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT);
-        const trainingRankingComponent =
-          Math.min(dampedTrainingPoints / MAX_POINTS_PER_SESSION, 1) * TRAINING_RANKING_WEIGHT;
-
-        skillScore = Math.round(
-          Math.max(
-            0,
-            Math.min(
-              100,
-              ratingComponent +
-                performanceComponent -
-                disciplinePenalty +
-                assiduityBonus +
-                distinctionsBonus +
-                trainingRankingComponent,
-            ),
-          ),
-        );
+      // Recency-weighted rating sum — the club-wide mean (pass 2) is itself built from
+      // these same weighted sums, so a match 6 months ago already counts half as much
+      // toward BOTH a player's own average and the club's.
+      let ratingWeightedSum = 0;
+      let ratingWeightSum = 0;
+      for (const r of userRatings) {
+        const matchDate = matchDateById.get(r.matchId);
+        const daysAgo = matchDate ? (Date.now() - new Date(matchDate).getTime()) / DAY_MS : 0;
+        const weight = Math.pow(0.5, Math.max(daysAgo, 0) / RATING_RECENCY_HALF_LIFE_DAYS);
+        ratingWeightedSum += r.rating * weight;
+        ratingWeightSum += weight;
       }
+
+      // Goalkeepers/defenders are judged on clean-sheet rate instead of goals+assists, which
+      // structurally favours attackers — but only once there's an actual defensive track
+      // record to judge; otherwise the standard involvement measure. Kept as separate raw
+      // ingredients (not yet damped) since each needs its OWN club-wide mean as a target —
+      // pooling clean-sheet rates with attacker involvement would mean nothing.
+      const isDefensiveProfile = defensiveMatchesStarted > 0;
+      const involvementPerMatch = matchesPlayed > 0 ? Math.min((goals + assists) / matchesPlayed, 1) : 0;
+      const cleanSheetRate = isDefensiveProfile ? cleanSheets / defensiveMatchesStarted : 0;
+
+      const disciplinePenalty = Math.min(
+        (yellowCards * YELLOW_CARD_PENALTY + redCards * RED_CARD_PENALTY + ownGoals * OWN_GOAL_PENALTY) /
+          Math.max(matchesPlayed, 1),
+        DISCIPLINE_CAP,
+      );
+      const assiduityBonus = (trainingAttendanceRate ?? 0) * ASSIDUITY_WEIGHT;
+      const distinctionsBonus = Math.min(motmCount + patronDefenseCount, DISTINCTIONS_CAP);
 
       return {
         userId: user.id,
@@ -558,6 +554,125 @@ export class StatsService {
         defensiveMatchesStarted,
         cleanSheets,
         goalsConceded,
+        ratingWeightedSum,
+        ratingWeightSum,
+        isDefensiveProfile,
+        involvementPerMatch,
+        cleanSheetRate,
+        trainingPointsSum,
+        trainingCount: trainingPoints.length,
+        disciplinePenalty,
+        assiduityBonus,
+        distinctionsBonus,
+        hasObservedBasis: averageRating !== null || trainingPoints.length > 0,
+      };
+    });
+
+    // Pass 2: the club's own average for each component — a thin sample regresses toward
+    // what's actually normal at THIS club (see the confidence-prior comment above), not an
+    // arbitrary fixed midpoint. Weighted by the same n each shrink formula below uses, so a
+    // player with a single rating doesn't skew the mean it's about to be pulled toward.
+    const sum = (xs: number[]) => xs.reduce((s, x) => s + x, 0);
+    const clubMeanRating =
+      sum(raw.map((r) => r.ratingWeightedSum)) / Math.max(sum(raw.map((r) => r.ratingWeightSum)), 1e-9);
+    const involvementPlayers = raw.filter((r) => !r.isDefensiveProfile && r.matchesPlayed > 0);
+    const clubMeanInvolvement =
+      involvementPlayers.length > 0
+        ? sum(involvementPlayers.map((r) => r.involvementPerMatch * r.matchesPlayed)) /
+          sum(involvementPlayers.map((r) => r.matchesPlayed))
+        : 0;
+    const defensivePlayers = raw.filter((r) => r.isDefensiveProfile);
+    const clubMeanCleanSheetRate =
+      defensivePlayers.length > 0
+        ? sum(defensivePlayers.map((r) => r.cleanSheetRate * r.defensiveMatchesStarted)) /
+          sum(defensivePlayers.map((r) => r.defensiveMatchesStarted))
+        : 0;
+    const totalTrainingCount = sum(raw.map((r) => r.trainingCount));
+    const clubMeanTrainingPoints =
+      totalTrainingCount > 0 ? sum(raw.map((r) => r.trainingPointsSum)) / totalTrainingCount : 0;
+
+    const shrink = (n: number, x: number, k: number, mean: number) => (n * x + k * mean) / (n + k);
+
+    return raw.map((r) => {
+      const coachAverage = coachAverageByPlayerId.get(r.userId) ?? null;
+      let skillScore: number | null = null;
+
+      if (r.hasObservedBasis || coachAverage !== null) {
+        // "Observed" niveau: everything the player has actually shown, all shrunk toward
+        // the club's own mean for a thin sample (see clubMean* above) — matches ONLY affect
+        // this the moment they're played, never assumed. When there's a coach rating to
+        // blend against (below), this is only ever weighted by matchesPlayed, so for a
+        // player with 0 matches its value here is irrelevant — the blend zeroes it out on
+        // its own, whatever it happens to compute to.
+        // shrink's n*x term is really ratingWeightedSum here (n=weightSum, x=weightedSum/
+        // weightSum) — written via the raw sum so it stays exact, and correct, even when
+        // weightSum is 0 (x would be an undefined 0/0, but n*x collapses to 0 regardless).
+        const dampedRating =
+          (r.ratingWeightedSum + RATING_CONFIDENCE_PRIOR_WEIGHT * clubMeanRating) /
+          (r.ratingWeightSum + RATING_CONFIDENCE_PRIOR_WEIGHT);
+        const ratingComponent = (dampedRating / 10) * RATING_WEIGHT;
+
+        const performanceComponent = r.isDefensiveProfile
+          ? shrink(r.defensiveMatchesStarted, r.cleanSheetRate, PERFORMANCE_CONFIDENCE_PRIOR_WEIGHT, clubMeanCleanSheetRate) * PERFORMANCE_WEIGHT
+          : shrink(r.matchesPlayed, r.involvementPerMatch, PERFORMANCE_CONFIDENCE_PRIOR_WEIGHT, clubMeanInvolvement) * PERFORMANCE_WEIGHT;
+
+        const dampedTrainingPoints = shrink(
+          r.trainingCount,
+          r.trainingCount > 0 ? r.trainingPointsSum / r.trainingCount : clubMeanTrainingPoints,
+          TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT,
+          clubMeanTrainingPoints,
+        );
+        const trainingRankingComponent =
+          Math.min(dampedTrainingPoints / MAX_POINTS_PER_SESSION, 1) * TRAINING_RANKING_WEIGHT;
+
+        // Only counted for a player who has actually played at least one match — with 0
+        // matches, this component is excluded from "obs" entirely (see the blend below,
+        // which zeroes obs's contribution by matchesPlayed anyway) but computing it
+        // honestly rather than fudging it keeps this block simple and side-effect-free.
+        const observed =
+          ratingComponent +
+          performanceComponent -
+          r.disciplinePenalty +
+          r.assiduityBonus +
+          r.distinctionsBonus +
+          trainingRankingComponent;
+
+        if (coachAverage === null) {
+          skillScore = Math.round(Math.max(0, Math.min(100, observed)));
+        } else {
+          // The coach's read is the seed: with 0 matches it's ~all of the score (capped at
+          // COACH_RATING_NO_MATCH_CAP — see its own comment), and as matches accumulate the
+          // player's own record (observed) takes over, weighted by COACH_RATING_PRIOR_WEIGHT
+          // "matches' worth" of trust in the coach's initial read.
+          const coachBase = coachAverage * 10 * (r.matchesPlayed === 0 ? COACH_RATING_NO_MATCH_CAP : 1);
+          const blended =
+            (coachBase * COACH_RATING_PRIOR_WEIGHT + observed * r.matchesPlayed) /
+            (COACH_RATING_PRIOR_WEIGHT + r.matchesPlayed);
+          skillScore = Math.round(Math.max(0, Math.min(100, blended)));
+        }
+      }
+
+      return {
+        userId: r.userId,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        matchesPlayed: r.matchesPlayed,
+        goals: r.goals,
+        ownGoals: r.ownGoals,
+        assists: r.assists,
+        yellowCards: r.yellowCards,
+        redCards: r.redCards,
+        trainingsPresent: r.trainingsPresent,
+        trainingsResponded: r.trainingsResponded,
+        trainingAttendanceRate: r.trainingAttendanceRate,
+        averageRating: r.averageRating,
+        ratingsCount: r.ratingsCount,
+        motmCount: r.motmCount,
+        patronDefenseCount: r.patronDefenseCount,
+        presenceStreak: r.presenceStreak,
+        defensiveMatchesStarted: r.defensiveMatchesStarted,
+        cleanSheets: r.cleanSheets,
+        goalsConceded: r.goalsConceded,
         skillScore,
       };
     });

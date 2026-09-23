@@ -14,11 +14,13 @@ import { pointsForResult } from './points-for-result';
 
 const DEFAULT_TEAM_COUNT = 2;
 
-// skillScore is 0-100 — a ±5-point spread (so up to 10 points apart) is well within noise
+// skillScore is 0-100 — a ±1-point spread (so up to 2 points apart) is well within noise
 // for a score built from recency-weighted ratings, damped confidence priors, etc. (see
-// StatsService.getPlayerStats). Kept modest on purpose: enough to make close calls vary
-// between regenerations, not so wide that it could flip a genuinely lopsided matchup.
-const SCORE_JITTER_RANGE = 10;
+// StatsService.getPlayerStats). Kept narrow on purpose: the confidence-shrink formulas
+// already compress the score range compared to raw averages, so a jitter as wide as before
+// would swamp real, meaningful gaps between players — this is only enough to make truly
+// tied players swap places between regenerations, never to flip a genuine mismatch.
+const SCORE_JITTER_RANGE = 2;
 
 const BAND_BY_SUBPOSITION: Record<PlayerSubPosition, PlayerPosition> = {
   [PlayerSubPosition.GOALKEEPER]: PlayerPosition.GOALKEEPER,
