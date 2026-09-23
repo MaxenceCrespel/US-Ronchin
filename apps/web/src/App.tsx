@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { PublicShell, RouteTitle } from '@/lib/route-meta'
 import { Layout } from '@/app/Layout'
 import { RequireAuth } from '@/app/RequireAuth'
+import { ChunkErrorBoundary } from '@/app/ChunkErrorBoundary'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
 import { JoinPage } from '@/features/auth/JoinPage'
@@ -42,49 +43,51 @@ function App() {
   return (
     <>
       <RouteTitle />
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
-          <Route element={<PublicShell />}>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
-            <Route path="/join" element={<JoinPage />} />
-            <Route path="/join/waiting" element={<JoinWaitingPage />} />
-          </Route>
-
-          <Route element={<RequireAuth />}>
+      <ChunkErrorBoundary>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
             <Route element={<PublicShell />}>
-              <Route path="/complete-profile" element={<CompleteProfilePage />} />
-              <Route path="/fix-positions" element={<FixPositionsPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+              <Route path="/join" element={<JoinPage />} />
+              <Route path="/join/waiting" element={<JoinWaitingPage />} />
             </Route>
-            <Route element={<Layout />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/trainings" element={<TrainingsPage />} />
-              <Route path="/matches" element={<MatchesPage />} />
-              <Route path="/matches/:id" element={<MatchDetailPage />} />
-              <Route path="/stats" element={<StatsPage />} />
-              <Route path="/players" element={<PlayersPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/profile/edit" element={<EditProfilePage />} />
-              <Route path="/profile/badges" element={<BadgesPage />} />
-              <Route path="/profile/trophies" element={<TrophyCasePage />} />
-              <Route path="/profile/notifications" element={<NotificationsPage />} />
-              <Route path="/profile/password" element={<PasswordPage />} />
 
-              <Route element={<RequireAuth roles={['COACH']} />}>
-                <Route path="/admin/import-pdf" element={<ImportMatchPdfPage />} />
-                <Route path="/profile/club" element={<ClubSettingsPage />} />
-                <Route path="/player-ratings" element={<PlayerRatingsPage />} />
+            <Route element={<RequireAuth />}>
+              <Route element={<PublicShell />}>
+                <Route path="/complete-profile" element={<CompleteProfilePage />} />
+                <Route path="/fix-positions" element={<FixPositionsPage />} />
               </Route>
+              <Route element={<Layout />}>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/trainings" element={<TrainingsPage />} />
+                <Route path="/matches" element={<MatchesPage />} />
+                <Route path="/matches/:id" element={<MatchDetailPage />} />
+                <Route path="/stats" element={<StatsPage />} />
+                <Route path="/players" element={<PlayersPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/profile/edit" element={<EditProfilePage />} />
+                <Route path="/profile/badges" element={<BadgesPage />} />
+                <Route path="/profile/trophies" element={<TrophyCasePage />} />
+                <Route path="/profile/notifications" element={<NotificationsPage />} />
+                <Route path="/profile/password" element={<PasswordPage />} />
 
-              <Route element={<RequireAuth roles={['SUPERADMIN']} />}>
-                <Route path="/admin" element={<AdminKpisPage />} />
+                <Route element={<RequireAuth roles={['COACH']} />}>
+                  <Route path="/admin/import-pdf" element={<ImportMatchPdfPage />} />
+                  <Route path="/profile/club" element={<ClubSettingsPage />} />
+                  <Route path="/player-ratings" element={<PlayerRatingsPage />} />
+                </Route>
+
+                <Route element={<RequireAuth roles={['SUPERADMIN']} />}>
+                  <Route path="/admin" element={<AdminKpisPage />} />
+                </Route>
               </Route>
             </Route>
-          </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </ChunkErrorBoundary>
     </>
   )
 }

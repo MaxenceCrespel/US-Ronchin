@@ -81,7 +81,6 @@ export function Layout() {
       <SkipLink />
       <BadgeUnlockWatcher />
       <MandatoryVotePopup />
-      <PlayerRatingsReminder />
       <Suspense fallback={null}>
         <AwardsCeremonyWatcher />
         <MonthlyTrophyUnlockWatcher />
@@ -194,6 +193,7 @@ export function Layout() {
         </header>
         <OfflineBanner />
         <VoteReminderBanner />
+        <PlayerRatingsReminder />
         <InstallAppBanner />
         <NotificationPrompt />
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6">
