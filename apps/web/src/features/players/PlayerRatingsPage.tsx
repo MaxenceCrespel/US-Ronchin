@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Lock } from 'lucide-react'
+import { CircleHelp, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -52,6 +52,9 @@ export function PlayerRatingsPage() {
 
   const [showLegend, setShowLegend] = useState(false)
   const legendGuard = useModalGuard(showLegend)
+
+  const [showInfo, setShowInfo] = useState(false)
+  const infoGuard = useModalGuard(showInfo)
 
   const [showRecap, setShowRecap] = useState(false)
   const recapGuard = useModalGuard(showRecap)
@@ -129,7 +132,8 @@ export function PlayerRatingsPage() {
     <div
       className={cn(
         'mx-auto flex max-w-xl flex-col gap-3.5 pb-28',
-        (introGuard.justClosed || legendGuard.justClosed || recapGuard.justClosed) && 'pointer-events-none',
+        (introGuard.justClosed || legendGuard.justClosed || recapGuard.justClosed || infoGuard.justClosed) &&
+          'pointer-events-none',
       )}
     >
       <div>
@@ -139,6 +143,13 @@ export function PlayerRatingsPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           Note chaque joueur, puis enregistre tout d'un coup. Tes notes sont privées.
         </p>
+        <button
+          type="button"
+          onClick={() => setShowInfo(true)}
+          className="text-club-blue-dark mt-1.5 flex items-center gap-1 text-xs font-semibold underline"
+        >
+          <CircleHelp className="size-3.5 shrink-0" aria-hidden="true" />À quoi sert cette note ?
+        </button>
       </div>
 
       {/* Scale strip — sticky so it stays visible while scrolling the list, instead of a
@@ -335,6 +346,11 @@ export function PlayerRatingsPage() {
             </h2>
             <ul className="flex list-disc flex-col gap-2 pl-4.5 text-sm leading-relaxed">
               <li>
+                Ta note sert de <strong>base</strong> pour calculer le niveau de chaque joueur, utilisé notamment pour{' '}
+                <strong>équilibrer les équipes</strong> à l'entraînement. Elle compte surtout tant qu'il n'a pas encore
+                beaucoup joué : ses vraies performances prennent ensuite progressivement le relais.
+              </li>
+              <li>
                 Note le <strong>niveau général</strong> de chaque joueur de <strong>1 à 10</strong>, tel que tu le vois sur le
                 terrain. Pas ses stats, ni sa présence à l'entraînement.
               </li>
@@ -383,6 +399,48 @@ export function PlayerRatingsPage() {
               ))}
             </ul>
             <Button type="button" onClick={() => legendGuard.close(() => setShowLegend(false))}>
+              Fermer
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Reopenable "why" explainer — same content as the mandatory intro's first bullet,
+          but available at any time (not just on a coach's first visit) since a coach who
+          dismissed the intro months ago, or a new coach joining later, has no other way to
+          be reminded what this page is actually for. */}
+      {showInfo && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ratings-info-title"
+          onClick={() => infoGuard.close(() => setShowInfo(false))}
+        >
+          <div
+            className="bg-background flex w-full max-w-lg flex-col gap-3 rounded-t-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="ratings-info-title" className="text-lg font-bold text-balance">
+              À quoi sert cette note ?
+            </h2>
+            <div className="flex flex-col gap-2.5 text-sm leading-relaxed">
+              <p>
+                Elle sert de <strong>base</strong> pour calculer le niveau de chaque joueur, utilisé notamment pour{' '}
+                <strong>équilibrer les équipes</strong> à l'entraînement.
+              </p>
+              <p>
+                Elle compte surtout pour un joueur qui n'a <strong>pas encore beaucoup joué</strong> : au fil des matchs
+                et des entraînements, ses vraies performances (notes des coéquipiers, résultats, assiduité) prennent
+                progressivement le relais sur ta note.
+              </p>
+              <p>
+                Note son <strong>niveau général de jeu</strong>, tel que tu le vois sur le terrain — pas ses statistiques,
+                ni sa présence. Ta note reste <strong>privée</strong> : ni les joueurs ni les autres coachs ne la voient,
+                seule la moyenne des coachs sert au calcul.
+              </p>
+            </div>
+            <Button type="button" onClick={() => infoGuard.close(() => setShowInfo(false))} className="mt-1">
               Fermer
             </Button>
           </div>

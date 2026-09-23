@@ -25,6 +25,16 @@ describe('player ratings (coach)', () => {
     expect(screen.getByRole('button', { name: `Enregistrer · 0/${playerCount}` })).toBeDisabled()
   })
 
+  it('explains what the rating is for, reopenable any time (not just on first visit)', async () => {
+    const user = await openRatings()
+    await user.click(screen.getByRole('button', { name: "J'ai compris, je commence" }))
+    await user.click(screen.getByRole('button', { name: 'À quoi sert cette note ?' }))
+    const dialog = await screen.findByRole('dialog', { name: 'À quoi sert cette note ?' })
+    expect(dialog).toHaveTextContent('équilibrer les équipes')
+    await user.click(screen.getByRole('button', { name: 'Fermer' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'À quoi sert cette note ?' })).not.toBeInTheDocument())
+  })
+
   it('opens and closes the full legend', async () => {
     const user = await openRatings()
     await user.click(screen.getByRole('button', { name: "J'ai compris, je commence" }))
