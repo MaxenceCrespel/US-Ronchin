@@ -114,6 +114,7 @@ export class UsersService {
       lastName: data.lastName,
       isLicensed: data.isLicensed,
       passwordHash: null,
+      seniorityToReview: true,
     });
     return this.usersRepository.save(user);
   }
@@ -152,6 +153,7 @@ export class UsersService {
       isLicensed: data.isLicensed,
       passwordHash: data.passwordHash,
       status: UserStatus.PENDING,
+      seniorityToReview: true,
     });
     const saved = await this.usersRepository.save(user);
     await this.pushNotificationsService.sendToCoaches({
@@ -182,6 +184,10 @@ export class UsersService {
   async adminUpdate(userId: string, dto: AdminUpdateUserDto): Promise<User> {
     const user = await this.findById(userId);
     Object.assign(user, dto);
+    // Any explicit choice of seniority — a bracket, or null for "nouveau joueur" — settles the
+    // "à renseigner" reminder. Leaving the key out (the edit form does, while the field is
+    // still untouched) keeps it pending.
+    if (dto.seniorityTier !== undefined) user.seniorityToReview = false;
     return this.usersRepository.save(user);
   }
 

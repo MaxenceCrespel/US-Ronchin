@@ -171,7 +171,12 @@ function EditPlayerDialog({ player }: { player: User }) {
   const [isPlayingCoach, setIsPlayingCoach] = useState(player.isPlayingCoach)
   const [isLicensed, setIsLicensed] = useState(player.isLicensed)
   const [licenseNumber, setLicenseNumber] = useState(player.licenseNumber ?? '')
-  const [seniorityTier, setSeniorityTier] = useState<SeniorityTier | null>(player.seniorityTier)
+  // 'UNSET' only while the seniority is still flagged "à renseigner" (see User.seniorityToReview):
+  // the select then starts on that placeholder, and saving without touching it leaves the
+  // reminder in place instead of silently turning it into "nouveau joueur".
+  const initialSeniority = (): SeniorityTier | null | 'UNSET' =>
+    player.seniorityToReview ? 'UNSET' : player.seniorityTier
+  const [seniorityTier, setSeniorityTier] = useState<SeniorityTier | null | 'UNSET'>(initialSeniority)
 
   useEffect(() => {
     if (!open) return
@@ -179,7 +184,7 @@ function EditPlayerDialog({ player }: { player: User }) {
     setIsPlayingCoach(player.isPlayingCoach)
     setIsLicensed(player.isLicensed)
     setLicenseNumber(player.licenseNumber ?? '')
-    setSeniorityTier(player.seniorityTier)
+    setSeniorityTier(initialSeniority())
     setTemporaryPassword(null)
   }, [open, player])
 
@@ -192,7 +197,7 @@ function EditPlayerDialog({ player }: { player: User }) {
         isPlayingCoach: canBeOnRoster ? isPlayingCoach : undefined,
         isLicensed,
         licenseNumber: licenseNumber || undefined,
-        seniorityTier,
+        seniorityTier: seniorityTier === 'UNSET' ? undefined : seniorityTier,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] })
@@ -275,13 +280,20 @@ function EditPlayerDialog({ player }: { player: User }) {
           <div className="flex flex-col gap-1.5">
             <Label>Ancienneté au club</Label>
             <Select
-              value={seniorityTier ?? 'NONE'}
-              onValueChange={(v) => setSeniorityTier(v === 'NONE' ? null : (v as SeniorityTier))}
+              value={seniorityTier === null ? 'NONE' : seniorityTier}
+              onValueChange={(v) =>
+                setSeniorityTier(v === 'NONE' ? null : v === 'UNSET' ? 'UNSET' : (v as SeniorityTier))
+              }
             >
               <SelectTrigger aria-label="Ancienneté au club" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {player.seniorityToReview && (
+                  <SelectItem value="UNSET" disabled>
+                    À renseigner
+                  </SelectItem>
+                )}
                 <SelectItem value="NONE">Nouveau joueur (moins d'1 an)</SelectItem>
                 {(Object.entries(SENIORITY_TIER_LABELS) as [SeniorityTier, string][]).map(([tier, label]) => (
                   <SelectItem key={tier} value={tier}>
@@ -293,6 +305,12 @@ function EditPlayerDialog({ player }: { player: User }) {
             <p className="text-muted-foreground text-xs">
               Priorité sur un entraînement complet : licencié, puis par ancienneté, puis premier arrivé.
             </p>
+            {seniorityTier === 'UNSET' && (
+              <p className="text-xs text-amber-700">
+                À renseigner : choisis « Nouveau joueur » ou une tranche d'ancienneté. Tant que ce n'est pas fait,
+                ça reste dans « À traiter » sur l'accueil.
+              </p>
+            )}
           </div>
 
           <Button type="submit" disabled={mutation.isPending}>
@@ -704,9 +722,16 @@ export function PlayersPage() {
   const playersQuery = useQuery({ queryKey: ['players'], queryFn: fetchPlayers })
   const levelsQuery = useAllAccountLevels()
 
+  // The player just accepted, for the "don't forget their info" popup below — not blocking:
+  // both pieces of info also surface in "À traiter" on the home page until they're filled in.
+  const [justApproved, setJustApproved] = useState<User | null>(null)
   const approveMutation = useMutation({
     mutationFn: (userId: string) => approveUser(userId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['players'] }),
+    onSuccess: (approved) => {
+      queryClient.invalidateQueries({ queryKey: ['players'] })
+      queryClient.invalidateQueries({ queryKey: ['player-ratings'] })
+      setJustApproved(approved)
+    },
   })
 
   const [search, setSearch] = useState('')
@@ -947,6 +972,39 @@ export function PlayersPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={justApproved !== null} onOpenChange={(next) => !next && setJustApproved(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {justApproved?.firstName} {justApproved?.lastName} rejoint l'effectif
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">
+            Deux infos à compléter pour ne rien oublier. Rien d'obligatoire tout de suite : tant qu'elles manquent,
+            elles restent dans « À traiter » sur l'accueil.
+          </p>
+          <ul className="flex flex-col gap-2 text-sm">
+            <li className="rounded-lg border p-3">
+              <strong>Ancienneté</strong> — depuis le crayon sur sa ligne dans la liste, champ « Ancienneté au club »
+              (elle décide de la priorité sur un entraînement complet).
+            </li>
+            <li className="rounded-lg border p-3">
+              <strong>Niveau global</strong> — une note de 1 à 10 sur la page « Noter les joueurs ».
+            </li>
+          </ul>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setJustApproved(null)}>
+              Plus tard
+            </Button>
+            <Button asChild>
+              <Link to="/player-ratings" onClick={() => setJustApproved(null)}>
+                Noter son niveau
+              </Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

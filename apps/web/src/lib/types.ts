@@ -33,6 +33,10 @@ export interface User {
    * ONE_TO_THREE < THREE_TO_SEVEN < SEVEN_PLUS when a training's headcount cap frees up a
    * slot. */
   seniorityTier: SeniorityTier | null
+  /** True from account creation until a coach/admin explicitly picks a seniority (null already
+   * means "moins d'un an", so an unset value can't be told apart otherwise) — feeds the "À
+   * traiter" reminder. Absent on older payloads. */
+  seniorityToReview?: boolean
   positions: PlayerSubPosition[]
   jerseyNumber: number | null
   preferredFoot: PreferredFoot | null

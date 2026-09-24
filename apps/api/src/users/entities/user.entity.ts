@@ -98,6 +98,14 @@ export class User {
   @Column({ name: 'seniority_tier', type: 'enum', enum: SeniorityTier, nullable: true })
   seniorityTier: SeniorityTier | null;
 
+  /** True from account creation (sign-up or invitation) until a coach/admin explicitly picks a
+   * seniority — needed because seniorityTier null already means "moins d'un an", so an unset
+   * value can't be told apart from a deliberate "nouveau joueur". Existing accounts are false:
+   * it only flags players who arrive from now on. Drives the "À traiter" reminder on the
+   * home page (see AdminUpdateUserDto: any explicit seniorityTier clears it). */
+  @Column({ name: 'seniority_to_review', default: false })
+  seniorityToReview: boolean;
+
   @Column({ type: 'enum', enum: PlayerSubPosition, array: true, nullable: true })
   positions: PlayerSubPosition[] | null;
 

@@ -58,6 +58,34 @@ describe('users, auth, settings, awards, admin tools (real stack)', () => {
       expect((await t.http().get('/api/auth/join-status').query({ email })).body.status).toBe('ACTIVE');
     });
 
+    it('flags a new account until a coach picks a seniority, even "nouveau joueur"', async () => {
+      const seniorityOf = async (id: string) =>
+        (await t.http().get('/api/users').set(as(coach))).body.find((u: { id: string }) => u.id === id);
+
+      const email = `flag-${Date.now()}@test.local`;
+      await t.http().post('/api/auth/join').send({ email, firstName: 'Fl', lastName: 'Ag', password: 'Password-123' });
+      const joined = (await t.http().get('/api/users').set(as(coach))).body.find((u: { email: string }) => u.email === email);
+      expect(joined.seniorityToReview).toBe(true);
+      await t.http().patch(`/api/users/${joined.id}/approve`).set(as(coach));
+
+      // another edit that leaves seniority out keeps the reminder
+      await t.http().patch(`/api/users/${joined.id}`).set(as(coach)).send({ isLicensed: true });
+      expect((await seniorityOf(joined.id)).seniorityToReview).toBe(true);
+
+      // an explicit "nouveau joueur" (null) settles it
+      const set = await t.http().patch(`/api/users/${joined.id}`).set(as(coach)).send({ seniorityTier: null });
+      expect(set.status).toBe(200);
+      const after = await seniorityOf(joined.id);
+      expect(after.seniorityToReview).toBe(false);
+      expect(after.seniorityTier).toBeNull();
+
+      // invited accounts are flagged too, and an existing account never is
+      const inviteEmail = `flag-inv-${Date.now()}@test.local`;
+      const inv = await t.http().post('/api/auth/invitations').set(as(coach)).send({ email: inviteEmail, firstName: 'In', lastName: 'Flag' });
+      expect((await seniorityOf(inv.body.user.id)).seniorityToReview).toBe(true);
+      expect((await seniorityOf(player.user.id)).seniorityToReview).toBe(false);
+    });
+
     it('a coach invites a player who then sets a password', async () => {
       const email = `invited-${Date.now()}@test.local`;
       expect((await t.http().post('/api/auth/invitations').set(as(player)).send({ email, firstName: 'In', lastName: 'Vited' })).status).toBe(403);
