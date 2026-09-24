@@ -8,6 +8,8 @@ import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
+import { BAND_BY_SUBPOSITION, BANDS, bandsCovered } from './bands';
+import { dealTeams, Line } from './team-deal';
 import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
 import { pointsForResult } from './points-for-result';
@@ -21,34 +23,6 @@ const DEFAULT_TEAM_COUNT = 2;
 // would swamp real, meaningful gaps between players — this is only enough to make truly
 // tied players swap places between regenerations, never to flip a genuine mismatch.
 const SCORE_JITTER_RANGE = 2;
-
-const BAND_BY_SUBPOSITION: Record<PlayerSubPosition, PlayerPosition> = {
-  [PlayerSubPosition.GOALKEEPER]: PlayerPosition.GOALKEEPER,
-  [PlayerSubPosition.CENTER_BACK]: PlayerPosition.DEFENDER,
-  [PlayerSubPosition.RIGHT_BACK]: PlayerPosition.DEFENDER,
-  [PlayerSubPosition.LEFT_BACK]: PlayerPosition.DEFENDER,
-  [PlayerSubPosition.DEFENSIVE_MIDFIELDER]: PlayerPosition.MIDFIELDER,
-  [PlayerSubPosition.CENTER_MIDFIELDER]: PlayerPosition.MIDFIELDER,
-  [PlayerSubPosition.RIGHT_MIDFIELDER]: PlayerPosition.MIDFIELDER,
-  [PlayerSubPosition.LEFT_MIDFIELDER]: PlayerPosition.MIDFIELDER,
-  [PlayerSubPosition.ATTACKING_MIDFIELDER]: PlayerPosition.MIDFIELDER,
-  [PlayerSubPosition.RIGHT_WINGER]: PlayerPosition.FORWARD,
-  [PlayerSubPosition.LEFT_WINGER]: PlayerPosition.FORWARD,
-  [PlayerSubPosition.STRIKER]: PlayerPosition.FORWARD,
-};
-
-const BANDS: PlayerPosition[] = [
-  PlayerPosition.GOALKEEPER,
-  PlayerPosition.DEFENDER,
-  PlayerPosition.MIDFIELDER,
-  PlayerPosition.FORWARD,
-];
-
-/** A player "covers" a band as soon as ANY of their selected positions maps to it —
- * a defender who also plays midfield can count as midfield cover if a team needs one. */
-function bandsCovered(user: User): Set<PlayerPosition> {
-  return new Set((user.positions ?? []).map((p) => BAND_BY_SUBPOSITION[p]));
-}
 
 @Injectable()
 export class TeamBalancingService {
@@ -156,78 +130,32 @@ export class TeamBalancingService {
       .sort((a, b) => jitteredScore(b) - jitteredScore(a));
 
     const effectiveTeamCount = Math.min(teamCount, Math.max(2, totalHeadcount));
-    const teamSums = new Array(effectiveTeamCount).fill(0);
+
+    // The split itself: equal headcounts first, then line by line, best player first, dealt
+    // one team after the other (see dealTeams for the rules and their order of priority).
+    const { teamByUserId, lineByUserId } = dealTeams(
+      presentAttendances.map((a) => ({
+        userId: a.userId,
+        score: scoreByUserId.get(a.userId) ?? 0,
+        orderKey: jitteredScore(a.userId),
+        positions: a.user.positions ?? [],
+      })),
+      effectiveTeamCount,
+    );
     const teamCounts = new Array(effectiveTeamCount).fill(0);
     const assignments: { userId: string; guestLabel: null; teamIndex: number }[] = [];
-
-    // Real players first, balanced by skill score.
     for (const userId of presentUserIds) {
-      // Eligible teams are only those tied for the CURRENT lowest headcount — picking
-      // purely by lowest skill-sum (as before) could keep favoring the same team forever
-      // whenever several players share a score (very common: 0 is the default for anyone
-      // with no stats yet), producing something like 11 vs 7 instead of 9 vs 9. Restricting
-      // to the least-full team(s) first, and breaking ties by skill-sum, keeps sizes within
-      // 1 of each other no matter how scores cluster.
-      const minCount = Math.min(...teamCounts);
-      let minTeam = -1;
-      for (let i = 0; i < effectiveTeamCount; i++) {
-        if (teamCounts[i] > minCount) continue;
-        if (minTeam === -1 || teamSums[i] < teamSums[minTeam]) minTeam = i;
-      }
-      teamSums[minTeam] += scoreByUserId.get(userId) ?? 0;
-      teamCounts[minTeam] += 1;
-      assignments.push({ userId, guestLabel: null, teamIndex: minTeam });
+      const teamIndex = teamByUserId.get(userId)!;
+      teamCounts[teamIndex] += 1;
+      assignments.push({ userId, guestLabel: null, teamIndex });
     }
-
-    // Safety net: if a whole team ends up with zero coverage on a broad position band
-    // (goalkeeper/defense/midfield/attack) while another team has a spare, swap one player
-    // in — best-effort only, does not attempt full multi-band optimization.
     const userById = new Map(presentAttendances.map((a) => [a.userId, a.user]));
-    for (const band of BANDS) {
-      const coverers = presentUserIds.filter((id) => bandsCovered(userById.get(id)!).has(band));
-      if (coverers.length === 0) continue;
-
-      const coverageByTeam = new Array(effectiveTeamCount).fill(0);
-      for (const id of coverers) {
-        const assignment = assignments.find((a) => a.userId === id)!;
-        coverageByTeam[assignment.teamIndex]++;
-      }
-
-      for (let emptyTeam = 0; emptyTeam < effectiveTeamCount; emptyTeam++) {
-        if (coverageByTeam[emptyTeam] > 0) continue;
-
-        const donorTeam = coverageByTeam.findIndex((c, i) => i !== emptyTeam && c >= 2);
-        if (donorTeam === -1) continue;
-
-        const moverId = coverers.find(
-          (id) => assignments.find((a) => a.userId === id)!.teamIndex === donorTeam,
-        );
-        if (!moverId) continue;
-        const moverScore = scoreByUserId.get(moverId) ?? 0;
-
-        const emptyTeamMembers = assignments.filter((a) => a.teamIndex === emptyTeam);
-        if (emptyTeamMembers.length === 0) continue;
-        const partner = emptyTeamMembers.reduce((closest, candidate) => {
-          const candidateScore = scoreByUserId.get(candidate.userId) ?? 0;
-          const closestScore = scoreByUserId.get(closest.userId) ?? 0;
-          return Math.abs(candidateScore - moverScore) < Math.abs(closestScore - moverScore)
-            ? candidate
-            : closest;
-        });
-
-        const moverAssignment = assignments.find((a) => a.userId === moverId)!;
-        moverAssignment.teamIndex = emptyTeam;
-        partner.teamIndex = donorTeam;
-        coverageByTeam[donorTeam]--;
-        coverageByTeam[emptyTeam]++;
-      }
-    }
 
     // Admin-declared "never on the same team" pairs (see PlayerSeparationRulesService) —
     // best-effort: if constraints overlap too much to all be satisfied with this many teams,
     // whichever can't be resolved safely is left as-is rather than left half-fixed.
     const separationRules = await this.separationRulesRepository.find();
-    this.resolveSeparationRules(assignments, separationRules, scoreByUserId, effectiveTeamCount);
+    this.resolveSeparationRules(assignments, separationRules, scoreByUserId, effectiveTeamCount, lineByUserId);
 
     // Guests ("+1"/"+2") have no skill score — spread by headcount as a default. But when a
     // guest's position was specified, prefer whichever team is thinnest on that band (real
@@ -260,22 +188,23 @@ export class TeamBalancingService {
           : `Invité de ${attendance.user.firstName} #${i + 1}`;
         const band = guest?.position ? BAND_BY_SUBPOSITION[guest.position] : null;
 
-        let minTeam = 0;
+        // Headcount always comes first, exactly like the real players above: only the teams
+        // tied for the CURRENT lowest headcount are candidates, and a declared position only
+        // chooses among those. Letting the position decide on its own (headcount as a mere
+        // tie-break) could stack several positioned guests onto one team — with 13 players and
+        // 3 guests it produced 9 against 7 — since each guest looks at its own band only.
+        const minCount = Math.min(...teamCounts);
+        const candidates: number[] = [];
+        for (let t = 0; t < effectiveTeamCount; t++) {
+          if (teamCounts[t] === minCount) candidates.push(t);
+        }
+        let minTeam = candidates[0];
         if (band) {
           const coverage = bandCoverageByTeam.get(band)!;
-          for (let t = 1; t < effectiveTeamCount; t++) {
-            if (
-              coverage[t] < coverage[minTeam] ||
-              (coverage[t] === coverage[minTeam] && teamCounts[t] < teamCounts[minTeam])
-            ) {
-              minTeam = t;
-            }
+          for (const t of candidates) {
+            if (coverage[t] < coverage[minTeam]) minTeam = t;
           }
           coverage[minTeam] += 1;
-        } else {
-          for (let t = 1; t < effectiveTeamCount; t++) {
-            if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
-          }
         }
         teamCounts[minTeam] += 1;
         guestAssignments.push({
@@ -307,7 +236,8 @@ export class TeamBalancingService {
 
   /** Mutates assignments in place, swapping one member of a violating pair to another team
    * whenever two admin-separated players land together — picks whichever legal swap partner
-   * has the closest skill score to minimize balance disruption. "Legal" is checked in BOTH
+   * has the closest skill score — within the mover's own line when there is one — to minimize
+   * balance disruption. "Legal" is checked in BOTH
    * directions: pulling the candidate onto the staying player's team must not recreate a
    * different violation there, AND pushing the mover onto the candidate's team must not
    * recreate a different violation there either — e.g. someone excluded from two other
@@ -320,6 +250,7 @@ export class TeamBalancingService {
     rules: { userAId: string; userBId: string }[],
     scoreByUserId: Map<string, number | null>,
     teamCount: number,
+    lineByUserId: Map<string, Line> = new Map(),
   ): void {
     if (rules.length === 0 || teamCount < 2) return;
     const assignmentByUserId = new Map(assignments.map((a) => [a.userId, a]));
@@ -356,7 +287,12 @@ export class TeamBalancingService {
         ) {
           continue;
         }
-        const diff = Math.abs((scoreByUserId.get(candidate.userId) ?? 0) - (scoreByUserId.get(mover.userId) ?? 0));
+        // Someone from the SAME line first (a forward for a forward keeps the line-by-line split
+        // intact), and only then whoever is closest in score.
+        const sameLine = lineByUserId.get(candidate.userId) === lineByUserId.get(mover.userId) ? 0 : 1;
+        const diff =
+          sameLine * 1000 +
+          Math.abs((scoreByUserId.get(candidate.userId) ?? 0) - (scoreByUserId.get(mover.userId) ?? 0));
         if (diff < bestDiff) {
           bestDiff = diff;
           bestCandidate = candidate;
