@@ -196,6 +196,24 @@ CVE-2026-8328
 # reachability argument as this file's libxml2/Python entries above.
 CVE-2026-93990
 
+# CVE-2026-88806 (libX11: heap-based buffer overflow via a malicious X server, HIGH) and
+# CVE-2026-88807 (libXrender: code injection via heap overflow in RenderQueryPictFormats,
+# HIGH) hit libx11-6/libx11-data/libx11-xcb1 (installed 2:1.8.4-2+deb12u2) and libxrender1
+# (installed 1:0.9.10-1.1) — Status: affected, no Fixed Version for either. Same category as
+# libexpat1 above: all three are explicitly listed in apps/api/Dockerfile's own `apt-get
+# install --no-install-recommends` block, X11 client libraries headless Chrome links against
+# — not pulled in incidentally. Re-verified 2026-09-24: a fresh `docker run node:22-bookworm-
+# slim` has none of them installed (genuinely this Dockerfile's own explicit dependency, not
+# the base image), and `apt-cache policy libx11-6 libxrender1` in it shows those exact
+# versions as both the current candidate and what's already installed — nothing newer for
+# `apt-get upgrade` (already run in the Dockerfile) to move to; no Debian bookworm fix
+# published yet. Unreachable regardless: both need a malicious X server or attacker-supplied
+# font/picture-format data actually reaching Chrome's X11/Xrender code path — the FFF scraper
+# runs Chrome in pure headless mode (no X server, ever) and only ever visits one fixed,
+# trusted FFF domain over HTTPS, never attacker- or user-supplied content.
+CVE-2026-88806
+CVE-2026-88807
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
