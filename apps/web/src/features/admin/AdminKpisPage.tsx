@@ -183,7 +183,8 @@ function PlayerDetailDialog({
                   Niveau et performance
                 </p>
                 <div className="flex flex-col divide-y">
-                  <DetailRow label="Niveau" value={stats.skillScore ?? '— (jamais noté)'} />
+                  <DetailRow label="Niveau entraînement (équipes)" value={stats.trainingLevel ?? '—'} />
+                  <DetailRow label="Niveau match" value={stats.skillScore ?? '— (aucun match noté)'} />
                   <DetailRow
                     label="Note moyenne"
                     value={stats.averageRating != null ? `${stats.averageRating.toFixed(1)}/10 (${stats.ratingsCount} note${stats.ratingsCount > 1 ? 's' : ''})` : '—'}
@@ -345,12 +346,11 @@ export function AdminKpisPage() {
   const kpisQuery = useQuery({ queryKey: ['admin', 'kpis'], queryFn: fetchAdminKpis })
   const data = kpisQuery.data
 
-  // Same all-time skillScore TeamBalancingService.generateTeams uses to balance training
-  // teams (StatsService.getPlayerStats() with no season filter) — not shown anywhere else
-  // in the app (StatsPage only ever uses it to order the roster table, never renders the
-  // number), admin-only visibility here is deliberate.
+  // The all-time training level TeamBalancingService.generateTeams splits the training teams
+  // on (StatsService.getPlayerStats() with no season filter) — the average points per scored
+  // training session on 0-100. Admin-only visibility here is deliberate.
   const statsQuery = useQuery({ queryKey: ['stats', 'players', 'all-time'], queryFn: () => fetchPlayerStats() })
-  const skillScoreByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s.skillScore]) ?? [])
+  const levelByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s.trainingLevel]) ?? [])
   const statsByUserId = new Map(statsQuery.data?.map((s) => [s.userId, s]) ?? [])
 
   const [selectedPlayer, setSelectedPlayer] = useState<UserActivityKpi | null>(null)
@@ -382,9 +382,8 @@ export function AdminKpisPage() {
         case 'role':
           return ROLE_LABELS[p.role]
         case 'level':
-          // No score yet sorts as the lowest, not last-alphabetically or NaN — a never-rated
-          // player is meaningfully "below" a 0, but shouldn't scatter the sort.
-          return skillScoreByUserId.get(p.userId) ?? -1
+          // Missing sorts as the lowest, not last-alphabetically or NaN.
+          return levelByUserId.get(p.userId) ?? -1
         case 'lastSeen':
           return p.lastSeenAt ? new Date(p.lastSeenAt).getTime() : -Infinity
         case 'active7':
@@ -404,7 +403,7 @@ export function AdminKpisPage() {
       return typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : (av as number) - (bv as number)
     })
     return sortDir === 'asc' ? sorted : sorted.reverse()
-  }, [data?.players, sortKey, sortDir, skillScoreByUserId])
+  }, [data?.players, sortKey, sortDir, levelByUserId])
 
   return (
     <div className="flex flex-col gap-6">
@@ -489,7 +488,7 @@ export function AdminKpisPage() {
                   <TableRow>
                     <SortableHeader label="Joueur" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={toggleSort} />
                     <SortableHeader label="Rôle" sortKey="role" active={sortKey === 'role'} dir={sortDir} onSort={toggleSort} />
-                    <SortableHeader label="Niveau" sortKey="level" active={sortKey === 'level'} dir={sortDir} onSort={toggleSort} />
+                    <SortableHeader label="Niveau équipes" sortKey="level" active={sortKey === 'level'} dir={sortDir} onSort={toggleSort} />
                     <SortableHeader
                       label="Dernière connexion"
                       sortKey="lastSeen"
@@ -539,7 +538,7 @@ export function AdminKpisPage() {
                       </TableCell>
                       <TableCell>{ROLE_LABELS[p.role]}</TableCell>
                       <TableCell className="font-medium">
-                        {skillScoreByUserId.get(p.userId) ?? '—'}
+                        {levelByUserId.get(p.userId) ?? '—'}
                       </TableCell>
                       <TableCell>
                         {p.lastSeenAt

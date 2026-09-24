@@ -236,7 +236,12 @@ export interface PlayerStats {
   defensiveMatchesStarted: number
   cleanSheets: number
   goalsConceded: number
+  /** Match level (peer ratings, performance, discipline) — null until someone has been rated in a
+   * match. Training plays no part in it. */
   skillScore: number | null
+  /** 0-100, from the average points per scored training session alone — what splits the training
+   * teams. Never null: a player with no scored session sits on the club average. */
+  trainingLevel: number
 }
 
 export interface MonthlyChallengeEntry {
@@ -348,16 +353,6 @@ export interface AccountLevel {
   tier: AccountTier
   nextTier: AccountTier | null
   nextTierScore: number | null
-}
-
-/** A single player as seen from the currently-signed-in coach's rating list — `rating` is
- * always THIS coach's own note, never the computed skillScore or another coach's opinion
- * (see the API's PlayerRatingsController: a coach only ever reads their own ratings back). */
-export interface PlayerToRate {
-  userId: string
-  firstName: string
-  lastName: string
-  rating: number | null
 }
 
 export interface PlayerRating {

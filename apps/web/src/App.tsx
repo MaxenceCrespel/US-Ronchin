@@ -28,7 +28,6 @@ const MatchDetailPage = lazy(() => import('@/features/matches/MatchDetailPage').
 const StatsPage = lazy(() => import('@/features/stats/StatsPage').then((m) => ({ default: m.StatsPage })))
 const TrophyCasePage = lazy(() => import('@/features/awards/TrophyCasePage').then((m) => ({ default: m.TrophyCasePage })))
 const ImportMatchPdfPage = lazy(() => import('@/features/pdf-import/ImportMatchPdfPage').then((m) => ({ default: m.ImportMatchPdfPage })))
-const PlayerRatingsPage = lazy(() => import('@/features/players/PlayerRatingsPage').then((m) => ({ default: m.PlayerRatingsPage })))
 
 function PageFallback() {
   return (
@@ -75,7 +74,6 @@ function App() {
                 <Route element={<RequireAuth roles={['COACH']} />}>
                   <Route path="/admin/import-pdf" element={<ImportMatchPdfPage />} />
                   <Route path="/profile/club" element={<ClubSettingsPage />} />
-                  <Route path="/player-ratings" element={<PlayerRatingsPage />} />
                 </Route>
 
                 <Route element={<RequireAuth roles={['SUPERADMIN']} />}>

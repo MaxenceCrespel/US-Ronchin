@@ -11,7 +11,6 @@ import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
 import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
-import { PlayerRatingsReminder } from '@/features/players/PlayerRatingsReminder'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
@@ -177,7 +176,6 @@ export function Layout() {
         </header>
         <OfflineBanner />
         <VoteReminderBanner />
-        <PlayerRatingsReminder />
         <InstallAppBanner />
         <NotificationPrompt />
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6">

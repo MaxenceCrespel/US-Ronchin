@@ -1,6 +1,5 @@
 import { errorMessage } from '@/lib/error-message'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import {
@@ -12,7 +11,6 @@ import {
   Pencil,
   QrCode,
   Search,
-  Star,
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
@@ -729,7 +727,6 @@ export function PlayersPage() {
     mutationFn: (userId: string) => approveUser(userId),
     onSuccess: (approved) => {
       queryClient.invalidateQueries({ queryKey: ['players'] })
-      queryClient.invalidateQueries({ queryKey: ['player-ratings'] })
       setJustApproved(approved)
     },
   })
@@ -755,14 +752,6 @@ export function PlayersPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Effectif</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {isCoach && (
-            <Button variant="outline" asChild>
-              <Link to="/player-ratings">
-                <Star className="size-4" aria-hidden="true" />
-                Noter les joueurs
-              </Link>
-            </Button>
-          )}
           {isCoach && <InvitePlayerDialog />}
         </div>
       </div>
@@ -981,26 +970,18 @@ export function PlayersPage() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            Deux infos à compléter pour ne rien oublier. Rien d'obligatoire tout de suite : tant qu'elles manquent,
-            elles restent dans « À traiter » sur l'accueil.
+            Pense à renseigner son ancienneté. Rien d'obligatoire tout de suite : tant qu'elle manque, elle reste dans
+            « À traiter » sur l'accueil.
           </p>
           <ul className="flex flex-col gap-2 text-sm">
             <li className="rounded-lg border p-3">
               <strong>Ancienneté</strong> — depuis le crayon sur sa ligne dans la liste, champ « Ancienneté au club »
               (elle décide de la priorité sur un entraînement complet).
             </li>
-            <li className="rounded-lg border p-3">
-              <strong>Niveau global</strong> — une note de 1 à 10 sur la page « Noter les joueurs ».
-            </li>
           </ul>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setJustApproved(null)}>
-              Plus tard
-            </Button>
-            <Button asChild>
-              <Link to="/player-ratings" onClick={() => setJustApproved(null)}>
-                Noter son niveau
-              </Link>
+          <div className="flex justify-end">
+            <Button type="button" onClick={() => setJustApproved(null)}>
+              Compris
             </Button>
           </div>
         </DialogContent>

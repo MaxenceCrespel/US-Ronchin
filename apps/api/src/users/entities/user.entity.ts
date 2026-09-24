@@ -150,14 +150,6 @@ export class User {
   @Column({ name: 'login_count', type: 'int', default: 0 })
   loginCount: number;
 
-  /** Coach/admin only — when this coach last got the "some players still need a level"
-   * push (PushNotificationsScheduler.handlePlayerRatingsReminders). Null means never sent
-   * (or nothing's ever been missing). Reset implicitly the moment they finish: the scheduler
-   * simply stops touching this once nothing's missing, so re-appearing missing ratings later
-   * (a new player) don't wait out a stale 7-day window from a much earlier reminder. */
-  @Column({ name: 'player_ratings_reminder_sent_at', type: 'timestamp', nullable: true })
-  playerRatingsReminderSentAt: Date | null;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

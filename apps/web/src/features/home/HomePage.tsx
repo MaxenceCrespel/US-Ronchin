@@ -4,7 +4,7 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake, Gauge, Star } from 'lucide-react'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake, Gauge } from 'lucide-react'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,6 @@ import {
 } from '@/features/matches/api'
 import { fetchPlayerStats, fetchTeamStats } from '@/features/stats/api'
 import { fetchPlayers } from '@/features/players/api'
-import { usePendingPlayerRatings } from '@/features/players/usePendingPlayerRatings'
 import { MyStatsCard } from '@/features/stats/MyStatsCard'
 import { MonthlyChallengesCard } from '@/features/stats/MonthlyChallengesCard'
 
@@ -489,13 +488,11 @@ export function HomePage() {
   const myStats = playerStatsQuery.data?.find((p) => p.userId === user?.id)
 
   const pendingPlayers = (playersQuery.data ?? []).filter((p) => p.status === 'PENDING')
-  // Accepted players whose seniority nobody has picked yet (see User.seniorityToReview), and —
-  // for this coach — players they haven't rated yet: both are data to fill in, so they sit in
-  // "À traiter" rather than only behind the ratings reminder.
+  // Accepted players whose seniority nobody has picked yet (see User.seniorityToReview): data
+  // to fill in, so it sits in "À traiter".
   const playersNeedingSeniority = (playersQuery.data ?? []).filter(
     (p) => p.status === 'ACTIVE' && p.seniorityToReview,
   )
-  const { missing: playersNeedingRating } = usePendingPlayerRatings()
 
   // Days until the next occurrence of a MM-DD birthday, wrapping to next year once it's
   // passed this year — 0 means today. Kept to a week so the card stays a quick glance,
@@ -717,19 +714,6 @@ export function HomePage() {
                     ? `Ancienneté à renseigner — ${playersNeedingSeniority[0].firstName} ${playersNeedingSeniority[0].lastName}`
                     : `Ancienneté à renseigner pour ${playersNeedingSeniority.length} joueurs`,
                 to: '/players',
-              },
-            ]
-          : []),
-        ...(playersNeedingRating.length > 0
-          ? [
-              {
-                id: 'players-rating',
-                icon: Star,
-                label:
-                  playersNeedingRating.length === 1
-                    ? `Niveau à renseigner — ${playersNeedingRating[0].firstName} ${playersNeedingRating[0].lastName}`
-                    : `Niveau à renseigner pour ${playersNeedingRating.length} joueurs`,
-                to: '/player-ratings',
               },
             ]
           : []),

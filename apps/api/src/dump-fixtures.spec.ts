@@ -51,7 +51,7 @@ maybe('dump API fixtures for the web tests', () => {
       '/api/stats/last-attendance-trophy-winner', '/api/stats/last-training-champion-winner',
       '/api/badges/me', '/api/badges/level', '/api/badges/levels', '/api/awards/categories', '/api/awards/monthly',
       '/api/awards/trophy-count', '/api/standings', '/api/standings/logs', '/api/training-ranking', '/api/settings',
-      '/api/push/vapid-public-key', '/api/fff-sync/logs', '/api/training-guest-matches', '/api/player-ratings/mine',
+      '/api/push/vapid-public-key', '/api/fff-sync/logs', '/api/training-guest-matches',
       `/api/matches/${matchIds[0]}/ratings`,
       '/api/badges/holders', '/api/admin/kpis', '/api/player-separation-rules/all',
       ...[...matchIds, upcoming.id].flatMap((m) => [

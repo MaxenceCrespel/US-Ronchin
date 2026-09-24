@@ -21,7 +21,6 @@ const ROUTES: RouteMeta[] = [
   { pattern: /^\/matches\/[^/]+$/, title: 'Détail du match', ownH1: false },
   { pattern: /^\/stats$/, title: 'Stats', ownH1: true },
   { pattern: /^\/players$/, title: 'Effectif', ownH1: true },
-  { pattern: /^\/player-ratings$/, title: 'Noter les joueurs', ownH1: true },
   { pattern: /^\/profile$/, title: 'Mon profil', ownH1: false },
   { pattern: /^\/profile\/edit$/, title: 'Modifier mon profil', ownH1: false },
   { pattern: /^\/profile\/badges$/, title: 'Mes badges', ownH1: false },

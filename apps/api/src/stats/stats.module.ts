@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
-import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { Match } from '../matches/entities/match.entity';
 import { MatchEvent } from '../matches/entities/match-event.entity';
 import { MatchComposition } from '../matches/entities/match-composition.entity';
@@ -27,7 +26,6 @@ import { StatsController } from './stats.controller';
       Attendance,
       TrainingSession,
       TrainingTeamAssignment,
-      CoachPlayerRating,
     ]),
   ],
   controllers: [StatsController],

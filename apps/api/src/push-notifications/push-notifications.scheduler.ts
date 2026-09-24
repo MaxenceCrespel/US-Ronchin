@@ -11,7 +11,6 @@ import { isMotmRevealed } from '../matches/motm-utils';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
-import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { AttendancePollReminder, PollReminderKind } from './entities/attendance-poll-reminder.entity';
 import { PushNotificationsService } from './push-notifications.service';
 import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
@@ -39,8 +38,6 @@ export class PushNotificationsScheduler {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(AttendancePollReminder)
     private readonly pollRemindersRepository: Repository<AttendancePollReminder>,
-    @InjectRepository(CoachPlayerRating)
-    private readonly coachRatingsRepository: Repository<CoachPlayerRating>,
     private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
@@ -305,62 +302,6 @@ export class PushNotificationsScheduler {
       } catch (error) {
         this.logger.warn(
           `Échec du rappel d'anniversaire pour ${birthdayUser.id}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
-    }
-  }
-
-  /** Once a day, nudges any coach/admin who still hasn't rated every active player — capped
-   * at once every REMINDER_INTERVAL_DAYS so it doesn't nag daily while the same handful of
-   * players stay unrated. The new-player case is handled separately and immediately, by
-   * PlayerRatingsService.notifyCoachesOfNewPlayer right when an account is approved — this
-   * cron only covers the "never got around to finishing" case. */
-  @Cron('0 0 9 * * *', { timeZone: 'Europe/Paris' })
-  async handlePlayerRatingsReminders() {
-    const REMINDER_INTERVAL_DAYS = 7;
-    const now = Date.now();
-
-    const [coaches, ratablePlayers, allRatings] = await Promise.all([
-      this.usersRepository.find({ where: { role: UserRole.COACH, status: UserStatus.ACTIVE } }),
-      this.usersRepository.find({
-        where: [
-          { role: UserRole.PLAYER, status: UserStatus.ACTIVE },
-          { isPlayingCoach: true, status: UserStatus.ACTIVE },
-        ],
-      }),
-      this.coachRatingsRepository.find(),
-    ]);
-    if (coaches.length === 0 || ratablePlayers.length === 0) return;
-
-    const ratedIdsByCoach = new Map<string, Set<string>>();
-    for (const r of allRatings) {
-      const set = ratedIdsByCoach.get(r.coachId) ?? new Set<string>();
-      set.add(r.playerId);
-      ratedIdsByCoach.set(r.coachId, set);
-    }
-
-    for (const coach of coaches) {
-      const targetIds = ratablePlayers.map((p) => p.id).filter((id) => id !== coach.id);
-      const rated = ratedIdsByCoach.get(coach.id) ?? new Set<string>();
-      const missing = targetIds.filter((id) => !rated.has(id)).length;
-      if (missing === 0) continue;
-
-      const daysSinceLastReminder = coach.playerRatingsReminderSentAt
-        ? (now - coach.playerRatingsReminderSentAt.getTime()) / 86_400_000
-        : Infinity;
-      if (daysSinceLastReminder < REMINDER_INTERVAL_DAYS) continue;
-
-      try {
-        await this.pushNotificationsService.sendToUsers([coach.id], {
-          title: `${missing} joueur${missing > 1 ? 's' : ''} à noter`,
-          body: `Tu as encore ${missing} joueur${missing > 1 ? 's' : ''} à noter. Ça prend quelques minutes.`,
-          url: '/player-ratings',
-        });
-        coach.playerRatingsReminderSentAt = new Date();
-        await this.usersRepository.save(coach);
-      } catch (error) {
-        this.logger.warn(
-          `Échec du rappel de notation des joueurs pour ${coach.id}: ${error instanceof Error ? error.message : error}`,
         );
       }
     }

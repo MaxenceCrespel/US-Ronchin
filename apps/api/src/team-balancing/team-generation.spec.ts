@@ -67,7 +67,7 @@ async function generate(opts: {
       { provide: getRepositoryToken(PlayerSeparationRule), useValue: { find: jest.fn().mockResolvedValue(opts.rules ?? []) } },
       {
         provide: StatsService,
-        useValue: { getPlayerStats: jest.fn().mockResolvedValue(opts.players.map((p) => ({ userId: p.id, skillScore: p.score }))) },
+        useValue: { getPlayerStats: jest.fn().mockResolvedValue(opts.players.map((p) => ({ userId: p.id, trainingLevel: p.score }))) },
       },
       { provide: PushNotificationsService, useValue: { sendToUsers: jest.fn().mockResolvedValue(undefined) } },
     ],

@@ -16,12 +16,9 @@ import { pointsForResult } from './points-for-result';
 
 const DEFAULT_TEAM_COUNT = 2;
 
-// skillScore is 0-100 — a ±1-point spread (so up to 2 points apart) is well within noise
-// for a score built from recency-weighted ratings, damped confidence priors, etc. (see
-// StatsService.getPlayerStats). Kept narrow on purpose: the confidence-shrink formulas
-// already compress the score range compared to raw averages, so a jitter as wide as before
-// would swamp real, meaningful gaps between players — this is only enough to make truly
-// tied players swap places between regenerations, never to flip a genuine mismatch.
+// The training level is 0-100 — a ±1-point spread (so up to 2 points apart) is well within
+// noise for an average of a handful of sessions. Kept narrow on purpose: this is only enough
+// to make truly tied players swap places between regenerations, never to flip a genuine gap.
 const SCORE_JITTER_RANGE = 2;
 
 @Injectable()
@@ -108,7 +105,12 @@ export class TeamBalancingService {
       guestSourceAttendances.reduce((sum, a) => sum + a.confirmedGuestCount, 0);
 
     const playerStats = await this.statsService.getPlayerStats();
-    const scoreByUserId = new Map(playerStats.map((p) => [p.userId, p.skillScore]));
+    // Training teams are split on the training record alone — the average points per scored
+    // training session, on a 0-100 scale (see StatsService trainingLevel) — not on the general
+    // level: many players train without ever playing a match (unlicensed), so match ratings
+    // can't describe them, and a player who keeps winning sees his average rise and gets split
+    // from his usual teammates at the next generation, which keeps the teams changing.
+    const scoreByUserId = new Map(playerStats.map((p) => [p.userId, p.trainingLevel]));
 
     // A 45 and a 55 aren't meaningfully different players — sorting strictly by score made
     // "Régénérer" fully deterministic (same inputs → same split, every single time, since
