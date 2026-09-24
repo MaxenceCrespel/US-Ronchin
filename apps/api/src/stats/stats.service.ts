@@ -20,7 +20,7 @@ import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { pointsForResult, MAX_POINTS_PER_SESSION } from '../team-balancing/points-for-result';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
-import { parisToday } from '../common/utils/paris-time';
+import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 
 // skillScore weights — see getPlayerStats() below for the full breakdown. Sum of the
 // positive components is 105 (50 + 10 + 10 + 5 + 30), leaving headroom before the
@@ -178,6 +178,19 @@ function effectiveAttendanceStatus(
   return sessionIsPast ? AttendanceStatus.ABSENT : null;
 }
 
+/** A session only actually counts toward attendance history once it's genuinely over — a
+ * same-day-but-not-yet-happened (or currently in progress) session used to be treated as
+ * "past" by a plain `date <= today` check, which let a player's just-declared answer
+ * (effectiveStatus falls back to the declaration when there's no real pointage yet) count as
+ * a confirmed PRESENT before the training had even started — e.g. unlocking "Increvable"
+ * (5 in a row) off a poll answer for tonight's session instead of 5 sessions that actually
+ * happened. Comparing the real end instant (see parisWallTimeToDate) instead of the bare
+ * date fixes that without touching effectiveStatus's own declared-as-best-guess fallback,
+ * which is still exactly right for a genuinely past session the coach hasn't pointed yet. */
+function sessionHasEnded(session: Pick<TrainingSession, 'date' | 'endTime'>, now: number): boolean {
+  return parisWallTimeToDate(session.date, session.endTime).getTime() <= now;
+}
+
 @Injectable()
 export class StatsService {
   constructor(
@@ -214,14 +227,14 @@ export class StatsService {
    * (a player who never answers the poll is treated as absent, not skipped).
    * Scoped to `bounds` when provided: sessions outside the season don't count and don't extend the streak. */
   private async getPresenceStreaks(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
     const [sessions, attendances] = await Promise.all([
       this.sessionsRepository.find(),
       this.attendancesRepository.find(),
     ]);
 
     const pastSessions = sessions
-      .filter((s) => !s.cancelled && s.date <= today && (!bounds || isInSeason(s.date, bounds)))
+      .filter((s) => !s.cancelled && sessionHasEnded(s, now) && (!bounds || isInSeason(s.date, bounds)))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
     const attendanceBySession = new Map<string, Attendance[]>();
@@ -381,7 +394,7 @@ export class StatsService {
       coachAverageByPlayerId.set(playerId, list.reduce((sum, v) => sum + v, 0) / list.length);
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
     const matchById = new Map(matches.map((m) => [m.id, m]));
     const matchDateById = new Map(matches.map((m) => [m.id, m.date]));
     const sessionDateById = new Map(sessions.map((s) => [s.id, s.date]));
@@ -418,7 +431,7 @@ export class StatsService {
     // Every past, non-cancelled session counts toward a player's attendance record — a session
     // with no answer at all defaults to absent (effectiveAttendanceStatus), it isn't just excluded.
     const pastSessions = sessions.filter(
-      (s) => !s.cancelled && s.date <= today && sessionInSeason(s.id),
+      (s) => !s.cancelled && sessionHasEnded(s, now) && sessionInSeason(s.id),
     );
     const attendanceBySession = new Map<string, Map<string, Attendance>>();
     for (const a of attendances) {
@@ -848,10 +861,13 @@ export class StatsService {
         status: AttendanceStatus.PRESENT,
       })
       .andWhere('session.date BETWEEN :start AND :end', { start: monthStart, end: monthEnd })
-      // Falling back to the declared status must not reach into the future — a player who
-      // simply declared "présent" for next week hasn't attended anything yet. Only a
-      // session that's actually happened can have that declaration trusted or overridden.
-      .andWhere('session.date <= :today', { today: todayParis })
+      // Falling back to the declared status must not count a session that hasn't actually
+      // happened yet — a player who simply declared "présent" for tonight's session hasn't
+      // attended anything yet, and there's no real pointage to override it with either. A
+      // date-only comparison can't tell an evening session from one already over, so today
+      // is excluded outright rather than trusting a same-day declaration early (see
+      // sessionHasEnded's own comment for the equivalent JS-side fix).
+      .andWhere('session.date < :today', { today: todayParis })
       .select('attendance.userId', 'userId')
       .addSelect('user.firstName', 'firstName')
       .addSelect('user.lastName', 'lastName')
