@@ -7,7 +7,7 @@ import { AttendanceStatusChange } from './entities/attendance-status-change.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
-import { pickNextWaitlisted, priorityRank } from './attendance-cap';
+import { pickNextWaitlisted, pickRowToLoseAGuest, priorityRank } from './attendance-cap';
 
 export interface GuestNameInput {
   firstName: string;
@@ -148,20 +148,28 @@ export class AttendancesService {
         if (otherHeadcount < cap) {
           attendance.confirmed = true;
         } else {
-          // Full — an arriving player who outranks the lowest-priority confirmed player
-          // still bumps them back to the waitlist instead of joining it themselves (see
-          // evictLowerPriority) — not just "licensed bumps non-licensed" but the full
-          // 3-tier priority (licensed, then seniority bracket). Two players of equal rank
-          // fighting over the same last slot still just waitlists the later one.
-          const arrivingUser = await this.usersRepository.findOne({ where: { id: userId } });
-          const evicted = arrivingUser
-            ? await this.evictLowerPriority(trainingSessionId, others, userId, arrivingUser)
-            : null;
-          if (evicted) {
-            otherHeadcount -= evicted.freedHeadcount;
+          // Full. A confirmed GUEST always gives way first: a player with an account outranks
+          // any guest, whoever brought them (see pickRowToLoseAGuest) — so if a guest holds a
+          // place, that's the one the arriving player takes, without touching any player.
+          if (await this.evictGuest(trainingSessionId, others, userId)) {
+            otherHeadcount -= 1;
             attendance.confirmed = true;
           } else {
-            attendance.confirmed = false;
+            // No guest to bump — an arriving player who outranks the lowest-priority
+            // confirmed player still bumps them back to the waitlist instead of joining it
+            // themselves (see evictLowerPriority) — not just "licensed bumps non-licensed"
+            // but the full 3-tier priority (licensed, then seniority bracket). Two players of
+            // equal rank fighting over the same last slot still just waitlists the later one.
+            const arrivingUser = await this.usersRepository.findOne({ where: { id: userId } });
+            const evicted = arrivingUser
+              ? await this.evictLowerPriority(trainingSessionId, others, userId, arrivingUser)
+              : null;
+            if (evicted) {
+              otherHeadcount -= evicted.freedHeadcount;
+              attendance.confirmed = true;
+            } else {
+              attendance.confirmed = false;
+            }
           }
         }
       }
@@ -279,11 +287,12 @@ export class AttendancesService {
 
   /** Headcount just freed up — fills it as far as it goes, one unit of demand at a time:
    * first any waitlisted PLAYER (licensed, then longest-waiting — see pickNextWaitlisted),
-   * who brings themselves AND as many of their own already-declared guests as fit; once no
-   * waitlisted player fits any more, tops up already-confirmed players' own unmet guest
-   * demand (oldest declaration first). Nobody "did" any of this — it's a side effect of
-   * someone else's headcount shrinking — so changedBy is always the promoted row's own
-   * userId. */
+   * one place each and WITHOUT their guests; only once no waitlisted player is left does the
+   * remaining room go to unmet guest demand (oldest declaration first). A guest ranks below
+   * every player with an account (see pickRowToLoseAGuest), so no guest gets a place while a
+   * player is still waiting — not even the guest of the very player being promoted.
+   * Nobody "did" any of this — it's a side effect of someone else's headcount shrinking — so
+   * changedBy is always the promoted row's own userId. */
   private async promoteWaitlist(trainingSessionId: string, cap: number): Promise<void> {
     for (;;) {
       // Not filtered to status: PRESENT — a guest counts against the cap regardless of
@@ -307,11 +316,6 @@ export class AttendancesService {
         const previousConfirmed = nextPlayer.confirmed;
         const previousConfirmedGuestCount = nextPlayer.confirmedGuestCount;
         nextPlayer.confirmed = true;
-        const guestRoom = Math.max(0, room - 1);
-        nextPlayer.confirmedGuestCount = Math.min(
-          nextPlayer.guestCount,
-          previousConfirmedGuestCount + guestRoom,
-        );
         await this.attendancesRepository.save(nextPlayer);
         await this.statusChangesRepository.save(
           this.statusChangesRepository.create({
@@ -355,6 +359,40 @@ export class AttendancesService {
         }),
       );
     }
+  }
+
+  /** A player with an account declaring PRESENT into an already-full cap takes the place of
+   * a confirmed guest, if any holds one — guests rank below every player (see
+   * pickRowToLoseAGuest), whoever brought them. Takes ONE place: the most recently declared
+   * guest goes first, and the row that brought them keeps its own place and its other guests.
+   * The row that lost a guest gets a history entry (changedBy the arriving player), same as
+   * evictLowerPriority. Returns whether a guest was bumped. */
+  private async evictGuest(
+    trainingSessionId: string,
+    others: Attendance[],
+    arrivingUserId: string,
+  ): Promise<boolean> {
+    const row = pickRowToLoseAGuest(others.filter((a) => a.userId !== arrivingUserId));
+    if (!row) return false;
+
+    const previousConfirmedGuestCount = row.confirmedGuestCount;
+    row.confirmedGuestCount = previousConfirmedGuestCount - 1;
+    await this.attendancesRepository.save(row);
+
+    await this.statusChangesRepository.save(
+      this.statusChangesRepository.create({
+        trainingSessionId,
+        userId: row.userId,
+        changedBy: arrivingUserId,
+        previousStatus: row.status!,
+        newStatus: row.status!,
+        previousConfirmed: row.confirmed,
+        newConfirmed: row.confirmed,
+        previousConfirmedGuestCount,
+        newConfirmedGuestCount: row.confirmedGuestCount,
+      }),
+    );
+    return true;
   }
 
   /** A player declaring PRESENT into an already-full cap bumps a lower-priority confirmed

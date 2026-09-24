@@ -20,6 +20,23 @@ export function priorityRank(user: PriorityUser): number {
   return user.isLicensed ? seniority + 4 : seniority;
 }
 
+/** A guest ("+1", someone brought along with no account of their own) ranks BELOW every
+ * player with an account — including a player with no licence and no seniority at all, who
+ * is priorityRank 0. A guest never inherits the rank of whoever brought them: the licence or
+ * seniority of the inviter says nothing about the guest, and an app player always outranks
+ * one. Used to pick which confirmed guest gives up a place when a player arrives into a full
+ * session (before any player is even considered for eviction — see
+ * AttendancesService.evictGuest), and to keep guests from being promoted ahead of a
+ * waitlisted player (see AttendancesService.promoteWaitlist). Every guest shares this same
+ * rank, so among them it's "last declared, first out". */
+export function pickRowToLoseAGuest<T extends Pick<Attendance, 'confirmedGuestCount' | 'respondedAt'>>(
+  rows: T[],
+): T | null {
+  const holdingGuests = rows.filter((a) => a.confirmedGuestCount > 0);
+  if (holdingGuests.length === 0) return null;
+  return [...holdingGuests].sort((a, b) => b.respondedAt.getTime() - a.respondedAt.getTime())[0];
+}
+
 /** Picks who gets promoted when a confirmed PRESENT slot frees up — highest priorityRank
  * first, then by respondedAt (longest-waiting first) within the same rank. Only ever
  * decides who's NEXT in line for an open slot; it has no say over anyone already confirmed

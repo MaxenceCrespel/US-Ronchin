@@ -226,4 +226,115 @@ describe('AttendancesService.setAttendance', () => {
     expect(b.confirmedGuestCount).toBe(1);
     expect(b.guestCount).toBe(3);
   });
+
+  describe('guests rank below every player with an account', () => {
+    it('gives a guest place to a newcomer instead of waitlisting them', async () => {
+      const { service, attendances } = await build({
+        sessionDate: '2026-09-22',
+        cap: 3,
+        attendances: [
+          { userId: 'a', guestCount: 1, confirmedGuestCount: 1 },
+          { userId: 'b' },
+        ],
+      });
+      const c = await service.setAttendance('s1', 'c', AttendanceStatus.PRESENT);
+      expect(c.confirmed).toBe(true);
+      // a keeps their own place, only the guest gave way
+      const a = attendances.find((x) => x.userId === 'a')!;
+      expect(a.confirmed).toBe(true);
+      expect(a.confirmedGuestCount).toBe(0);
+      expect(a.guestCount).toBe(1);
+    });
+
+    it("doesn't let a guest inherit a licensed, senior inviter's priority", async () => {
+      const { service, attendances } = await build({
+        sessionDate: '2026-09-22',
+        cap: 3,
+        attendances: [
+          {
+            userId: 'a',
+            guestCount: 1,
+            confirmedGuestCount: 1,
+            user: { isLicensed: true, seniorityTier: 'SEVEN_PLUS' } as User,
+          },
+          { userId: 'b' },
+        ],
+      });
+      // c has no licence and no seniority (rank 0) — still outranks a's guest
+      const c = await service.setAttendance('s1', 'c', AttendanceStatus.PRESENT);
+      expect(c.confirmed).toBe(true);
+      expect(attendances.find((x) => x.userId === 'a')!.confirmedGuestCount).toBe(0);
+    });
+
+    it('bumps the most recently declared guest first', async () => {
+      const { service, attendances } = await build({
+        sessionDate: '2026-09-22',
+        cap: 3,
+        attendances: [
+          {
+            userId: 'early',
+            guestCount: 1,
+            confirmedGuestCount: 1,
+            respondedAt: new Date('2026-09-18'),
+          },
+          {
+            userId: 'late',
+            guestCount: 1,
+            confirmedGuestCount: 1,
+            respondedAt: new Date('2026-09-19'),
+          },
+        ],
+      });
+      // early is ABSENT but their guest still holds a place (a guest counts regardless of
+      // the inviter's own status): early 0+1, late 1+1 = 3 = cap, so the session is full.
+      attendances.find((x) => x.userId === 'early')!.status = AttendanceStatus.ABSENT;
+      const c = await service.setAttendance('s1', 'c', AttendanceStatus.PRESENT);
+      expect(c.confirmed).toBe(true);
+      expect(attendances.find((x) => x.userId === 'late')!.confirmedGuestCount).toBe(0);
+      expect(attendances.find((x) => x.userId === 'early')!.confirmedGuestCount).toBe(1);
+    });
+
+    it("never lets an arriving player's own guest bump anyone", async () => {
+      const { service, attendances } = await build({
+        sessionDate: '2026-09-22',
+        cap: 2,
+        attendances: [{ userId: 'a', guestCount: 1, confirmedGuestCount: 1 }],
+      });
+      // Full (a + a's guest). b takes a's guest's place, but b's own guest finds nothing left
+      // and stays unconfirmed — a guest never bumps another guest, or a player.
+      const b = await service.setAttendance('s1', 'b', AttendanceStatus.PRESENT, [
+        { firstName: 'G' },
+      ]);
+      expect(b.confirmed).toBe(true);
+      expect(b.confirmedGuestCount).toBe(0);
+      expect(b.guestCount).toBe(1);
+      expect(attendances.find((x) => x.userId === 'a')!.confirmedGuestCount).toBe(0);
+    });
+
+    it('promotes waitlisted players before any guest, guests of the promoted one included', async () => {
+      const { service, attendances } = await build({
+        sessionDate: '2026-09-22',
+        cap: 4,
+        attendances: [
+          { userId: 'x' },
+          { userId: 'y', guestCount: 1, confirmedGuestCount: 1 },
+          { userId: 'z' },
+          {
+            userId: 'b',
+            confirmed: false,
+            guestCount: 1,
+            user: { isLicensed: true, seniorityTier: null } as User,
+          },
+          { userId: 'd', confirmed: false },
+        ],
+      });
+      // y turns ABSENT and drops the guest too: frees 2 places (y's own + the guest)
+      await service.setAttendance('s1', 'y', AttendanceStatus.ABSENT);
+      const b = attendances.find((x) => x.userId === 'b')!;
+      const d = attendances.find((x) => x.userId === 'd')!;
+      expect(b.confirmed).toBe(true);
+      expect(d.confirmed).toBe(true);
+      expect(b.confirmedGuestCount).toBe(0); // b's guest waits behind every waitlisted player
+    });
+  });
 });

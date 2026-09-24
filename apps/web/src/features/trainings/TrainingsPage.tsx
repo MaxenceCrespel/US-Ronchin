@@ -61,6 +61,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
+import { describeAttendanceChange } from './attendance-history'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { AttendanceMark } from '@/components/AttendanceMark'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
@@ -68,7 +69,6 @@ import { FootballSpinner } from '@/components/FootballSpinner'
 import type {
   Attendance,
   AttendanceStatus,
-  AttendanceStatusChangeEntry,
   Match,
   PlayerSubPosition,
   TrainingType,
@@ -578,29 +578,6 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
     enabled: open,
   })
 
-  function describe(entry: AttendanceStatusChangeEntry): string {
-    const from = entry.previousStatus ? ATTENDANCE_STATUS_LABELS[entry.previousStatus] : 'Aucune réponse'
-    const to = ATTENDANCE_STATUS_LABELS[entry.newStatus]
-    const isSelf = entry.changedBy === entry.userId
-    const actor = isSelf ? null : `${entry.changer.firstName} ${entry.changer.lastName[0]}.`
-    const notes: string[] = []
-    if (entry.previousConfirmed !== entry.newConfirmed) {
-      notes.push(entry.newConfirmed ? "passé de liste d'attente à confirmé" : "mis en liste d'attente")
-    }
-    const guestDiff = entry.newConfirmedGuestCount - entry.previousConfirmedGuestCount
-    if (guestDiff > 0) {
-      notes.push(`${guestDiff} invité${guestDiff > 1 ? 's' : ''} confirmé${guestDiff > 1 ? 's' : ''} en plus`)
-    } else if (guestDiff < 0) {
-      notes.push(`${-guestDiff} invité${-guestDiff > 1 ? 's' : ''} repassé${-guestDiff > 1 ? 's' : ''} en attente`)
-    }
-    const noteText = notes.length > 0 ? ` — ${notes.join(', ')}` : ''
-    if (from === to && !isSelf) {
-      // The auto-promotion case: status doesn't change, only confirmed/guests do.
-      return `Mis à jour depuis la liste d'attente${noteText}`
-    }
-    return `${from} → ${to}${noteText}${actor ? ` (par ${actor}, coach)` : ''}`
-  }
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -636,7 +613,7 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
                       <strong className="font-medium">
                         {entry.user.firstName} {entry.user.lastName}
                       </strong>{' '}
-                      <span className="text-muted-foreground">{describe(entry)}</span>
+                      <span className="text-muted-foreground">{describeAttendanceChange(entry)}</span>
                     </span>
                   </div>
                 </li>
