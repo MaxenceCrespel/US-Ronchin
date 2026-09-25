@@ -214,6 +214,20 @@ CVE-2026-93990
 CVE-2026-88806
 CVE-2026-88807
 
+# CVE-2026-96889 (librsvg: use-after-free when an SVG's XML includes duplicated entities,
+# HIGH) hits librsvg2-2 and librsvg2-common (installed 2.54.7+dfsg-1~deb12u1) — Status:
+# affected, no Fixed Version. Re-verified 2026-09-25: in a fresh `docker run
+# node:22-bookworm-slim`, `apt-cache policy librsvg2-2 librsvg2-common` shows Candidate ==
+# that same version (bookworm and bookworm-security alike), so no patched package exists to
+# upgrade to; and neither is in the base image (`dpkg -l | grep rsvg` there is empty) nor in
+# apps/api/Dockerfile's own explicit package list — they come in as a dependency of the
+# GTK/icon-theme libraries the headless-Chrome libraries pull in. Not reachable: no code of
+# ours calls librsvg; the one place user-supplied images are decoded (avatar upload,
+# users.controller.ts) goes through `sharp`, which ships its own libvips inside node_modules
+# (@img/sharp-libvips-linux-x64), not the system librsvg; and the FFF scraper's headless
+# Chrome renders SVG with its own engine, over HTTPS to one fixed, trusted FFF domain.
+CVE-2026-96889
+
 # brace-expansion DoS in OUR app's dependency tree (CVE-2026-14257 and its
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
