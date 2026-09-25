@@ -287,33 +287,87 @@ function ratingColor(value: number): string {
   return `hsl(${hue}deg 75% 42%)`
 }
 
-/** The reference points shown while rating, so a 6 means the same thing to everyone. Each
- * band is coloured with the very ramp the slider uses (ratingColor), at its midpoint. */
-const RATING_LEGEND: { range: string; mid: number; label: string }[] = [
-  { range: '0-2', mid: 1, label: 'Très en dessous — a pesé négativement' },
-  { range: '3-4', mid: 3.5, label: 'En difficulté, en dessous du niveau' },
-  { range: '5-6', mid: 5.5, label: 'Match correct, sans éclat' },
-  { range: '7-8', mid: 7.5, label: 'Bon match, a compté pour l\'équipe' },
-  { range: '9-10', mid: 9.5, label: 'Match exceptionnel, décisif' },
+/** One reference per whole point, so a 6 means the same thing to everyone. A half point sits
+ * between its two neighbours (see ratingLabel). Kept short: the legend is a two-line strip on a phone. */
+const RATING_POINTS: [name: string, meaning: string][] = [
+  ['Match à oublier', "A mis l'équipe en danger"],
+  ['Très mauvais', 'Erreurs répétées'],
+  ['Mauvais', 'Loin de son niveau, absent du jeu'],
+  ['Faible', "En difficulté, peu d'impact"],
+  ['Passable', "Quelques bonnes choses, trop d'erreurs"],
+  ['Moyen', 'Le minimum attendu de lui'],
+  ['Correct', 'Solide, sans éclat'],
+  ['Bon', 'Utile et régulier'],
+  ['Très bon', 'A fait la différence par moments'],
+  ['Excellent', 'Dominant, parmi les meilleurs'],
+  ['Parfait', 'Décisif du début à la fin'],
 ]
 
-function RatingLegend() {
+const formatNote = (value: number) => String(value).replace('.', ',')
+
+function ratingLabel(value: number): string {
+  if (Number.isInteger(value)) return RATING_POINTS[value][0]
+  return `entre ${RATING_POINTS[Math.floor(value)][0].toLowerCase()} et ${RATING_POINTS[Math.ceil(value)][0].toLowerCase()}`
+}
+
+/** A row of 11 chips (the scale itself, on the slider's colour ramp) and one fixed-height
+ * explanation of the current note. Sticky, so the reference stays in view while the list of
+ * teammates scrolls. `value` is the note being dragged; touching a chip reads that point
+ * without changing any note. A half point lights its two neighbours. */
+function RatingLegend({ value }: { value?: number }) {
+  const [tapped, setTapped] = useState<number | undefined>(undefined)
+  const shown = tapped ?? value
+  const low = shown != null ? Math.floor(shown) : null
+  const high = shown != null ? Math.ceil(shown) : null
+  const half = low !== high
   return (
-    <div className="bg-muted/40 flex flex-col gap-1.5 rounded-md p-3" aria-label="Repères de notation">
-      <p className="text-xs font-semibold">Pour t'aider à noter</p>
-      <ul className="flex flex-col gap-1">
-        {RATING_LEGEND.map(({ range, mid, label }) => (
-          <li key={range} className="flex items-baseline gap-2 text-xs">
-            <span
-              className="w-9 shrink-0 font-semibold tabular-nums"
-              style={{ color: ratingColor(mid) }}
+    <div
+      className="bg-card sticky top-0 z-10 -mx-6 flex flex-col gap-2 border-b px-6 pb-2.5 pt-2.5"
+      aria-label="Repères de notation"
+    >
+      <div className="grid grid-cols-11 gap-[3px]" role="group" aria-label="Repères de 0 à 10">
+        {RATING_POINTS.map(([name], n) => {
+          const on = shown != null && !half && n === low
+          const near = shown != null && half && (n === low || n === high)
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-label={`${n} sur 10, ${name}`}
+              onClick={() => setTapped(n)}
+              className={cn(
+                'h-8 rounded-[7px] border border-transparent text-[13px] font-bold tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+                on && 'text-white',
+              )}
+              style={{
+                ['--c' as string]: ratingColor(n),
+                backgroundColor: on
+                  ? ratingColor(n)
+                  : `color-mix(in srgb, var(--c) ${near ? 55 : 16}%, var(--color-card))`,
+                borderColor: on || near ? ratingColor(n) : undefined,
+              }}
             >
-              {range}
+              {n}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex h-[4.3em] flex-col gap-px text-[13px]" aria-live="polite">
+        {shown == null ? (
+          <span className="text-muted-foreground">Touche un chiffre ou bouge un curseur pour voir ce qu'il veut dire.</span>
+        ) : (
+          <>
+            <b className="tabular-nums" style={{ color: ratingColor(shown) }}>
+              {formatNote(shown)} · {ratingLabel(shown)}
+            </b>
+            <span className="text-muted-foreground text-xs leading-snug">
+              {half
+                ? `Mieux que « ${RATING_POINTS[low!][0].toLowerCase()} » (${RATING_POINTS[low!][1].toLowerCase()}), sans être « ${RATING_POINTS[high!][0].toLowerCase()} »`
+                : RATING_POINTS[low!][1]}
             </span>
-            <span className="text-muted-foreground">{label}</span>
-          </li>
-        ))}
-      </ul>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -956,6 +1010,8 @@ export function MatchDetailPage() {
   const levelsQuery = useAllAccountLevels()
 
   const [ratingDrafts, setRatingDrafts] = useState<Record<string, number>>({})
+  // The note being dragged right now, previewed on the legend's scale (see RatingLegend).
+  const [previewRating, setPreviewRating] = useState<number | undefined>(undefined)
 
   const submitRatingsMutation = useMutation({
     mutationFn: (ratings: { ratedUserId?: string; ratedGuestId?: string; rating: number }[]) =>
@@ -965,6 +1021,7 @@ export function MatchDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['ratings-summary', matchId] })
       queryClient.invalidateQueries({ queryKey: ['ratings-submitted', matchId] })
       setRatingDrafts({})
+      setPreviewRating(undefined)
     },
   })
 
@@ -2263,7 +2320,7 @@ export function MatchDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {iPlayed && pendingRatingIds.size > 0 && <RatingLegend />}
+            {iPlayed && pendingRatingIds.size > 0 && <RatingLegend key={previewRating} value={previewRating} />}
             <div className="divide-y">
             {compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
               const isSelf = entry.userId === user?.id
@@ -2332,7 +2389,7 @@ export function MatchDetailPage() {
                         className="shrink-0 text-sm font-semibold tabular-nums"
                         style={{ color: ratingColor(draftValue ?? 0) }}
                       >
-                        {draftValue != null ? draftValue : 'Non noté'}
+                        {draftValue != null ? `${formatNote(draftValue)} / 10` : 'Non noté'}
                       </span>
                     ) : (
                       <span className="flex shrink-0 items-center gap-2 text-xs">
@@ -2348,9 +2405,10 @@ export function MatchDetailPage() {
                   {isPending && (
                     <RatingSlider
                       value={draftValue}
-                      onChange={(value) =>
+                      onChange={(value) => {
                         setRatingDrafts((prev) => ({ ...prev, [entry.id]: value }))
-                      }
+                        setPreviewRating(value)
+                      }}
                     />
                   )}
                 </div>
