@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PushSubscription } from './entities/push-subscription.entity';
 import { AttendancePollReminder } from './entities/attendance-poll-reminder.entity';
 import { User } from '../users/entities/user.entity';
+import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { Match } from '../matches/entities/match.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
@@ -27,6 +28,7 @@ import { PushNotificationsScheduler } from './push-notifications.scheduler';
       MatchComposition,
       MatchMotmVote,
       MatchDefenseBossVote,
+      CoachPlayerRating,
     ]),
   ],
   controllers: [PushNotificationsController],

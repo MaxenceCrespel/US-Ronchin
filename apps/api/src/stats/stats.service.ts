@@ -17,6 +17,7 @@ import {
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
+import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { pointsForResult, MAX_POINTS_PER_SESSION } from '../team-balancing/points-for-result';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, SeasonBounds } from './season.util';
 import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
@@ -48,12 +49,20 @@ const RATING_RECENCY_HALF_LIFE_DAYS = 180; // a match 6 months ago counts half a
 // sample shouldn't alone crown someone. Performance and training get a lighter touch.
 const RATING_CONFIDENCE_PRIOR_WEIGHT = 5; // kN
 const PERFORMANCE_CONFIDENCE_PRIOR_WEIGHT = 3; // kP
-const TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT = 1; // kE
+// Training level: the coaches' own 1-10 read (averaged over every coach who rated the player)
+// is the starting point, worth this many recent training sessions — so a couple of lucky
+// sessions can't crown a player the coaches rate low, and the coaches' read fades only as
+// real, recent results pile up. A player nobody rated starts from the club's average instead.
+const TRAINING_COACH_PRIOR_WEIGHT = 10; // kE
 // "Assidu du mois"/"Vainqueur d'entraînement" need a real sample to judge fairly — a month
 // with only one or two trainings (holidays, a short break) would let a single session decide
 // the whole trophy. "Joueur du mois" doesn't use this: it's gated on at least one *match*
 // instead (see MonthlyAwardScheduler.openIfNeeded), a different kind of evidence entirely.
 const MIN_TRAININGS_FOR_STAT_TROPHY = 4;
+// A training result counts half as much every 60 days: a player's average follows how he does
+// NOW, so a long winning streak moves even a long-standing player enough to be split from his
+// usual teammates at the next generation, instead of being diluted by years of older sessions.
+const TRAINING_RECENCY_HALF_LIFE_DAYS = 60;
 const DAY_MS = 86_400_000;
 
 
@@ -207,6 +216,8 @@ export class StatsService {
     private readonly sessionsRepository: Repository<TrainingSession>,
     @InjectRepository(TrainingTeamAssignment)
     private readonly teamAssignmentsRepository: Repository<TrainingTeamAssignment>,
+    @InjectRepository(CoachPlayerRating)
+    private readonly coachRatingsRepository: Repository<CoachPlayerRating>,
   ) {}
 
   private resolveSeasonBounds(season?: string): SeasonBounds | null {
@@ -348,6 +359,7 @@ export class StatsService {
       matches,
       sessions,
       teamAssignments,
+      coachRatings,
       motmCounts,
       patronDefenseCounts,
       presenceStreaks,
@@ -363,6 +375,7 @@ export class StatsService {
         this.matchesRepository.find(),
         this.sessionsRepository.find(),
         this.teamAssignmentsRepository.find(),
+        this.coachRatingsRepository.find(),
         this.getMotmCounts(bounds),
         this.getPatronDefenseCounts(bounds),
         this.getPresenceStreaks(bounds),
@@ -386,14 +399,14 @@ export class StatsService {
       if (s.scoreTeam0 == null || s.scoreTeam1 == null || !sessionInSeason(s.id)) continue;
       scoredSessionPoints.set(s.id, pointsForResult(s.scoreTeam0, s.scoreTeam1));
     }
-    const trainingPointsByUserId = new Map<string, number[]>();
+    const trainingPointsByUserId = new Map<string, { points: number; date: string }[]>();
     for (const assignment of teamAssignments) {
       if (!assignment.userId) continue;
       const teamPoints = scoredSessionPoints.get(assignment.trainingSessionId);
       if (!teamPoints) continue;
       const points = teamPoints[assignment.teamIndex] ?? 0;
       const existing = trainingPointsByUserId.get(assignment.userId) ?? [];
-      existing.push(points);
+      existing.push({ points, date: sessionDateById.get(assignment.trainingSessionId) ?? '' });
       trainingPointsByUserId.set(assignment.userId, existing);
     }
 
@@ -488,7 +501,15 @@ export class StatsService {
       const patronDefenseCount = patronDefenseCounts.get(user.id) ?? 0;
 
       const trainingPoints = trainingPointsByUserId.get(user.id) ?? [];
-      const trainingPointsSum = trainingPoints.reduce((sum, p) => sum + p, 0);
+      // Recency-weighted, like the match ratings below: a session 60 days old counts half.
+      let trainingWeightedSum = 0;
+      let trainingWeightSum = 0;
+      for (const { points, date } of trainingPoints) {
+        const daysAgo = (Date.now() - new Date(date).getTime()) / DAY_MS;
+        const weight = Math.pow(0.5, Math.max(daysAgo, 0) / TRAINING_RECENCY_HALF_LIFE_DAYS);
+        trainingWeightedSum += points * weight;
+        trainingWeightSum += weight;
+      }
 
       // Recency-weighted rating sum — the club-wide mean (pass 2) is itself built from
       // these same weighted sums, so a match 6 months ago already counts half as much
@@ -545,8 +566,8 @@ export class StatsService {
         isDefensiveProfile,
         involvementPerMatch,
         cleanSheetRate,
-        trainingPointsSum,
-        trainingCount: trainingPoints.length,
+        trainingWeightedSum,
+        trainingWeightSum,
         disciplinePenalty,
         distinctionsBonus,
         hasObservedBasis: averageRating !== null,
@@ -572,24 +593,35 @@ export class StatsService {
         ? sum(defensivePlayers.map((r) => r.cleanSheetRate * r.defensiveMatchesStarted)) /
           sum(defensivePlayers.map((r) => r.defensiveMatchesStarted))
         : 0;
-    const totalTrainingCount = sum(raw.map((r) => r.trainingCount));
+    const totalTrainingWeight = sum(raw.map((r) => r.trainingWeightSum));
     const clubMeanTrainingPoints =
-      totalTrainingCount > 0 ? sum(raw.map((r) => r.trainingPointsSum)) / totalTrainingCount : 0;
+      totalTrainingWeight > 0 ? sum(raw.map((r) => r.trainingWeightedSum)) / totalTrainingWeight : 0;
+
+    // One averaged 1-10 note per player across every coach who rated them, on the same scale
+    // as a session's points (a 10/10 starts a player at the max, 8 points).
+    const coachNotesByPlayerId = new Map<string, number[]>();
+    for (const r of coachRatings) {
+      const list = coachNotesByPlayerId.get(r.playerId) ?? [];
+      list.push(Number(r.rating));
+      coachNotesByPlayerId.set(r.playerId, list);
+    }
 
     const shrink = (n: number, x: number, k: number, mean: number) => (n * x + k * mean) / (n + k);
 
     return raw.map((r) => {
-      // Average points per scored training session (see pointsForResult: 3 for a win + the goal
-      // difference up to 5, so 8 at most), barely pulled toward the club's average so a single
-      // lucky session doesn't crown anyone — and a player with no scored session at all lands
-      // exactly ON the club average, neither favoured nor penalised. This alone, on a 0-100
-      // scale, is what balances the training teams (see trainingLevel below).
-      const dampedTrainingPoints = shrink(
-        r.trainingCount,
-        r.trainingCount > 0 ? r.trainingPointsSum / r.trainingCount : clubMeanTrainingPoints,
-        TRAINING_RANKING_CONFIDENCE_PRIOR_WEIGHT,
-        clubMeanTrainingPoints,
-      );
+      // Recency-weighted average points per scored training session (see pointsForResult: 3 for a
+      // win + the goal difference up to 5, so 8 at most), pulled toward the coaches' average
+      // note for the player (TRAINING_COACH_PRIOR_WEIGHT sessions' worth) — or toward the club's
+      // average when nobody rated them, so a player with no scored session and no note lands
+      // exactly ON the club average. On a 0-100 scale this is what balances the training teams
+      // (see trainingLevel below).
+      const notes = coachNotesByPlayerId.get(r.userId);
+      const priorPoints = notes
+        ? (sum(notes) / notes.length / 10) * MAX_POINTS_PER_SESSION
+        : clubMeanTrainingPoints;
+      const dampedTrainingPoints =
+        (r.trainingWeightedSum + TRAINING_COACH_PRIOR_WEIGHT * priorPoints) /
+        (r.trainingWeightSum + TRAINING_COACH_PRIOR_WEIGHT);
       const trainingLevel = Math.round(Math.min(dampedTrainingPoints / MAX_POINTS_PER_SESSION, 1) * 1000) / 10;
 
       let skillScore: number | null = null;

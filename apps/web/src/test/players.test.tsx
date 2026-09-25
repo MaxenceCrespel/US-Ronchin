@@ -21,6 +21,13 @@ describe('players page (coach)', () => {
     expect(screen.getByText(/14 joueurs · 4 licenciés · 10 non licenciés/)).toBeInTheDocument()
   })
 
+  it('links to player ratings for a coach, not for a player', async () => {
+    await openPlayers('coach')
+    expect(screen.getByRole('link', { name: /Noter les joueurs/ })).toHaveAttribute('href', '/player-ratings')
+    await openPlayers('player')
+    expect(screen.queryByRole('link', { name: /Noter les joueurs/ })).not.toBeInTheDocument()
+  })
+
   it('copies the sign-up link', async () => {
     const user = await openPlayers()
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)

@@ -7,13 +7,15 @@ import { fakeApi, fixtures } from './fake-api'
 const settle = (ms = 500) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 
 const users = fixtures.roles.coach['/users'] as Record<string, unknown>[]
+const ratingCount = (fixtures.roles.coach['/player-ratings/mine'] as unknown[]).length
 
 describe('new player info to fill in', () => {
-  it('lists a missing seniority in "À traiter" on the coach home', async () => {
+  it('lists missing seniority and missing levels in "À traiter" on the coach home', async () => {
     renderApp('/', 'coach')
     fakeApi.on('GET', /^\/users$/, [{ ...users[0], firstName: 'Nou', lastName: 'Veau', seniorityToReview: true }, ...users.slice(1)])
     await settle(900)
     expect(await screen.findByText('Ancienneté à renseigner — Nou Veau')).toBeInTheDocument()
+    expect(screen.getByText(`Niveau à renseigner pour ${ratingCount} joueurs`)).toBeInTheDocument()
   })
 
   it('says how many when several players still need a seniority', async () => {
@@ -29,7 +31,7 @@ describe('new player info to fill in', () => {
     expect(screen.queryByText(/à renseigner/)).not.toBeInTheDocument()
   })
 
-  it('pops up after accepting a player, asking for the seniority, and can be dismissed', async () => {
+  it('pops up after accepting a player, pointing to the ratings page, and can be dismissed', async () => {
     const pending = { ...users[0], id: 'pending-y', firstName: 'Tout', lastName: 'Neuf', status: 'PENDING', email: 'n@x.io', accountActivated: true }
     const user = userEvent.setup()
     renderApp('/players', 'coach')
@@ -40,7 +42,8 @@ describe('new player info to fill in', () => {
 
     const dialog = await screen.findByRole('dialog', { name: /Tout Neuf rejoint l'effectif/ })
     expect(within(dialog).getByText('Ancienneté')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Compris' }))
+    expect(within(dialog).getByRole('link', { name: 'Noter son niveau' })).toHaveAttribute('href', '/player-ratings')
+    await user.click(within(dialog).getByRole('button', { name: 'Plus tard' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /rejoint l'effectif/ })).not.toBeInTheDocument())
   })
 

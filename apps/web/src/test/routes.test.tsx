@@ -27,6 +27,7 @@ const ROUTES: [string, string, Role][] = [
   ['/profile/notifications', 'notifications', 'player'],
   ['/profile/password', 'password', 'player'],
   ['/profile/club', 'club settings', 'coach'],
+  ['/player-ratings', 'player ratings', 'coach'],
   ['/admin/import-pdf', 'pdf import', 'coach'],
   ['/admin', 'admin kpis', 'admin'],
   ['/fix-positions', 'fix positions', 'player'],

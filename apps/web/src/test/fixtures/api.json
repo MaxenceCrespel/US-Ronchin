@@ -3308,6 +3308,80 @@
    },
    "/fff-sync/logs": [],
    "/training-guest-matches": [],
+   "/player-ratings/mine": [
+    {
+     "userId": "8c99a2a6-814a-4121-8f62-b88faa2699de",
+     "firstName": "First3",
+     "lastName": "Last3",
+     "rating": null
+    },
+    {
+     "userId": "05f32901-3b9e-4f2b-a1f5-b2e76c5e8d19",
+     "firstName": "First4",
+     "lastName": "Last4",
+     "rating": null
+    },
+    {
+     "userId": "31ddc676-2770-4d6e-92c9-2b7678f2fde0",
+     "firstName": "First5",
+     "lastName": "Last5",
+     "rating": null
+    },
+    {
+     "userId": "123ad991-c619-46df-9ad1-86bacde017ce",
+     "firstName": "First6",
+     "lastName": "Last6",
+     "rating": null
+    },
+    {
+     "userId": "394c0360-e515-43d2-b860-f4e45b6df7c9",
+     "firstName": "First7",
+     "lastName": "Last7",
+     "rating": null
+    },
+    {
+     "userId": "e7a6f6b5-cd15-4a84-9c16-5d61fe0fdfa0",
+     "firstName": "First8",
+     "lastName": "Last8",
+     "rating": null
+    },
+    {
+     "userId": "c604cdb7-dcdb-4784-8a56-d3c182df8c44",
+     "firstName": "First9",
+     "lastName": "Last9",
+     "rating": null
+    },
+    {
+     "userId": "b199c407-ba76-4f62-95ed-9d718abef20b",
+     "firstName": "First10",
+     "lastName": "Last10",
+     "rating": null
+    },
+    {
+     "userId": "ccdb756e-34f2-4755-bb5f-a14001fc9cb6",
+     "firstName": "First11",
+     "lastName": "Last11",
+     "rating": null
+    },
+    {
+     "userId": "723db4ea-5158-4929-a829-22c343907208",
+     "firstName": "First12",
+     "lastName": "Last12",
+     "rating": null
+    },
+    {
+     "userId": "095c4b27-52e1-4c39-a798-8351b20aa569",
+     "firstName": "First13",
+     "lastName": "Last13",
+     "rating": null
+    },
+    {
+     "userId": "c7870f78-6d61-4788-b957-6ccc3e7c6bb6",
+     "firstName": "First14",
+     "lastName": "Last14",
+     "rating": null
+    }
+   ],
    "/matches/62f1ac35-aba1-4b24-8310-bdfc30d061d8/ratings": [
     {
      "id": "61a40cda-61a6-4d0d-8f67-523c81ba53a4",

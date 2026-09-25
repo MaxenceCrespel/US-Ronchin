@@ -2,6 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/types/authenticated-user';
+import { UserRole } from '../users/entities/user.entity';
 import { StatsService } from './stats.service';
 
 @UseGuards(JwtAuthGuard)
@@ -10,8 +11,12 @@ export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
   @Get('players')
-  getPlayerStats(@Query('season') season?: string) {
-    return this.statsService.getPlayerStats(season);
+  async getPlayerStats(@Query('season') season?: string, @CurrentUser() currentUser?: AuthenticatedUser) {
+    const stats = await this.statsService.getPlayerStats(season);
+    // The training level splits the training teams — coach/admin business, not something a
+    // player should be able to read for everybody from the network tab.
+    if (currentUser?.role === UserRole.PLAYER) return stats.map(({ trainingLevel: _hidden, ...rest }) => rest);
+    return stats;
   }
 
   @Get('team')

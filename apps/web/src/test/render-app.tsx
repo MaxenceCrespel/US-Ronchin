@@ -35,6 +35,7 @@ const WARM_ROUTES: [string, Role][] = [
   ['/profile/notifications', 'player'],
   ['/profile/password', 'player'],
   ['/profile/club', 'coach'],
+  ['/player-ratings', 'coach'],
   ['/admin/import-pdf', 'coach'],
   ['/admin', 'admin'],
   ['/complete-profile', 'player'],

@@ -2,6 +2,7 @@ import { bearer, createTestApp, TestApp } from './test-utils/test-app';
 import { UserRole } from './users/entities/user.entity';
 import { Training, TrainingType } from './trainings/entities/training.entity';
 import { TrainingSession } from './trainings/entities/training-session.entity';
+import { CoachPlayerRating } from './users/entities/coach-player-rating.entity';
 import { TrainingTeamAssignment } from './team-balancing/entities/training-team-assignment.entity';
 
 const day = (offset: number) => {
@@ -16,18 +17,31 @@ describe('training level (real stack)', () => {
   let t: TestApp;
   let coachToken: string;
   const levels = new Map<string, number>();
+  let playerToken: string;
   const matchLevels = new Map<string, number | null>();
   let newcomerId: string;
   let streakId: string;
   let regularId: string;
+  let ratedHighId: string;
+  let ratedLowId: string;
 
   beforeAll(async () => {
     t = await createTestApp();
     const coach = await t.createUser({ role: UserRole.COACH });
     coachToken = coach.token;
+    playerToken = (await t.createUser()).token;
     const streak = await t.createUser();
     const regular = await t.createUser();
     const newcomer = await t.createUser();
+    // Two more players with no scored session, whom the coach rated 9 and 2
+    const ratedHigh = await t.createUser();
+    const ratedLow = await t.createUser();
+    ratedHighId = ratedHigh.user.id;
+    ratedLowId = ratedLow.user.id;
+    await t.repo(CoachPlayerRating).save([
+      t.repo(CoachPlayerRating).create({ coachId: coach.user.id, playerId: ratedHighId, rating: 9 }),
+      t.repo(CoachPlayerRating).create({ coachId: coach.user.id, playerId: ratedLowId, rating: 2 }),
+    ]);
     streakId = streak.user.id;
     regularId = regular.user.id;
     newcomerId = newcomer.user.id;
@@ -83,10 +97,26 @@ describe('training level (real stack)', () => {
   });
 
   it('puts a player with no scored session exactly on the club average, neither ahead nor behind', () => {
-    // The club average is the mean over every scored appearance: (4 × 8 + 3 × 5 + 7 × 0)
-    // points over 4 + 10 appearances
-    const clubMeanPoints = (4 * 8 + 3 * 5) / 14;
+    // The club average is the recency-weighted mean over every scored appearance (a session
+    // counts half as much every 60 days): sessions were 70, 63, ... 7 days ago.
+    const w = (s: number) => Math.pow(0.5, (7 * (10 - s)) / 60);
+    let weighted = 0;
+    let weights = 0;
+    for (let s = 0; s < 10; s++) {
+      const points = (s < 4 ? 8 : 0) + (s >= 4 && s < 7 ? 5 : 0); // streak's 8s, regular's 5s
+      weighted += points * w(s);
+      weights += w(s) * ((s < 4 ? 1 : 0) + 1); // streak attends the first four, regular all ten
+    }
+    const clubMeanPoints = weighted / weights;
     expect(levels.get(newcomerId)).toBeCloseTo(Math.round((clubMeanPoints / 8) * 1000) / 10, 1);
+  });
+
+  it("starts a player with no session from the coaches' note: 9/10 above the club average, 2/10 below", () => {
+    expect(levels.get(ratedHighId)!).toBeGreaterThan(levels.get(newcomerId)!);
+    expect(levels.get(ratedLowId)!).toBeLessThan(levels.get(newcomerId)!);
+    // no session: the level is exactly the note, on 0-100
+    expect(levels.get(ratedHighId)).toBeCloseTo(90, 1);
+    expect(levels.get(ratedLowId)).toBeCloseTo(20, 1);
   });
 
   it('is on a 0-100 scale for everyone, never null', () => {
@@ -98,5 +128,13 @@ describe('training level (real stack)', () => {
 
   it('keeps trainings out of the match level: no match rated, no match level', () => {
     for (const id of [streakId, regularId, newcomerId]) expect(matchLevels.get(id)).toBeNull();
+  });
+
+  it('is sent to coaches but never to a player', async () => {
+    const asPlayer = await t.http().get('/api/stats/players').set(bearer(playerToken));
+    expect(asPlayer.status).toBe(200);
+    for (const p of asPlayer.body as Record<string, unknown>[]) expect(p).not.toHaveProperty('trainingLevel');
+    const asCoach = await t.http().get('/api/stats/players').set(bearer(coachToken));
+    for (const p of asCoach.body as Record<string, unknown>[]) expect(p).toHaveProperty('trainingLevel');
   });
 });

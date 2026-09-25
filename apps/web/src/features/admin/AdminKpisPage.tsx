@@ -343,7 +343,14 @@ function SortableHeader({
 }
 
 export function AdminKpisPage() {
-  const kpisQuery = useQuery({ queryKey: ['admin', 'kpis'], queryFn: fetchAdminKpis })
+  // Live: installs, notification opt-ins and last-seen change while the page is open, so it
+  // re-reads every 15 s (paused while the tab is hidden) and on returning to the tab.
+  const kpisQuery = useQuery({
+    queryKey: ['admin', 'kpis'],
+    queryFn: fetchAdminKpis,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  })
   const data = kpisQuery.data
 
   // The all-time training level TeamBalancingService.generateTeams splits the training teams

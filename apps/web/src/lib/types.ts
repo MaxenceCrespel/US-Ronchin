@@ -240,8 +240,9 @@ export interface PlayerStats {
    * match. Training plays no part in it. */
   skillScore: number | null
   /** 0-100, from the average points per scored training session alone — what splits the training
-   * teams. Never null: a player with no scored session sits on the club average. */
-  trainingLevel: number
+   * teams. Never null: a player with no scored session sits on the club average. Only sent to
+   * coaches and admins — absent for a player. */
+  trainingLevel?: number
 }
 
 export interface MonthlyChallengeEntry {
@@ -353,6 +354,15 @@ export interface AccountLevel {
   tier: AccountTier
   nextTier: AccountTier | null
   nextTierScore: number | null
+}
+
+/** A single player as seen from the currently-signed-in coach's rating list — `rating` is
+ * always THIS coach's own note, never the computed level or another coach's opinion. */
+export interface PlayerToRate {
+  userId: string
+  firstName: string
+  lastName: string
+  rating: number | null
 }
 
 export interface PlayerRating {

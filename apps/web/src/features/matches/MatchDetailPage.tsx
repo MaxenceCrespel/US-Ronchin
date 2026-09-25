@@ -287,6 +287,37 @@ function ratingColor(value: number): string {
   return `hsl(${hue}deg 75% 42%)`
 }
 
+/** The reference points shown while rating, so a 6 means the same thing to everyone. Each
+ * band is coloured with the very ramp the slider uses (ratingColor), at its midpoint. */
+const RATING_LEGEND: { range: string; mid: number; label: string }[] = [
+  { range: '0-2', mid: 1, label: 'Très en dessous — a pesé négativement' },
+  { range: '3-4', mid: 3.5, label: 'En difficulté, en dessous du niveau' },
+  { range: '5-6', mid: 5.5, label: 'Match correct, sans éclat' },
+  { range: '7-8', mid: 7.5, label: 'Bon match, a compté pour l\'équipe' },
+  { range: '9-10', mid: 9.5, label: 'Match exceptionnel, décisif' },
+]
+
+function RatingLegend() {
+  return (
+    <div className="bg-muted/40 flex flex-col gap-1.5 rounded-md p-3" aria-label="Repères de notation">
+      <p className="text-xs font-semibold">Pour t'aider à noter</p>
+      <ul className="flex flex-col gap-1">
+        {RATING_LEGEND.map(({ range, mid, label }) => (
+          <li key={range} className="flex items-baseline gap-2 text-xs">
+            <span
+              className="w-9 shrink-0 font-semibold tabular-nums"
+              style={{ color: ratingColor(mid) }}
+            >
+              {range}
+            </span>
+            <span className="text-muted-foreground">{label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 /** Just the slider itself, always full-width — a fixed-width wrapper (with a value label
  * squeezed next to it) used to overflow the vote modal's own padding on a real phone, even
  * though it looked fine at desktop widths. The value now lives on its own line above,
@@ -2232,6 +2263,7 @@ export function MatchDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {iPlayed && pendingRatingIds.size > 0 && <RatingLegend />}
             <div className="divide-y">
             {compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
               const isSelf = entry.userId === user?.id
