@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -11,7 +11,6 @@ import { GenerateTeamsDto } from './dto/generate-teams.dto';
 import { MovePlayerDto } from './dto/move-player.dto';
 import { AddWalkInDto } from './dto/add-walk-in.dto';
 import { AddPlayerDto } from './dto/add-player.dto';
-import { LinkPastTrainingsDto } from './dto/link-past-trainings.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('training-ranking')
@@ -34,30 +33,6 @@ export class TrainingRankingController {
       throw new ForbiddenException();
     }
     return this.teamBalancingService.getPlayerTrainingHistory(userId);
-  }
-}
-
-// Someone who trained as an unlinked guest before creating their own account — coach
-// retroactively credits their past sessions in one go. Spans every session, so it doesn't
-// fit under a single :sessionId/teams scope like TeamBalancingController below.
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.COACH)
-@Controller('training-guest-matches')
-export class PastTrainingGuestsController {
-  constructor(private readonly teamBalancingService: TeamBalancingService) {}
-
-  @Get()
-  findMatches(@Query('firstName') firstName: string, @Query('lastName') lastName: string) {
-    return this.teamBalancingService.findUnlinkedGuestMatches(firstName ?? '', lastName ?? '');
-  }
-
-  @Post('link')
-  async link(@Body() dto: LinkPastTrainingsDto) {
-    const linkedCount = await this.teamBalancingService.linkPastGuestTrainings(
-      dto.userId,
-      dto.assignmentIds,
-    );
-    return { linkedCount };
   }
 }
 
