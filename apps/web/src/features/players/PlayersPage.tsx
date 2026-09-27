@@ -796,7 +796,10 @@ export function PlayersPage() {
                                 size="sm"
                               />
                             </AccountLevelRing>
-                            <span className="text-xs font-medium">
+                            <span
+                              className="max-w-28 truncate text-xs font-medium"
+                              title={`${player.firstName} ${player.lastName}`}
+                            >
                               {player.firstName} {player.lastName}
                             </span>
                           </div>

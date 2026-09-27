@@ -535,10 +535,14 @@ export function AdminKpisPage() {
                         <button
                           type="button"
                           onClick={() => setSelectedPlayer(p)}
-                          className="flex items-center gap-2 hover:underline"
+                          className="flex min-w-0 items-center gap-2 hover:underline"
                         >
                           <PlayerAvatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size="sm" />
-                          <span className="font-medium">
+                          {/* A table cell doesn't shrink like a flex row does — truncate needs its
+                              own max-width to kick in regardless of the column's auto layout, or a
+                              long name like "Mehdi Choloux Mezrag" just widens the whole table. The
+                              full name is still one tap away via the detail dialog this opens. */}
+                          <span className="max-w-32 truncate font-medium" title={`${p.firstName} ${p.lastName}`}>
                             {p.firstName} {p.lastName}
                           </span>
                         </button>

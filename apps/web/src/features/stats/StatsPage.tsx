@@ -368,7 +368,12 @@ function RosterStatsTable({ season }: { season: string }) {
                 {roster.map((p) => (
                   <TableRow key={p.userId}>
                     <TableCell className="bg-card sticky left-0 z-10 text-xs font-medium">
-                      {p.firstName} {p.lastName}
+                      {/* A long name (e.g. "Mehdi Choloux Mezrag") would otherwise widen this
+                          sticky first column and eat into the stat columns it's meant to pin in
+                          place — the full name still shows on hover/long-press via title. */}
+                      <span className="block max-w-24 truncate" title={`${p.firstName} ${p.lastName}`}>
+                        {p.firstName} {p.lastName}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right">{p.matchesPlayed}</TableCell>
                     <TableCell className="text-right">{p.goals}</TableCell>
