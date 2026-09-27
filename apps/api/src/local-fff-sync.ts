@@ -24,6 +24,16 @@ const API_BASE_URL = process.env.SYNC_API_BASE_URL;
 const API_KEY = process.env.SYNC_API_KEY;
 const FFF_TEAM_URL_OVERRIDE = process.env.SYNC_FFF_TEAM_URL;
 
+// The calendar changes at most once a week (a new fixture), so once a day is plenty; the
+// standings can change mid-Sunday afternoon as other pools' matches finish, so `sync:fff:local
+// -- --standings-only` is meant to run more often that day (see the two systemd timers this
+// script ships with — README-timers.md next to this file). `--matches-only` skips the
+// standings scrape entirely, `--standings-only` skips the calendar one; with neither flag
+// (or both), it does both, exactly like before.
+const args = new Set(process.argv.slice(2));
+const doMatches = !args.has('--standings-only') || args.has('--matches-only');
+const doStandings = !args.has('--matches-only') || args.has('--standings-only');
+
 interface ExistingMatch {
   fffMatchId: string | null;
   date: string;
@@ -70,56 +80,60 @@ async function main() {
 
   const scraper = new FffScraperService();
 
-  console.log('Scraping du calendrier...');
-  const scrapedMatches = await scraper.scrapeMatches(teamUrl);
-  console.log(`${scrapedMatches.length} match(s) trouvé(s).`);
+  if (doMatches) {
+    console.log('Scraping du calendrier...');
+    const scrapedMatches = await scraper.scrapeMatches(teamUrl);
+    console.log(`${scrapedMatches.length} match(s) trouvé(s).`);
 
-  console.log('Récupération des matchs déjà en prod (pour ne pas re-scraper un lieu déjà connu)...');
-  const existingMatches = await apiFetch<ExistingMatch[]>(API_BASE_URL, '/fff-sync/existing-matches', API_KEY);
-  const existingByKey = new Map(
-    existingMatches.map((m) => [m.fffMatchId ?? `${m.date}-${m.opponent}`, m]),
-  );
+    console.log('Récupération des matchs déjà en prod (pour ne pas re-scraper un lieu déjà connu)...');
+    const existingMatches = await apiFetch<ExistingMatch[]>(API_BASE_URL, '/fff-sync/existing-matches', API_KEY);
+    const existingByKey = new Map(
+      existingMatches.map((m) => [m.fffMatchId ?? `${m.date}-${m.opponent}`, m]),
+    );
 
-  console.log('Résolution des lieux/pelouses manquants (une page par match concerné)...');
-  const resolved: ScrapedMatch[] = [];
-  for (const scraped of scrapedMatches) {
-    const key = scraped.fffMatchId ?? `${scraped.date}-${scraped.opponent}`;
-    const existing = existingByKey.get(key);
-    const needsDetail = (!existing?.venue || !existing?.surface) && scraped.matchDetailUrl;
-    if (needsDetail) {
-      console.log(`  -> ${scraped.opponent} (${scraped.date})`);
-      const detail = await scraper.scrapeVenue(scraped.matchDetailUrl!);
-      resolved.push({
-        ...scraped,
-        venue: detail?.venue ?? existing?.venue ?? null,
-        surface: detail?.surface ?? existing?.surface ?? null,
-      });
-    } else {
-      resolved.push({ ...scraped, venue: existing?.venue ?? scraped.venue, surface: existing?.surface ?? null });
+    console.log('Résolution des lieux/pelouses manquants (une page par match concerné)...');
+    const resolved: ScrapedMatch[] = [];
+    for (const scraped of scrapedMatches) {
+      const key = scraped.fffMatchId ?? `${scraped.date}-${scraped.opponent}`;
+      const existing = existingByKey.get(key);
+      const needsDetail = (!existing?.venue || !existing?.surface) && scraped.matchDetailUrl;
+      if (needsDetail) {
+        console.log(`  -> ${scraped.opponent} (${scraped.date})`);
+        const detail = await scraper.scrapeVenue(scraped.matchDetailUrl!);
+        resolved.push({
+          ...scraped,
+          venue: detail?.venue ?? existing?.venue ?? null,
+          surface: detail?.surface ?? existing?.surface ?? null,
+        });
+      } else {
+        resolved.push({ ...scraped, venue: existing?.venue ?? scraped.venue, surface: existing?.surface ?? null });
+      }
     }
+
+    console.log('Envoi du calendrier vers la prod...');
+    const matchesLog = await apiFetch<{ status: string; matchesCreated: number; matchesUpdated: number }>(
+      API_BASE_URL,
+      '/fff-sync/import',
+      API_KEY,
+      { method: 'POST', body: JSON.stringify({ matches: resolved }) },
+    );
+    console.log(`Calendrier : ${matchesLog.status} — ${matchesLog.matchesCreated} créés, ${matchesLog.matchesUpdated} mis à jour.`);
   }
 
-  console.log('Envoi du calendrier vers la prod...');
-  const matchesLog = await apiFetch<{ status: string; matchesCreated: number; matchesUpdated: number }>(
-    API_BASE_URL,
-    '/fff-sync/import',
-    API_KEY,
-    { method: 'POST', body: JSON.stringify({ matches: resolved }) },
-  );
-  console.log(`Calendrier : ${matchesLog.status} — ${matchesLog.matchesCreated} créés, ${matchesLog.matchesUpdated} mis à jour.`);
+  if (doStandings) {
+    console.log('Scraping du classement...');
+    const standings = await scraper.scrapeStandings(teamUrl);
+    console.log(`${standings.length} équipe(s) trouvée(s).`);
 
-  console.log('Scraping du classement...');
-  const standings = await scraper.scrapeStandings(teamUrl);
-  console.log(`${standings.length} équipe(s) trouvée(s).`);
-
-  console.log('Envoi du classement vers la prod...');
-  const standingsLog = await apiFetch<{ status: string; teamsFound: number }>(
-    API_BASE_URL,
-    '/standings/import',
-    API_KEY,
-    { method: 'POST', body: JSON.stringify({ standings }) },
-  );
-  console.log(`Classement : ${standingsLog.status} — ${standingsLog.teamsFound} équipe(s).`);
+    console.log('Envoi du classement vers la prod...');
+    const standingsLog = await apiFetch<{ status: string; teamsFound: number }>(
+      API_BASE_URL,
+      '/standings/import',
+      API_KEY,
+      { method: 'POST', body: JSON.stringify({ standings }) },
+    );
+    console.log(`Classement : ${standingsLog.status} — ${standingsLog.teamsFound} équipe(s).`);
+  }
 }
 
 main().catch((error) => {

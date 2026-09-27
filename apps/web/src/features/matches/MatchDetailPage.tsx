@@ -1720,13 +1720,44 @@ export function MatchDetailPage() {
                     ))}
                 </div>
               )}
-              {(compositionQuery.data ?? []).some((e) => !e.isStarter) && (
+              {(compositionQuery.data ?? []).some((e) => !e.isStarter && !e.isSpectator) && (
                 <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
                   <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                     Remplaçants
                   </p>
                   {(compositionQuery.data ?? [])
-                    .filter((entry) => !entry.isStarter)
+                    .filter((entry) => !entry.isStarter && !entry.isSpectator)
+                    .map((entry) => (
+                      <div key={entry.id} className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-2 text-sm">
+                          <PlayerAvatar
+                            avatarUrl={entry.user?.avatarUrl}
+                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
+                            size="sm"
+                          />
+                          {entry.user
+                            ? `${entry.user.firstName} ${entry.user.lastName}`
+                            : `${entry.guestFirstName} ${entry.guestLastName}`}
+                        </div>
+                        {!entry.user && isCoach && (
+                          <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+              {/* Present but not playing (injured, between clubs...) — kept out of
+                  "Remplaçants" (see MatchComposition.isSpectator's own doc comment: a
+                  spectator never enters the game, unlike a genuine substitute). */}
+              {(compositionQuery.data ?? []).some((e) => e.isSpectator) && (
+                <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
+                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+                    Spectateurs
+                  </p>
+                  {(compositionQuery.data ?? [])
+                    .filter((entry) => entry.isSpectator)
                     .map((entry) => (
                       <div key={entry.id} className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-2 text-sm">
@@ -1753,10 +1784,11 @@ export function MatchDetailPage() {
             <div className="flex flex-wrap gap-1.5">
               {compositionQuery.data?.map((entry) => (
                 <div key={entry.id} className="flex flex-col items-start gap-0.5">
-                  <Badge variant={entry.isStarter ? 'default' : 'secondary'}>
+                  <Badge variant={entry.isStarter ? 'default' : entry.isSpectator ? 'outline' : 'secondary'}>
                     {entry.user
                       ? `${entry.user.firstName} ${entry.user.lastName}`
                       : `${entry.guestFirstName} ${entry.guestLastName}`}
+                    {entry.isSpectator && ' · Spectateur'}
                   </Badge>
                   {!entry.user && isCoach && (
                     <LinkGuestButton matchId={matchId} compositionId={entry.id} />
@@ -2777,6 +2809,39 @@ export function MatchDetailPage() {
         <div className="flex flex-col gap-8">
           {scoreCard}
           {presenceCard}
+          {/* Once a composition is saved, every step already reflects it (selectedPlayers/
+              formation/slotOrder are seeded from compositionQuery.data on load, further up) —
+              so jumping straight to any step, to add a late spectator or tweak the XI, never
+              means redoing it. Only the very first time through (nothing saved yet) does the
+              wizard force the linear Suivant/Suivant walk, since there's nothing to jump back
+              to. */}
+          {hasComposition && (
+            <div className="flex gap-1 text-sm" role="tablist" aria-label="Étape de configuration">
+              {(
+                [
+                  ['presence', '1. Présence'],
+                  ['formation', '2. Composition'],
+                  ['events', '3. Événements'],
+                ] as const
+              ).map(([step, label]) => (
+                <button
+                  key={step}
+                  type="button"
+                  role="tab"
+                  aria-selected={configStep === step}
+                  onClick={() => setConfigStep(step)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 font-medium transition-colors',
+                    configStep === step
+                      ? 'bg-club-blue text-white'
+                      : 'text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {configStep === 'presence' && renderPresenceStepCard()}
           {configStep === 'formation' && renderFormationStepCard()}
           {configStep === 'events' && renderEventsCard(true)}
