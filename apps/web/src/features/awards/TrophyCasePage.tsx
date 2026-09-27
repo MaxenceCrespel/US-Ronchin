@@ -199,9 +199,12 @@ function TrophyModal({ trophy, onClose }: { trophy: WonTrophy; onClose: () => vo
           />
         </Suspense>
       </div>
-      <p className="text-lg font-semibold text-white capitalize">{trophy.label}</p>
-      <p className="text-sm text-white/60">{trophy.detail}</p>
-      <p className="text-sm text-[#f4b400]">{trophy.metric}</p>
+      <p className="text-center text-lg font-semibold text-white capitalize">{trophy.label}</p>
+      {/* A match's score/date line is long enough to wrap on a phone — without text-center,
+          the flex column's items-center only centers the paragraph as a block, and the
+          wrapped second line falls back to the browser's default left alignment inside it. */}
+      <p className="text-center text-sm text-white/60">{trophy.detail}</p>
+      <p className="text-center text-sm text-[#f4b400]">{trophy.metric}</p>
     </div>
   )
 }
