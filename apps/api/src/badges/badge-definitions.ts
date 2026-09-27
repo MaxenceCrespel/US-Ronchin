@@ -756,7 +756,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'SPECIAL',
     rarity: 'EPIC',
     title: 'Le Métronome',
-    description: 'Une note moyenne supérieure à 7/10 sur tes 3 derniers matchs notés',
+    description: 'Une note moyenne d’au moins 6,5/10 sur l’ensemble de tes matchs notés',
     emoji: '🎻',
   },
 ];

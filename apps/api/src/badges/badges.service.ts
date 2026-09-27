@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { UserBadge } from './entities/user-badge.entity';
@@ -16,7 +16,7 @@ import { Match } from '../matches/entities/match.entity';
 import { MatchAttendance } from '../matches/entities/match-attendance.entity';
 import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
-import { PlayerPosition, User } from '../users/entities/user.entity';
+import { PlayerPosition, User, UserStatus } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
@@ -150,6 +150,8 @@ export interface BadgeHolderGroup {
 
 @Injectable()
 export class BadgesService {
+  private readonly logger = new Logger(BadgesService.name);
+
   constructor(
     @InjectRepository(UserBadge)
     private readonly badgesRepository: Repository<UserBadge>,
@@ -598,9 +600,13 @@ export class BadgesService {
       }
       const hasHistorique = seasonsActive.size >= 3;
 
-      // "Note moyenne sur 3 matchs" — the per-match average (not each individual note) of the
-      // 3 most recently rated matches, so a match rated by many teammates doesn't outweigh one
-      // rated by few.
+      // "Note moyenne sur l'ensemble de tes matchs notés" — the per-match average (not each
+      // individual note, so a match rated by many teammates doesn't outweigh one rated by
+      // few) of every match ever rated, not just the last 3: a badge is permanent once
+      // earned (see the toCreate/toUpdate split below — nothing here is ever revoked), so a
+      // short recent window mostly punished a good career average for a bad patch that came
+      // right before the check ran, rather than rewarding genuine consistency. At least 3
+      // rated matches are still required so 1-2 generous notes early on can't unlock it.
       const ratingsByMatch = new Map<string, { date: string; ratings: number[] }>();
       for (const r of myRatings) {
         if (!r.match || r.match.status !== 'PLAYED') continue;
@@ -608,12 +614,15 @@ export class BadgesService {
         entry.ratings.push(r.rating);
         ratingsByMatch.set(r.matchId, entry);
       }
-      const last3Rated = [...ratingsByMatch.values()]
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-        .slice(-3)
-        .map((entry) => entry.ratings.reduce((sum, v) => sum + v, 0) / entry.ratings.length);
-      const hasMetronome =
-        last3Rated.length >= 3 && last3Rated.reduce((sum, avg) => sum + avg, 0) / last3Rated.length > 7;
+      const allRatedMatchAverages = [...ratingsByMatch.values()].map(
+        (entry) => entry.ratings.reduce((sum, v) => sum + v, 0) / entry.ratings.length,
+      )
+      const METRONOME_TARGET = 6.5;
+      const careerRatingAverage =
+        allRatedMatchAverages.length > 0
+          ? allRatedMatchAverages.reduce((sum, avg) => sum + avg, 0) / allRatedMatchAverages.length
+          : null;
+      const hasMetronome = allRatedMatchAverages.length >= 3 && careerRatingAverage! >= METRONOME_TARGET;
 
       // Le Mois Parfait — 100% présence (entraînements + matchs) sur un mois calendaire donné,
       // un mois avec trop peu d'occasions ne compte pas. Non-réponse = absent, comme partout
@@ -780,6 +789,15 @@ export class BadgesService {
         patron_diva: { current: stats.patronDefenseCount, target: 10 },
         historique: { current: seasonsActive.size, target: 3 },
       };
+      // Only shown once at least one match has been rated — before that there's nothing
+      // meaningful to bar-chart (careerRatingAverage is null). Rounded to 2 decimals purely
+      // for display (e.g. 6.47); the eligibility check above uses the exact value.
+      if (careerRatingAverage !== null) {
+        progressByKey.metronome = {
+          current: Math.round(careerRatingAverage * 100) / 100,
+          target: METRONOME_TARGET,
+        };
+      }
 
       const repeatableCounts: Record<string, number> = {
         hat_trick: hatTrickCount,
@@ -990,5 +1008,23 @@ export class BadgesService {
     }
     const result = await this.badgesRepository.delete({ badgeKey });
     return { removedCount: result.affected ?? 0 };
+  }
+
+  /** Re-runs getForUser() for every active player right now, instead of waiting for the
+   * 4am cron (BadgesScheduler) — for when a badge's eligibility rule itself just changed
+   * (e.g. the Métronome switching from "last 3 matches" to a career average) and players
+   * who'd now qualify shouldn't have to wait for the nightly sync, or visit their own
+   * profile, to actually receive it. Same one-user-failure-doesn't-block-the-rest handling
+   * as the scheduler. */
+  async syncAll(): Promise<{ userCount: number }> {
+    const users = await this.usersRepository.find({ where: { status: UserStatus.ACTIVE } });
+    for (const user of users) {
+      try {
+        await this.getForUser(user.id);
+      } catch (err) {
+        this.logger.error(`Badge sync failed for user ${user.id}`, err instanceof Error ? err.stack : err);
+      }
+    }
+    return { userCount: users.length };
   }
 }

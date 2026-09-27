@@ -2698,11 +2698,13 @@ export function MatchDetailPage() {
                             tier={levelsQuery.data?.[entry.userId!]?.tier}
                             ringWidth={2}
                           >
+                            {/* This table is read as a stat sheet, one row per player, not as a
+                                lineup — the jersey number belongs on the pitch/composition
+                                views, not repeated here on every row. */}
                             <PlayerAvatar
                               avatarUrl={entry.user.avatarUrl}
                               firstName={entry.user.firstName}
                               lastName={entry.user.lastName}
-                              shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
                               size="sm"
                             />
                           </AccountLevelRing>
@@ -2713,9 +2715,21 @@ export function MatchDetailPage() {
                             size="sm"
                           />
                         )}
-                        {entry.user
-                          ? `${entry.user.firstName} ${entry.user.lastName}`
-                          : `${entry.guestFirstName} ${entry.guestLastName}`}
+                        {/* A table cell doesn't shrink like a flex row does — truncate needs its
+                            own max-width to kick in regardless of the column's auto layout, or a
+                            long name like "Mehdi Choloux Mezrag" just widens the whole table. */}
+                        <span
+                          className="max-w-24 truncate sm:max-w-32"
+                          title={
+                            entry.user
+                              ? `${entry.user.firstName} ${entry.user.lastName}`
+                              : `${entry.guestFirstName} ${entry.guestLastName}`
+                          }
+                        >
+                          {entry.user
+                            ? `${entry.user.firstName} ${entry.user.lastName}`
+                            : `${entry.guestFirstName} ${entry.guestLastName}`}
+                        </span>
                       </span>
                     </TableCell>
                     <TableCell className="px-1.5 text-right sm:px-2">

@@ -74,6 +74,17 @@ export class BadgesController {
     return this.badgesService.revokeFromEveryone(key);
   }
 
+  // Same access rule as the rest of this admin-only cluster — re-runs eligibility for every
+  // active player right now (see BadgesService.syncAll's own doc comment), for right after an
+  // eligibility rule itself changes, instead of waiting for the 4am cron.
+  @Post('sync-all')
+  syncAll(@CurrentUser() currentUser: AuthenticatedUser) {
+    if (currentUser.role !== UserRole.SUPERADMIN) {
+      throw new ForbiddenException();
+    }
+    return this.badgesService.syncAll();
+  }
+
   @Get('level')
   getMyLevel(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.badgesService.getAccountLevel(currentUser.id);
