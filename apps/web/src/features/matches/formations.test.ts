@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_FORMATION, FORMATIONS, positionCodes, slotCodes } from './formations'
+import { DEFAULT_FORMATION, FORMATIONS, guessFormation, positionCodes, slotCodes } from './formations'
 import { bandForY } from './PitchFormationEditor'
 
 const VALID_CODES = new Set(['GB', 'DG', 'DC', 'DD', 'MDF', 'MC', 'MG', 'MD', 'MOC', 'AG', 'AD', 'BU'])
@@ -52,6 +52,17 @@ describe('formations', () => {
   it('translates profile positions to their short codes', () => {
     expect(positionCodes(['RIGHT_BACK', 'STRIKER'])).toEqual(['DD', 'BU'])
     expect(positionCodes(null)).toEqual([])
+  })
+
+  it('recovers the formation from its saved row sizes, distinct systems included', () => {
+    expect(guessFormation([4, 2, 3, 1])).toBe('4-2-3-1')
+    expect(guessFormation([4, 4, 2])).toBe('4-4-2 à plat')
+    expect(guessFormation([3, 5, 2])).toBe('3-5-2')
+  })
+
+  it('falls back to the default system when no saved rows match (short squad, no data yet)', () => {
+    expect(guessFormation([4, 3])).toBe(DEFAULT_FORMATION)
+    expect(guessFormation([])).toBe(DEFAULT_FORMATION)
   })
 })
 

@@ -74,3 +74,18 @@ export function slotCodes(formationKey: string, ids: string[]): Record<string, s
 export function positionCodes(positions: PlayerSubPosition[] | null | undefined): string[] {
   return (positions ?? []).map((p) => SUB_POSITION_ABBR[p])
 }
+
+/** Reverse of MatchDetailPage's layoutForFormation: guesses which formation produced this
+ * defence→attack row-size signature (goalkeeper excluded). Only a per-player x/y is ever
+ * persisted with a saved composition, never the formation label itself, so reopening one
+ * has to recover "4-2-3-1" from what the saved rows actually look like — [4, 2, 3, 1] — or
+ * the formation picker silently reverts to DEFAULT_FORMATION even though the saved layout
+ * is still shown correctly. Falls back to DEFAULT_FORMATION when nothing matches exactly
+ * (fewer than 11 starters, or no saved coordinates yet). */
+export function guessFormation(rowSizes: number[]): string {
+  for (const [key, f] of Object.entries(FORMATIONS)) {
+    const sizes = f.rows.map((r) => r.slots.length)
+    if (sizes.length === rowSizes.length && sizes.every((n, i) => n === rowSizes[i])) return key
+  }
+  return DEFAULT_FORMATION
+}

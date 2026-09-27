@@ -69,7 +69,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
-import { DEFAULT_FORMATION, FORMATIONS } from './formations'
+import { DEFAULT_FORMATION, FORMATIONS, guessFormation } from './formations'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PositionLegend } from '@/components/PositionLegend'
@@ -657,12 +657,28 @@ export function MatchDetailPage() {
       setSelectedPlayers(map)
       setPlayerNotes(notes)
       setGuests(guestMap)
-      setSlotOrder(
-        compositionQuery.data
-          .filter((e) => e.isStarter)
-          .sort((a, b) => (a.formationY ?? 0) - (b.formationY ?? 0))
-          .map((e) => e.userId ?? e.id),
-      )
+
+      // layoutForFormation always puts the goalkeeper at slotOrder[0] (highest y, closest to
+      // their own goal — see its own y: 92) and slices the rest into formation rows in array
+      // order — so restoring that same order (descending y, not ascending) is what keeps a
+      // reopened composition's players in their saved rows instead of shifted by one slot.
+      const starters = [...compositionQuery.data]
+        .filter((e) => e.isStarter)
+        .sort((a, b) => (b.formationY ?? 0) - (a.formationY ?? 0))
+      setSlotOrder(starters.map((e) => e.userId ?? e.id))
+
+      // Only the per-player x/y is persisted, never which formation produced it — guess it
+      // back from the saved rows' sizes (defence→attack, goalkeeper excluded) so the picker
+      // shows "4-2-3-1" again instead of silently reverting to DEFAULT_FORMATION.
+      const outfieldYs = starters.slice(1).map((e) => e.formationY ?? 0)
+      const rowSizes: number[] = []
+      let lastY: number | null = null
+      for (const y of outfieldYs) {
+        if (lastY !== null && Math.abs(y - lastY) < 0.01) rowSizes[rowSizes.length - 1] += 1
+        else rowSizes.push(1)
+        lastY = y
+      }
+      if (rowSizes.length > 0) setFormation(guessFormation(rowSizes))
     }
   }, [compositionQuery.data])
 
