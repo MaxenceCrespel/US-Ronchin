@@ -529,7 +529,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'cadenas',
     category: 'CLEAN_SHEETS',
-    rarity: 'RARE',
+    rarity: 'LEGENDARY',
     title: 'Le Cadenas',
     description: '3 rencontres consécutives titulaire en défense sans encaisser de but',
     emoji: '🔒',
@@ -625,7 +625,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'verrou',
     category: 'CLEAN_SHEETS',
-    rarity: 'RARE',
+    rarity: 'LEGENDARY',
     title: 'Le Verrou',
     description: '3 rencontres consécutives titulaire gardien sans encaisser de but',
     emoji: '🔐',
