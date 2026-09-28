@@ -278,9 +278,12 @@ export class BadgesService {
         return concededByUs === 0;
       }).length;
       const hasCleanSheet = cleanSheetCount > 0;
-      const hasRoc = cleanSheetCount >= 5;
-      const hasForteresse = cleanSheetCount >= 10;
-      const hasInebranlable = cleanSheetCount >= 20;
+      // Thresholds lowered from 5/10/20 — a clean sheet is genuinely rare at this club (~2 in
+      // 30+ matches a season, high-scoring games being the norm), so the original milestones
+      // were effectively multi-season, near-unreachable goals rather than real ones.
+      const hasRoc = cleanSheetCount >= 2;
+      const hasForteresse = cleanSheetCount >= 5;
+      const hasInebranlable = cleanSheetCount >= 10;
 
       const goalkeeperCleanSheetCount = myComposition.filter((c) => {
         const m = c.match;
@@ -290,9 +293,10 @@ export class BadgesService {
         return concededByUs === 0;
       }).length;
       const hasPortier = goalkeeperCleanSheetCount > 0;
-      const hasMainsOr = goalkeeperCleanSheetCount >= 5;
-      const hasMainsDiamant = goalkeeperCleanSheetCount >= 10;
-      const hasMainsLegendaires = goalkeeperCleanSheetCount >= 20;
+      // Same lowered thresholds as hasRoc/hasForteresse/hasInebranlable above, same reason.
+      const hasMainsOr = goalkeeperCleanSheetCount >= 2;
+      const hasMainsDiamant = goalkeeperCleanSheetCount >= 5;
+      const hasMainsLegendaires = goalkeeperCleanSheetCount >= 10;
 
       const defenderStartCount = myComposition.filter(
         (c) => c.isStarter && c.position === PlayerPosition.DEFENDER && c.match?.status === 'PLAYED',
@@ -775,12 +779,12 @@ export class BadgesService {
         hot_head: { current: seasonStats.yellowCards, target: 5 },
         card_collector: { current: seasonStats.yellowCards, target: 10 },
         banned: { current: seasonStats.redCards, target: 2 },
-        roc: { current: cleanSheetCount, target: 5 },
-        forteresse: { current: cleanSheetCount, target: 10 },
-        inebranlable: { current: cleanSheetCount, target: 20 },
-        mains_or: { current: goalkeeperCleanSheetCount, target: 5 },
-        mains_diamant: { current: goalkeeperCleanSheetCount, target: 10 },
-        mains_legendaires: { current: goalkeeperCleanSheetCount, target: 20 },
+        roc: { current: cleanSheetCount, target: 2 },
+        forteresse: { current: cleanSheetCount, target: 5 },
+        inebranlable: { current: cleanSheetCount, target: 10 },
+        mains_or: { current: goalkeeperCleanSheetCount, target: 2 },
+        mains_diamant: { current: goalkeeperCleanSheetCount, target: 5 },
+        mains_legendaires: { current: goalkeeperCleanSheetCount, target: 10 },
         veteran_defense: { current: defenderStartCount, target: 15 },
         cadre_defensif: { current: defenderStartCount, target: 30 },
         legende_arriere_garde: { current: defenderStartCount, target: 50 },

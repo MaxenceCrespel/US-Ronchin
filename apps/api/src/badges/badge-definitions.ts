@@ -499,7 +499,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'clean_sheet',
     category: 'DEFENSE',
-    rarity: 'COMMON',
+    rarity: 'RARE',
     title: 'La Muraille de Ronchin',
     description: 'Titulaire en défense lors d’une rencontre terminée sans encaisser de but',
     emoji: '🧱',
@@ -509,7 +509,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'DEFENSE',
     rarity: 'RARE',
     title: 'Le Roc',
-    description: '5 rencontres titulaire en défense sans encaisser de but',
+    description: '2 rencontres titulaire en défense sans encaisser de but',
     emoji: '🪨',
   },
   {
@@ -517,7 +517,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'DEFENSE',
     rarity: 'EPIC',
     title: 'La Forteresse',
-    description: '10 rencontres titulaire en défense sans encaisser de but',
+    description: '5 rencontres titulaire en défense sans encaisser de but',
     emoji: '🏰',
   },
   {
@@ -525,7 +525,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'DEFENSE',
     rarity: 'LEGENDARY',
     title: 'L’Inébranlable',
-    description: '20 rencontres titulaire en défense sans encaisser de but',
+    description: '10 rencontres titulaire en défense sans encaisser de but',
     emoji: '🛡️',
   },
   {
@@ -595,7 +595,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     key: 'portier',
     category: 'GOALKEEPER',
-    rarity: 'COMMON',
+    rarity: 'RARE',
     title: 'Le Portier',
     description: 'Titulaire au poste de gardien lors d’une rencontre terminée sans encaisser de but',
     emoji: '🧤',
@@ -605,7 +605,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'GOALKEEPER',
     rarity: 'RARE',
     title: "Les Mains d'Or",
-    description: '5 rencontres titulaire gardien sans encaisser de but',
+    description: '2 rencontres titulaire gardien sans encaisser de but',
     emoji: '🥇',
   },
   {
@@ -613,7 +613,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'GOALKEEPER',
     rarity: 'EPIC',
     title: 'Les Mains de Diamant',
-    description: '10 rencontres titulaire gardien sans encaisser de but',
+    description: '5 rencontres titulaire gardien sans encaisser de but',
     emoji: '💎',
   },
   {
@@ -621,7 +621,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'GOALKEEPER',
     rarity: 'LEGENDARY',
     title: 'Les Mains Légendaires',
-    description: '20 rencontres titulaire gardien sans encaisser de but',
+    description: '10 rencontres titulaire gardien sans encaisser de but',
     emoji: '🌟',
   },
   {
