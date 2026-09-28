@@ -1,14 +1,13 @@
 export type BadgeCategory =
   | 'GOALS'
   | 'ASSISTS'
-  | 'MOTM'
-  | 'GOALKEEPER'
-  | 'DEFENSE'
-  | 'MIDFIELD'
+  | 'CLEAN_SHEETS'
+  | 'POSITIONS'
+  | 'RECOGNITION'
+  | 'CONTEXT'
   | 'ATTENDANCE'
   | 'EXPERIENCE'
   | 'DISCIPLINE'
-  | 'IMPACT'
   | 'SPECIAL';
 
 /** How hard a badge is to earn — drives the reveal's visual intensity (glow, particles, rarity tag). */
@@ -26,14 +25,13 @@ export interface BadgeDefinition {
 export const BADGE_CATEGORY_LABELS: Record<BadgeCategory, string> = {
   GOALS: 'Buts',
   ASSISTS: 'Passes décisives',
-  MOTM: 'Homme du match',
-  GOALKEEPER: 'Gardien',
-  DEFENSE: 'Défense',
-  MIDFIELD: 'Milieu',
+  CLEAN_SHEETS: 'Clean sheets',
+  POSITIONS: 'Polyvalence',
+  RECOGNITION: 'Reconnaissance',
+  CONTEXT: 'Contexte',
   ATTENDANCE: 'Assiduité',
   EXPERIENCE: 'Expérience',
   DISCIPLINE: 'Discipline',
-  IMPACT: 'Impact & résultats',
   SPECIAL: 'Spécial',
 };
 
@@ -212,7 +210,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   // Homme du match — progression
   {
     key: 'motm_first',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'COMMON',
     title: 'Homme du match',
     description: 'Être élu homme du match',
@@ -220,7 +218,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'motm_hero',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'RARE',
     title: 'Légende du terrain',
     description: '3 fois homme du match',
@@ -228,7 +226,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'motm_legend',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'EPIC',
     title: 'Idole du vestiaire',
     description: '5 fois homme du match',
@@ -236,7 +234,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'diva',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'LEGENDARY',
     title: 'Chouchou du vestiaire',
     description: '10 fois homme du match — le trophée a ton nom gravé dessus',
@@ -244,7 +242,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'incompris',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'RARE',
     title: "L'Incompris",
     description: 'Être élu homme du match lors d’une défaite de l’équipe',
@@ -252,7 +250,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'fair_play',
-    category: 'MOTM',
+    category: 'RECOGNITION',
     rarity: 'RARE',
     title: 'Le Fair-Play',
     description:
@@ -498,7 +496,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   // Impact & résultats — défense, moments individuels, série d'équipe, présence
   {
     key: 'clean_sheet',
-    category: 'DEFENSE',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: 'La Muraille de Ronchin',
     description: 'Titulaire en défense lors d’une rencontre terminée sans encaisser de but',
@@ -506,7 +504,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'roc',
-    category: 'DEFENSE',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: 'Le Roc',
     description: '2 rencontres titulaire en défense sans encaisser de but',
@@ -514,7 +512,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'forteresse',
-    category: 'DEFENSE',
+    category: 'CLEAN_SHEETS',
     rarity: 'EPIC',
     title: 'La Forteresse',
     description: '5 rencontres titulaire en défense sans encaisser de but',
@@ -522,7 +520,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'inebranlable',
-    category: 'DEFENSE',
+    category: 'CLEAN_SHEETS',
     rarity: 'LEGENDARY',
     title: 'L’Inébranlable',
     description: '10 rencontres titulaire en défense sans encaisser de but',
@@ -530,7 +528,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'cadenas',
-    category: 'DEFENSE',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: 'Le Cadenas',
     description: '3 rencontres consécutives titulaire en défense sans encaisser de but',
@@ -538,7 +536,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'veteran_defense',
-    category: 'DEFENSE',
+    category: 'EXPERIENCE',
     rarity: 'RARE',
     title: 'Le Vétéran de la Défense',
     description: '15 titularisations en défense au fil de la carrière',
@@ -546,7 +544,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'cadre_defensif',
-    category: 'DEFENSE',
+    category: 'EXPERIENCE',
     rarity: 'EPIC',
     title: 'Le Cadre Défensif',
     description: '30 titularisations en défense au fil de la carrière',
@@ -554,7 +552,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'legende_arriere_garde',
-    category: 'DEFENSE',
+    category: 'EXPERIENCE',
     rarity: 'LEGENDARY',
     title: "La Légende de l'Arrière-Garde",
     description: '50 titularisations en défense au fil de la carrière',
@@ -562,7 +560,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'patron_first',
-    category: 'DEFENSE',
+    category: 'RECOGNITION',
     rarity: 'COMMON',
     title: 'Patron de la défense',
     description: 'Être élu patron de la défense après un match',
@@ -570,7 +568,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'patron_hero',
-    category: 'DEFENSE',
+    category: 'RECOGNITION',
     rarity: 'RARE',
     title: 'Chef de la garnison',
     description: '3 fois élu patron de la défense',
@@ -578,7 +576,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'patron_legend',
-    category: 'DEFENSE',
+    category: 'RECOGNITION',
     rarity: 'EPIC',
     title: 'Général de la défense',
     description: '5 fois élu patron de la défense',
@@ -586,7 +584,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'patron_diva',
-    category: 'DEFENSE',
+    category: 'RECOGNITION',
     rarity: 'LEGENDARY',
     title: 'Seigneur de la défense',
     description: '10 fois élu patron de la défense',
@@ -594,7 +592,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'portier',
-    category: 'GOALKEEPER',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: 'Le Portier',
     description: 'Titulaire au poste de gardien lors d’une rencontre terminée sans encaisser de but',
@@ -602,7 +600,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'mains_or',
-    category: 'GOALKEEPER',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: "Les Mains d'Or",
     description: '2 rencontres titulaire gardien sans encaisser de but',
@@ -610,7 +608,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'mains_diamant',
-    category: 'GOALKEEPER',
+    category: 'CLEAN_SHEETS',
     rarity: 'EPIC',
     title: 'Les Mains de Diamant',
     description: '5 rencontres titulaire gardien sans encaisser de but',
@@ -618,7 +616,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'mains_legendaires',
-    category: 'GOALKEEPER',
+    category: 'CLEAN_SHEETS',
     rarity: 'LEGENDARY',
     title: 'Les Mains Légendaires',
     description: '10 rencontres titulaire gardien sans encaisser de but',
@@ -626,7 +624,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'verrou',
-    category: 'GOALKEEPER',
+    category: 'CLEAN_SHEETS',
     rarity: 'RARE',
     title: 'Le Verrou',
     description: '3 rencontres consécutives titulaire gardien sans encaisser de but',
@@ -634,7 +632,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'box_to_box',
-    category: 'MIDFIELD',
+    category: 'POSITIONS',
     rarity: 'RARE',
     title: 'Box-to-Box',
     description: 'Être titulaire au milieu, marquer ET délivrer une passe décisive dans le même match',
@@ -642,7 +640,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'braquage',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'EPIC',
     title: 'Le Braquage',
     description: 'Être l’unique buteur lors d’une victoire 1-0',
@@ -650,7 +648,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'super_sub',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'RARE',
     title: 'Le Super Sub',
     description: 'Être remplaçant au coup d’envoi et marquer après ton entrée',
@@ -658,15 +656,15 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'duo_magique',
-    category: 'IMPACT',
+    category: 'POSITIONS',
     rarity: 'RARE',
     title: 'Le Duo Magique',
-    description: 'Marquer un but ET délivrer une passe décisive dans le même match',
+    description: 'Titulaire en attaque, marquer ET délivrer une passe décisive dans le même match',
     emoji: '🤝',
   },
   {
     key: 'porte_bonheur',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'COMMON',
     title: 'Le Porte-Bonheur',
     description: 'Être sur la feuille de match lors de 3 victoires consécutives',
@@ -674,7 +672,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'chat_noir',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'RARE',
     title: 'Le Chat Noir',
     description: 'Être sur la feuille de match lors de 3 défaites consécutives',
@@ -682,7 +680,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'routard',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'COMMON',
     title: 'Le Routard',
     description: 'Être sur la feuille de match pour 5 déplacements à l’extérieur',
@@ -690,7 +688,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'footballeur_dimanche',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'RARE',
     title: 'Le Footballeur du Dimanche',
     description:
@@ -699,7 +697,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'naufrage',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'RARE',
     title: 'Le Naufragé',
     description:
@@ -708,7 +706,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'equilibriste',
-    category: 'IMPACT',
+    category: 'CONTEXT',
     rarity: 'EPIC',
     title: "L'Équilibriste",
     description:
@@ -717,7 +715,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'garde_du_corps',
-    category: 'IMPACT',
+    category: 'EXPERIENCE',
     rarity: 'RARE',
     title: 'Le Garde du Corps',
     description: 'Être nommé remplaçant 5 matchs consécutifs',
@@ -744,7 +742,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   },
   {
     key: 'polyvalent',
-    category: 'SPECIAL',
+    category: 'POSITIONS',
     rarity: 'RARE',
     title: 'Le Polyvalent',
     description:

@@ -10,28 +10,26 @@ import { fetchBadgesForUser } from './api'
 export const CATEGORY_LABELS: Record<BadgeCategory, string> = {
   GOALS: 'Buts',
   ASSISTS: 'Passes décisives',
-  MOTM: 'Homme du match',
-  GOALKEEPER: 'Gardien',
-  DEFENSE: 'Défense',
-  MIDFIELD: 'Milieu',
+  CLEAN_SHEETS: 'Clean sheets',
+  POSITIONS: 'Polyvalence',
+  RECOGNITION: 'Reconnaissance',
+  CONTEXT: 'Contexte',
   ATTENDANCE: 'Assiduité',
   EXPERIENCE: 'Expérience',
   DISCIPLINE: 'Discipline',
-  IMPACT: 'Impact & résultats',
   SPECIAL: 'Spécial',
 }
 
 export const CATEGORY_ORDER: BadgeCategory[] = [
   'GOALS',
   'ASSISTS',
-  'MOTM',
-  'GOALKEEPER',
-  'DEFENSE',
-  'MIDFIELD',
+  'CLEAN_SHEETS',
+  'POSITIONS',
+  'RECOGNITION',
+  'CONTEXT',
   'ATTENDANCE',
   'EXPERIENCE',
   'DISCIPLINE',
-  'IMPACT',
   'SPECIAL',
 ]
 

@@ -293,14 +293,13 @@ export interface MatchTrophyWinners {
 export type BadgeCategory =
   | 'GOALS'
   | 'ASSISTS'
-  | 'MOTM'
-  | 'GOALKEEPER'
-  | 'DEFENSE'
-  | 'MIDFIELD'
+  | 'CLEAN_SHEETS'
+  | 'POSITIONS'
+  | 'RECOGNITION'
+  | 'CONTEXT'
   | 'ATTENDANCE'
   | 'EXPERIENCE'
   | 'DISCIPLINE'
-  | 'IMPACT'
   | 'SPECIAL'
 
 export type BadgeRarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY'

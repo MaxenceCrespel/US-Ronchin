@@ -63,24 +63,6 @@ function isNearBirthday(isoDate: string, birthDate: string): boolean {
   );
 }
 
-/** Badges that reward a feat achievable multiple times within a single match — each
- * occurrence bumps the badge's own count instead of only ever being earned once. */
-const REPEATABLE_BADGE_KEYS = new Set([
-  'hat_trick',
-  'poker',
-  'double',
-  'duo_magique',
-  'clean_sheet',
-  'portier',
-  'super_sub',
-  'braquage',
-  'traiteur',
-  'cadeau_anniversaire',
-  'jekyll_hyde',
-  'impact_immediat',
-  'box_to_box',
-]);
-
 /** Minimum number of training+match "occasions" within a calendar month for Le Mois Parfait
  * to be meaningful — a month with just one session shouldn't count as a perfect month. */
 const MOIS_PARFAIT_MIN_OCCASIONS = 3;
@@ -266,8 +248,18 @@ export class BadgesService {
       const jekyllHydeCount = [...goalsByMatch.keys()].filter((matchId) => redMatches.has(matchId)).length;
       const hasJekyllHyde = jekyllHydeCount > 0;
 
+      // Titulaire ATTAQUANT specifically (Box-to-Box below is the midfielder equivalent of
+      // the same goal+assist feat) — the two used to have no position split at all and fired
+      // together on the same match for a scoring, passing midfielder, double-counting one
+      // feat as two badges. A player can't start as both FORWARD and MIDFIELDER in the same
+      // match, so this makes them mutually exclusive instead.
       const assistMatchIds = new Set(eventsAsAssist.map((e) => e.matchId));
-      const duoMagiqueCount = [...goalsByMatch.keys()].filter((matchId) => assistMatchIds.has(matchId)).length;
+      const duoMagiqueCount = [...goalsByMatch.keys()]
+        .filter((matchId) => assistMatchIds.has(matchId))
+        .filter((matchId) => {
+          const comp = myComposition.find((c) => c.matchId === matchId);
+          return comp?.isStarter && comp.position === PlayerPosition.FORWARD;
+        }).length;
       const hasDuoMagique = duoMagiqueCount > 0;
 
       const cleanSheetCount = myComposition.filter((c) => {
@@ -584,12 +576,18 @@ export class BadgesService {
       const myMotmVoteMatchIds = new Set(
         motmVotesForMyMatches.filter((v) => v.voterId === userId).map((v) => v.matchId),
       );
+      // Only matches whose vote is actually closed count, in both the numerator and the
+      // denominator — same motmRevealedNotifiedAt boundary as getPendingRatingTargets. A
+      // match played yesterday, still open for voting, isn't a missed vote yet; counting it
+      // against the player made the badge flicker off every time a new match was played,
+      // then back on once they got around to voting, rather than tracking genuine misses.
+      const closedVoteMatches = playedMatches.filter((m) => m.motmRevealedNotifiedAt !== null);
+      const votedMatchCount = closedVoteMatches.filter((m) => myMotmVoteMatchIds.has(m.id)).length;
       // 90% rather than every single match — now that this is revocable, requiring 100%
       // meant one missed vote (ever) permanently wiped it out until earning it back from
       // zero, which felt punitive for what's meant to be a "generally reliable" badge.
-      const votedMatchCount = playedMatches.filter((m) => myMotmVoteMatchIds.has(m.id)).length;
       const hasFairPlay =
-        playedMatches.length >= 3 && votedMatchCount / playedMatches.length >= 0.9;
+        closedVoteMatches.length >= 3 && votedMatchCount / closedVoteMatches.length >= 0.9;
 
       const hasTaulier = stats.matchesPlayed >= 10 && starterMatchCount / stats.matchesPlayed >= 0.8;
 
@@ -792,6 +790,35 @@ export class BadgesService {
         patron_legend: { current: stats.patronDefenseCount, target: 5 },
         patron_diva: { current: stats.patronDefenseCount, target: 10 },
         historique: { current: seasonsActive.size, target: 3 },
+        routard: { current: awayCount, target: 5 },
+        garde_du_corps: { current: maxBenchStreak, target: 5 },
+        aigle_des_surfaces: { current: goalTypeCountsInSeason.get(GoalType.HEAD) ?? 0, target: 3 },
+        specialiste: { current: goalTypeCountsInSeason.get(GoalType.PENALTY) ?? 0, target: 3 },
+        altruiste: { current: maxAltruisteStreak, target: 3 },
+        pere_noel: { current: maxAssistStreak, target: 5 },
+        sang_froid: { current: maxNoCardStreak, target: 20 },
+        panne_seche: { current: maxPanneSecheStreak, target: 10 },
+        cadenas: { current: maxCadenasStreak, target: 3 },
+        verrou: { current: maxGkCadenasStreak, target: 3 },
+        chat_noir: { current: maxLossStreak, target: 3 },
+        porte_bonheur: { current: maxWinStreak, target: 3 },
+        polyvalent: { current: positionsPlayed.size, target: 4 },
+        freres_darmes: {
+          current: Math.max(0, ...[...scorerMatchesByAssistTarget.values()].map((s) => s.size)),
+          target: 2,
+        },
+        // Ratio-based, on a 0-100 scale — the underlying condition is a percentage (starter
+        // rate, vote rate), not a raw count, so current/target here read as "63/80" meaning
+        // 63% of the way to the 80% bar, not 63 of 80 matches.
+        taulier: {
+          current: stats.matchesPlayed > 0 ? Math.round((starterMatchCount / stats.matchesPlayed) * 100) : 0,
+          target: 80,
+        },
+        fair_play: {
+          current:
+            closedVoteMatches.length > 0 ? Math.round((votedMatchCount / closedVoteMatches.length) * 100) : 0,
+          target: 90,
+        },
       };
       // Only shown once at least one match has been rated — before that there's nothing
       // meaningful to bar-chart (careerRatingAverage is null). Rounded to 2 decimals purely
@@ -803,32 +830,23 @@ export class BadgesService {
         };
       }
 
-      const repeatableCounts: Record<string, number> = {
-        hat_trick: hatTrickCount,
-        poker: pokerCount,
-        double: doubleCount,
-        duo_magique: duoMagiqueCount,
-        clean_sheet: cleanSheetCount,
-        portier: goalkeeperCleanSheetCount,
-        super_sub: superSubCount,
-        braquage: braquageCount,
-        traiteur: traiteurCount,
-        cadeau_anniversaire: birthdayGoalCount,
-        jekyll_hyde: jekyllHydeCount,
-        impact_immediat: impactImmediatCount,
-        box_to_box: boxToBoxCount,
-      };
-      const occurrenceCount = (key: string): number =>
-        REPEATABLE_BADGE_KEYS.has(key) ? (repeatableCounts[key] ?? 0) : eligibility[key] ? 1 : 0;
-
+      // Every badge is earned once and for all, never re-stacked on a later repeat of the
+      // same feat (a second hat-trick doesn't outweigh a first one in the account-level
+      // score) — simpler to reason about than a mix of one-off and cumulative badges, and it
+      // stops a handful of frequently-repeatable feats from silently dwarfing rarer ones.
+      // CLEAN_SHEETS is left out — genuinely out of reach for a player who never lines up
+      // in defense or goal, unlike every category here (POSITIONS included: 'polyvalent'
+      // alone, open to anyone, is enough to satisfy it without ever doing a box-to-box or a
+      // duo magique).
       const otherCategories: BadgeCategory[] = [
         'GOALS',
         'ASSISTS',
-        'MOTM',
         'ATTENDANCE',
         'EXPERIENCE',
         'DISCIPLINE',
-        'IMPACT',
+        'RECOGNITION',
+        'CONTEXT',
+        'POSITIONS',
       ];
       eligibility.swiss_army = otherCategories.every((category) =>
         BADGE_DEFINITIONS.some((d) => d.category === category && eligibility[d.key]),
@@ -838,36 +856,27 @@ export class BadgesService {
       const existingByKey = new Map(existing.map((b) => [b.badgeKey, b]));
 
       const toCreate: UserBadge[] = [];
-      const toUpdate: UserBadge[] = [];
-      const notifications: { title: string; count: number }[] = [];
+      const notifications: { title: string }[] = [];
 
       for (const d of BADGE_DEFINITIONS) {
-        const count = occurrenceCount(d.key);
-        if (count <= 0) continue;
-        const row = existingByKey.get(d.key);
-        if (!row) {
-          toCreate.push(this.badgesRepository.create({ userId, badgeKey: d.key, count }));
-          notifications.push({ title: d.title, count });
-        } else if (REPEATABLE_BADGE_KEYS.has(d.key) && count > row.count) {
-          row.count = count;
-          toUpdate.push(row);
-          notifications.push({ title: d.title, count });
-        }
+        if (!eligibility[d.key] || existingByKey.has(d.key)) continue;
+        toCreate.push(this.badgesRepository.create({ userId, badgeKey: d.key, count: 1 }));
+        notifications.push({ title: d.title });
       }
 
-      if (toCreate.length > 0 || toUpdate.length > 0) {
-        await this.badgesRepository.save([...toCreate, ...toUpdate]);
+      if (toCreate.length > 0) {
+        await this.badgesRepository.save(toCreate);
         for (const notif of notifications) {
           await this.pushNotificationsService.sendToUser(userId, {
             title: 'Badge débloqué !',
-            body: notif.count > 1 ? `${notif.title} ×${notif.count}` : notif.title,
+            body: notif.title,
             url: '/profile',
           });
         }
       }
 
       const toRevoke = [...existingByKey.entries()]
-        .filter(([key]) => REVOCABLE_BADGE_KEYS.has(key) && occurrenceCount(key) <= 0)
+        .filter(([key]) => REVOCABLE_BADGE_KEYS.has(key) && !eligibility[key])
         .map(([, row]) => row.id);
       if (toRevoke.length > 0) {
         await this.badgesRepository.delete(toRevoke);
