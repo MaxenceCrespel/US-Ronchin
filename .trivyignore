@@ -80,6 +80,8 @@ CVE-2026-8458
 CVE-2026-8927
 CVE-2026-8932
 CVE-2026-9538
+CVE-2026-84782
+CVE-2026-103111
 
 # CVE-2026-16742 (systemd-homed local privilege escalation via missing
 # home-record signature verification) affects libnss-systemd, libpam-
@@ -179,6 +181,15 @@ CVE-2026-82049
 # connection — the API is Node.js only and the scraper only speaks HTTPS to one fixed domain.
 CVE-2026-8328
 
+# CVE-2026-19553 (Python: certificate verification bypass via missing server_hostname
+# validation in SSLContext.wrap_bio(), HIGH) — same four packages, same installed version
+# (3.11.2-6+deb12u8) and same source (Chrome's Recommends chain) as CVE-2026-82049/
+# CVE-2026-8328 above; re-verified 2026-10-02 (`apt-cache policy` inside the built image:
+# Installed == Candidate, no Debian bookworm fix). Same unreachability: this is a TLS
+# certificate-pinning bug in Python's own ssl module — nothing here ever runs Python or
+# opens a TLS connection through it; the API is Node.js only.
+CVE-2026-19553
+
 # CVE-2026-93990 (Expat: XML injection via malformed UTF-16 input, HIGH) hits libexpat1 at
 # the installed 2.5.0-1+deb12u3 — Status: affected, no Fixed Version. Different source from
 # the rest of this file's Chrome-Recommends/base-image entries: libexpat1 is explicitly
@@ -214,6 +225,19 @@ CVE-2026-93990
 CVE-2026-88806
 CVE-2026-88807
 
+# CVE-2026-94286 (libXtst: Denial of Service via out-of-bounds read in the RECORD extension's
+# reply parser, HIGH) hits libxtst6 (installed 2:1.2.3-1.1) — Status: affected, no Fixed
+# Version. Same category as libx11-6/libxrender1 immediately above: explicitly listed in
+# apps/api/Dockerfile's own `apt-get install --no-install-recommends` block, an X11 client
+# library headless Chrome links against — not pulled in incidentally (confirmed absent from a
+# fresh node:22-bookworm-slim). Re-verified 2026-10-02 inside the built image: `apt-cache
+# policy libxtst6` shows that exact version as both Installed and Candidate, nothing newer for
+# `apt-get upgrade` (already run in the Dockerfile) to move to; no Debian bookworm fix
+# published yet. Unreachable regardless: the RECORD extension records X input events from a
+# live X server — the FFF scraper runs Chrome in pure headless mode, no X server ever started,
+# so this code path never executes.
+CVE-2026-94286
+
 # CVE-2026-96889 (librsvg: use-after-free when an SVG's XML includes duplicated entities,
 # HIGH) hits librsvg2-2 and librsvg2-common (installed 2.54.7+dfsg-1~deb12u1) — Status:
 # affected, no Fixed Version. Re-verified 2026-09-25: in a fresh `docker run
@@ -236,21 +260,28 @@ CVE-2026-96889
 # --- apps/api image only: SEPARATE, unrelated vulnerabilities vendored
 # INSIDE the npm CLI itself (apps/api/Dockerfile runs `npm install -g
 # npm@latest` to patch npm's own bundled tar/picomatch/sigstore versions —
-# see that Dockerfile's comment). As of npm@12.0.2 (current latest,
-# checked 2026-08-05), npm still vendors brace-expansion@5.0.7 internally
-# (CVE-2026-14257 / its later-assigned CVE-2026-69152, fixed only at
-# 5.0.9+) and ip-address@10.2.0 (CVE-2026-69192, fixed at 10.3.1+) — and
-# the base image's own default npm@10.9.8 is equally affected on
-# brace-expansion (vendors 2.0.2, fixed only at 2.1.4+). No published npm
-# release currently ships a fix for either; nothing in our control (not
-# our package.json, not `overrides` — these live inside the
-# globally-installed npm binary, not our dependency tree). Not reachable
-# either way: this npm install is only ever used to bootstrap the image
-# at build time and for the one `npx playwright install chrome` call
-# below it — never invoked at runtime, never fed attacker- or
-# HTTP-controlled input. Revisit by checking
-# `npm view npm@latest dependencies` — or just rebuilding the image —
-# once npm ships a release with both fixed.
+# see that Dockerfile's comment). As of npm@12.0.2 (checked 2026-08-05),
+# npm vendored brace-expansion@5.0.7 internally (CVE-2026-14257 / its
+# later-assigned CVE-2026-69152, fixed only at 5.0.9+) and ip-address@10.2.0
+# (CVE-2026-69192, fixed at 10.3.1+) — and the base image's own default
+# npm@10.9.8 was equally affected on brace-expansion (vendors 2.0.2, fixed
+# only at 2.1.4+). Re-verified 2026-10-02 against the built image: npm@latest
+# is now 12.2.0 and those two original CVEs are gone (brace-expansion moved
+# to 5.0.9, past the 5.0.9+ fix line), but it now vendors that exact 5.0.9
+# internally, which a newer round of CVEs (CVE-2026-102276/102278, fixed at
+# 5.0.10/5.0.11) catches again, plus undici@6.28.0 (CVE-2026-19534, fixed at
+# 6.28.1+) — same unfixable-by-us situation, just a different round of it:
+# nothing in our control (not our package.json, not `overrides` — these
+# live inside the globally-installed npm binary, not our dependency tree).
+# Not reachable either way: this npm install is only ever used to bootstrap
+# the image at build time and for the one `npx playwright install chrome`
+# call below it — never invoked at runtime, never fed attacker- or
+# HTTP-controlled input. Revisit by checking `npm view npm@latest
+# dependencies` — or just rebuilding the image — once npm ships a release
+# with all of these fixed.
 CVE-2026-14257
 CVE-2026-69152
 CVE-2026-69192
+CVE-2026-102276
+CVE-2026-102278
+CVE-2026-19534

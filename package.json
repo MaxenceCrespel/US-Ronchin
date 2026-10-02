@@ -13,10 +13,10 @@
   },
   "overrides": {
     "minimatch@3.1.5": {
-      "brace-expansion": "1.1.18"
+      "brace-expansion": "1.1.21"
     },
-    "fast-uri": "3.1.7",
+    "fast-uri": "3.1.8",
     "qs": "6.16.0",
-    "multer": "2.3.0"
+    "multer": "2.4.0"
   }
 }
