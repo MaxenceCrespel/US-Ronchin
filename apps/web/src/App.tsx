@@ -26,6 +26,8 @@ const PlayersPage = lazy(() => import('@/features/players/PlayersPage').then((m)
 const MatchesPage = lazy(() => import('@/features/matches/MatchesPage').then((m) => ({ default: m.MatchesPage })))
 const MatchDetailPage = lazy(() => import('@/features/matches/MatchDetailPage').then((m) => ({ default: m.MatchDetailPage })))
 const StatsPage = lazy(() => import('@/features/stats/StatsPage').then((m) => ({ default: m.StatsPage })))
+const ChampionshipPage = lazy(() => import('@/features/standings/ChampionshipPage').then((m) => ({ default: m.ChampionshipPage })))
+const CoupePage = lazy(() => import('@/features/coupe/CoupePage').then((m) => ({ default: m.CoupePage })))
 const TrophyCasePage = lazy(() => import('@/features/awards/TrophyCasePage').then((m) => ({ default: m.TrophyCasePage })))
 const ImportMatchPdfPage = lazy(() => import('@/features/pdf-import/ImportMatchPdfPage').then((m) => ({ default: m.ImportMatchPdfPage })))
 const PlayerRatingsPage = lazy(() => import('@/features/players/PlayerRatingsPage').then((m) => ({ default: m.PlayerRatingsPage })))
@@ -64,6 +66,8 @@ function App() {
                 <Route path="/matches" element={<MatchesPage />} />
                 <Route path="/matches/:id" element={<MatchDetailPage />} />
                 <Route path="/stats" element={<StatsPage />} />
+                <Route path="/championship" element={<ChampionshipPage />} />
+                <Route path="/coupe" element={<CoupePage />} />
                 <Route path="/players" element={<PlayersPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<EditProfilePage />} />

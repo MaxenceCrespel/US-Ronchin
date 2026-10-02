@@ -140,11 +140,16 @@ export interface AttendanceStatusChangeEntry {
 export interface MatchAttendance {
   id: string
   matchId: string
-  userId: string
-  user: User
+  /** Null for a guest row (see guestFirstName) — a real, licensed player the coach added
+   * directly, with no app account. */
+  userId: string | null
+  user: User | null
   status: AttendanceStatus
   guestCount: number
   guests: MatchAttendanceGuest[]
+  guestFirstName: string | null
+  guestLastName: string | null
+  guestPosition: PlayerSubPosition | null
   /** Set by the coach's convocation — only meaningful once Match.convocationAnnouncedAt is set. */
   called: boolean
   respondedAt: string
@@ -516,6 +521,7 @@ export interface TeamStanding {
   id: string
   rank: number
   teamName: string
+  logo: string | null
   isUs: boolean
   points: number
   played: number
@@ -525,6 +531,36 @@ export interface TeamStanding {
   goalsFor: number
   goalsAgainst: number
   goalDifference: number
+}
+
+export interface PoolMatch {
+  id: string
+  fffMatchId: string | null
+  date: string
+  matchday: string | null
+  homeTeam: string
+  awayTeam: string
+  homeLogo: string | null
+  awayLogo: string | null
+  isUs: boolean
+  scoreHome: number | null
+  scoreAway: number | null
+  played: boolean
+}
+
+export interface CupMatch {
+  id: string
+  fffMatchId: string | null
+  date: string
+  round: string
+  homeTeam: string
+  awayTeam: string
+  homeLogo: string | null
+  awayLogo: string | null
+  isUs: boolean
+  scoreHome: number | null
+  scoreAway: number | null
+  played: boolean
 }
 
 export interface StandingsSyncLog {

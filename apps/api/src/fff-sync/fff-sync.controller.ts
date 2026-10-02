@@ -36,13 +36,17 @@ export class FffSyncController {
   // (apps/api/src/local-fff-sync.ts) — guarded by a shared secret rather than a real user
   // account (see SyncApiKeyGuard's own doc comment for why).
 
-  /** The team URL configured in Paramètres — kept as the single source of truth instead of
-   * duplicating it into the script's own .env, so changing it once in the app is enough. */
+  /** The URLs configured in Paramètres — kept as the single source of truth instead of
+   * duplicating them into the script's own .env, so changing one once in the app is enough. */
   @UseGuards(SyncApiKeyGuard)
   @Get('sync-target')
   async syncTarget() {
     const settings = await this.settingsService.get();
-    return { fffTeamUrl: settings.fffTeamUrl };
+    return {
+      fffTeamUrl: settings.fffTeamUrl,
+      fffChampionshipUrl: settings.fffChampionshipUrl,
+      fffCupUrl: settings.fffCupUrl,
+    };
   }
 
   /** What this server already knows, so the script only re-fetches a match's detail page

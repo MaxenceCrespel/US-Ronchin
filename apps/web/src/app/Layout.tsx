@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Trophy, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Swords, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/lib/types'
@@ -36,7 +36,9 @@ const navItems: {
   { to: '/', label: 'Accueil', icon: Home, end: true, tour: 'nav-home' },
   { to: '/trainings', label: 'Entraînements', icon: CalendarDays, tour: 'nav-trainings' },
   { to: '/matches', label: 'Matchs', icon: ShieldHalf, tour: 'nav-matches' },
-  { to: '/stats', label: 'Stats', icon: Trophy, tour: 'nav-stats' },
+  { to: '/championship', label: 'Championnat', icon: Trophy, tour: 'nav-championship' },
+  { to: '/coupe', label: 'Coupe', icon: Swords, tour: 'nav-coupe' },
+  { to: '/stats', label: 'Stats', icon: BarChart3, tour: 'nav-stats' },
   { to: '/players', label: 'Effectif', icon: Users, tour: 'nav-players' },
   { to: '/admin', label: 'Admin', icon: Gauge, tour: 'nav-admin', roles: ['SUPERADMIN'] },
 ]

@@ -297,7 +297,7 @@ function UpcomingMatchCard({
       queryClient,
       ['match-attendance', matchId],
       currentUser,
-      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], called: false, respondedAt: new Date().toISOString() }),
+      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], guestFirstName: null, guestLastName: null, guestPosition: null, called: false, respondedAt: new Date().toISOString() }),
     ),
   })
 
@@ -716,7 +716,13 @@ export function HomePage() {
                   playersNeedingSeniority.length === 1
                     ? `Ancienneté à renseigner — ${playersNeedingSeniority[0].firstName} ${playersNeedingSeniority[0].lastName}`
                     : `Ancienneté à renseigner pour ${playersNeedingSeniority.length} joueurs`,
-                to: '/players',
+                // A single player: go straight to their own edit dialog, already open — not
+                // just the roster list they'd then have to find them in again. With several,
+                // there's no one player to jump to, so the list is the right landing spot.
+                to:
+                  playersNeedingSeniority.length === 1
+                    ? `/players?edit=${playersNeedingSeniority[0].id}`
+                    : '/players',
               },
             ]
           : []),
@@ -729,7 +735,12 @@ export function HomePage() {
                   playersNeedingRating.length === 1
                     ? `Niveau à renseigner — ${playersNeedingRating[0].firstName} ${playersNeedingRating[0].lastName}`
                     : `Niveau à renseigner pour ${playersNeedingRating.length} joueurs`,
-                to: '/player-ratings',
+                // Same idea as seniority above: one player scrolls straight to their row in
+                // "Notes des joueurs", several fall back to the plain list.
+                to:
+                  playersNeedingRating.length === 1
+                    ? `/player-ratings?userId=${playersNeedingRating[0].userId}`
+                    : '/player-ratings',
               },
             ]
           : []),

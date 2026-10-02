@@ -1,8 +1,18 @@
 import { apiClient } from '@/lib/api-client'
-import type { StandingsSyncLog, TeamStanding } from '@/lib/types'
+import type { CupMatch, PoolMatch, StandingsSyncLog, TeamStanding } from '@/lib/types'
 
 export async function fetchStandings(): Promise<TeamStanding[]> {
   const { data } = await apiClient.get<TeamStanding[]>('/standings')
+  return data
+}
+
+export async function fetchPoolMatches(): Promise<PoolMatch[]> {
+  const { data } = await apiClient.get<PoolMatch[]>('/standings/pool-matches')
+  return data
+}
+
+export async function fetchCupMatches(): Promise<CupMatch[]> {
+  const { data } = await apiClient.get<CupMatch[]>('/standings/cup-matches')
   return data
 }
 

@@ -4,7 +4,7 @@ import type { AttendanceStatus, User } from './types'
 /** Optimistic update for a presence answer: the list the screen shows switches to the new
  * status immediately, is rolled back if the server refuses, and is refetched either way so the
  * server's view (cap, waitlist, teams) always wins in the end. */
-export function optimisticAttendance<TItem extends { userId: string; status: AttendanceStatus | null }, TVars extends { status: AttendanceStatus }>(
+export function optimisticAttendance<TItem extends { userId: string | null; status: AttendanceStatus | null }, TVars extends { status: AttendanceStatus }>(
   queryClient: QueryClient,
   queryKey: readonly unknown[],
   user: User | null,

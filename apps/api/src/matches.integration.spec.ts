@@ -14,10 +14,14 @@ describe('match flow (real stack)', () => {
   let players: TestUser[];
   let matchId: string;
   let composition: { id: string; userId: string | null }[];
+  let attendance: { id: string; userId: string | null }[];
 
   const auth = (u: TestUser) => bearer(u.token);
   // motm / defense-boss votes target a composition row (so a not-yet-linked guest is valid too)
   const compId = (u: TestUser) => composition.find((c) => c.userId === u.user.id)!.id;
+  // convocation/lineup are keyed off the attendance row's own id, not userId — a guest
+  // attendance row (see MatchAttendance.guestFirstName) has no userId to key off at all.
+  const attId = (u: TestUser) => attendance.find((a) => a.userId === u.user.id)!.id;
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -66,13 +70,33 @@ describe('match flow (real stack)', () => {
     expect(withGuest.status).toBe(200);
     const list = await t.http().get(`/api/matches/${matchId}/attendance`).set(auth(coach));
     expect(list.body).toHaveLength(13);
+    attendance = list.body;
     // a player changes his mind
     await t.http().put(`/api/matches/${matchId}/attendance`).set(auth(players[12])).send({ status: 'ABSENT' });
     await t.http().put(`/api/matches/${matchId}/attendance`).set(auth(players[12])).send({ status: 'PRESENT' });
   });
 
+  it('coach adds a licensed guest with no app account — present, convocable, startable', async () => {
+    expect((await t.http().post(`/api/matches/${matchId}/attendance/guest`).set(auth(players[0])).send({ firstName: 'Benjamin' })).status).toBe(403);
+    const added = await t.http().post(`/api/matches/${matchId}/attendance/guest`).set(auth(coach)).send({ firstName: 'Benjamin', lastName: 'Invité' });
+    expect(added.status).toBe(201);
+    expect(added.body).toMatchObject({ userId: null, status: 'PRESENT', guestFirstName: 'Benjamin', guestLastName: 'Invité' });
+
+    const list = await t.http().get(`/api/matches/${matchId}/attendance`).set(auth(coach));
+    expect(list.body).toHaveLength(14);
+    const guestRow = list.body.find((a: { id: string }) => a.id === added.body.id);
+    expect(guestRow.user).toBeNull();
+
+    // goes through the exact same convocation flow as a real player
+    const called = await t.http().put(`/api/matches/${matchId}/convocation`).set(auth(coach)).send({ calledUserIds: [added.body.id] });
+    expect(called.body.find((a: { id: string }) => a.id === added.body.id).called).toBe(true);
+    // undo — the rest of this suite's convocation assertions expect a clean slate
+    await t.http().put(`/api/matches/${matchId}/convocation`).set(auth(coach)).send({ calledUserIds: [] });
+  });
+
   it('coach announces the convocation, then updates it', async () => {
-    const calledIds = players.slice(0, 12).map((p) => p.user.id);
+    attendance = (await t.http().get(`/api/matches/${matchId}/attendance`).set(auth(coach))).body;
+    const calledIds = players.slice(0, 12).map((p) => attId(p));
     expect((await t.http().put(`/api/matches/${matchId}/convocation`).set(auth(players[0])).send({ calledUserIds: calledIds })).status).toBe(403);
     const res = await t.http().put(`/api/matches/${matchId}/convocation`).set(auth(coach)).send({ calledUserIds: calledIds });
     expect(res.status).toBe(200);
@@ -88,7 +112,7 @@ describe('match flow (real stack)', () => {
   it('coach validates the starting XI', async () => {
     const noLineup = await t.http().get(`/api/matches/${matchId}/lineup`).set(auth(coach));
     expect(noLineup.body.slots).toBeNull();
-    const slots = players.slice(0, 11).map((p) => p.user.id);
+    const slots = players.slice(0, 11).map((p) => attId(p));
     const saved = await t
       .http()
       .put(`/api/matches/${matchId}/lineup`)
@@ -103,7 +127,7 @@ describe('match flow (real stack)', () => {
       .http()
       .put(`/api/matches/${matchId}/lineup`)
       .set(auth(coach))
-      .send({ formation: '4-3-3', slots: [players[12].user.id] });
+      .send({ formation: '4-3-3', slots: [attId(players[12])] });
     expect(bad.status).toBe(400);
     // lineup stays private to coaches
     expect((await t.http().get(`/api/matches/${matchId}/lineup`).set(auth(players[0]))).status).toBe(403);

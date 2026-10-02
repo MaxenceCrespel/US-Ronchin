@@ -16,6 +16,7 @@ import type {
   MotmResponse,
   DefenseBossResponse,
   PlayerPosition,
+  PlayerSubPosition,
   PlayerRating,
   RatingSummaryEntry,
 } from '@/lib/types'
@@ -197,6 +198,17 @@ export async function submitRatings(
 
 export async function fetchMatchAttendance(matchId: string): Promise<MatchAttendance[]> {
   const { data } = await apiClient.get<MatchAttendance[]>(`/matches/${matchId}/attendance`)
+  return data
+}
+
+/** Coach-only — declares a real, licensed player with no app account as present. See
+ * MatchAttendance.guestFirstName's own doc comment for how this differs from the friendly-
+ * match "+1" guest. */
+export async function addMatchGuest(
+  matchId: string,
+  guest: { firstName: string; lastName?: string; position?: PlayerSubPosition },
+): Promise<MatchAttendance> {
+  const { data } = await apiClient.post<MatchAttendance>(`/matches/${matchId}/attendance/guest`, guest)
   return data
 }
 

@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { TeamLogo } from '@/components/TeamLogo'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
@@ -71,7 +72,12 @@ export function StandingsCard() {
                 {standings.map((s) => (
                   <TableRow key={s.id} className={cn(s.isUs && 'bg-club-blue/5 font-semibold')}>
                     <TableCell>{s.rank}</TableCell>
-                    <TableCell>{s.teamName}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5">
+                        <TeamLogo src={s.logo} />
+                        {s.teamName}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">{s.points}</TableCell>
                     <TableCell className="text-right">{s.played}</TableCell>
                     <TableCell className="text-right">{s.won}</TableCell>

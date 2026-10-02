@@ -7,6 +7,8 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { UserRole } from '../users/entities/user.entity';
 import { StandingsService } from './standings.service';
 import { ImportStandingsDto } from './dto/import-standings.dto';
+import { ImportPoolMatchesDto } from './dto/import-pool-matches.dto';
+import { ImportCupMatchesDto } from './dto/import-cup-matches.dto';
 import { SyncApiKeyGuard } from '../fff-sync/guards/sync-api-key.guard';
 
 @Controller('standings')
@@ -40,5 +42,45 @@ export class StandingsController {
   @Post('import')
   importScraped(@Body() dto: ImportStandingsDto) {
     return this.standingsService.importScraped(dto.standings, null);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('pool-matches')
+  findAllPoolMatches() {
+    return this.standingsService.findAllPoolMatches();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.COACH)
+  @Post('pool-matches/sync')
+  syncPoolResults() {
+    return this.standingsService.syncPoolResults();
+  }
+
+  /** Fed by the local sync script — see importScraped's own doc comment for why. */
+  @UseGuards(SyncApiKeyGuard)
+  @Post('pool-matches/import')
+  importPoolResults(@Body() dto: ImportPoolMatchesDto) {
+    return this.standingsService.importPoolResults(dto.matches);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('cup-matches')
+  findAllCupMatches() {
+    return this.standingsService.findAllCupMatches();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.COACH)
+  @Post('cup-matches/sync')
+  syncCupResults() {
+    return this.standingsService.syncCupResults();
+  }
+
+  /** Fed by the local sync script — see importScraped's own doc comment for why. */
+  @UseGuards(SyncApiKeyGuard)
+  @Post('cup-matches/import')
+  importCupResults(@Body() dto: ImportCupMatchesDto) {
+    return this.standingsService.importCupResults(dto.matches);
   }
 }

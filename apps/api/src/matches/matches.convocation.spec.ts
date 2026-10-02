@@ -14,13 +14,17 @@ import { MatchDefenseBossVote } from './entities/match-defense-boss-vote.entity'
 import { AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 
-type Att = { userId: string; status: AttendanceStatus; called: boolean };
+type Att = { id: string; userId: string; status: AttendanceStatus; called: boolean };
 
+// setConvocation/setLineup key everything off the attendance row's own id (a guest row has
+// no userId at all — see MatchAttendance.guestFirstName) — using the same string for both
+// here keeps every existing calledUserIds/slots fixture below valid unchanged.
 const att = (
   userId: string,
   status: AttendanceStatus,
   called = false,
 ): Att => ({
+  id: userId,
   userId,
   status,
   called,
@@ -194,6 +198,22 @@ describe('MatchesService.setConvocation', () => {
     await expect(
       service.setConvocation('m1', { calledUserIds: ['a'] }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('calls a guest (no userId) without pushing to anyone, and keeps them called', async () => {
+    const { service, push, attendancesRepo } = await build({
+      attendances: [
+        att('a', AttendanceStatus.PRESENT),
+        { id: 'guest-1', userId: null as unknown as string, status: AttendanceStatus.PRESENT, called: false },
+      ],
+    });
+
+    await service.setConvocation('m1', { calledUserIds: ['a', 'guest-1'] });
+
+    expect(recipients(push, 'Tu es convoqué !')).toEqual(['a']);
+    expect(attendancesRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'guest-1', called: true }),
+    );
   });
 
   it('withdrawing a starter drops him from the saved lineup and invalidates it', async () => {

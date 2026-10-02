@@ -2127,7 +2127,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             {attendanceQuery.data.map((a) => (
               <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                 <AttendanceMark status={a.status} />
-                {a.user.firstName} {a.user.lastName[0]}.
+                {a.user ? `${a.user.firstName} ${a.user.lastName[0]}.` : `${a.guestFirstName} (invité)`}
                 {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
               </Badge>
             ))}

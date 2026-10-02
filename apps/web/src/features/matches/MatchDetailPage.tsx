@@ -978,7 +978,12 @@ export function MatchDetailPage() {
     lineupPrefilledRef.current = true
     const map: Record<string, { played: boolean; starter: boolean; spectator: boolean }> = {}
     for (const a of attendanceQuery.data ?? []) {
-      if (a.called) map[a.userId] = { played: true, starter: lineup.slots.includes(a.userId), spectator: false }
+      // A guest pre-declared before the match (MatchAttendance.guestFirstName) isn't known
+      // to the composition step's own, separate guest mechanism — the coach re-adds them
+      // there via "Ajouter un joueur non inscrit", same as before this existed.
+      if (a.called && a.userId) {
+        map[a.userId] = { played: true, starter: lineup.slots.includes(a.id), spectator: false }
+      }
     }
     setSelectedPlayers(map)
     setSlotOrder(lineup.slots)
@@ -993,7 +998,7 @@ export function MatchDetailPage() {
       queryClient,
       ['match-attendance', matchId],
       user ?? null,
-      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], called: false, respondedAt: new Date().toISOString() }),
+      (u) => ({ id: `optimistic-${u.id}`, matchId, userId: u.id, user: u, status: 'PRESENT', guestCount: 0, guests: [], guestFirstName: null, guestLastName: null, guestPosition: null, called: false, respondedAt: new Date().toISOString() }),
     ),
   })
 
@@ -1465,7 +1470,7 @@ export function MatchDetailPage() {
                 {attendanceQuery.data.map((a) => (
                   <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                     <AttendanceMark status={a.status} />
-                    {a.user.firstName} {a.user.lastName[0]}.
+                    {a.user ? `${a.user.firstName} ${a.user.lastName[0]}.` : `${a.guestFirstName} (invité)`}
                     {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                   </Badge>
                 ))}

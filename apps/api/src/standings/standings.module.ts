@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TeamStanding } from './entities/team-standing.entity';
+import { PoolMatch } from './entities/pool-match.entity';
+import { CupMatch } from './entities/cup-match.entity';
 import { StandingsSyncLog } from './entities/standings-sync-log.entity';
 import { StandingsService } from './standings.service';
 import { StandingsController } from './standings.controller';
@@ -9,7 +11,7 @@ import { FffSyncModule } from '../fff-sync/fff-sync.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TeamStanding, StandingsSyncLog]),
+    TypeOrmModule.forFeature([TeamStanding, PoolMatch, CupMatch, StandingsSyncLog]),
     SettingsModule,
     FffSyncModule,
   ],

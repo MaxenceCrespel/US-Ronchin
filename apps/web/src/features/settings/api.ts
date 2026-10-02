@@ -3,6 +3,8 @@ import { apiClient } from '@/lib/api-client'
 export interface ClubSettings {
   id: string
   fffTeamUrl: string | null
+  fffChampionshipUrl: string | null
+  fffCupUrl: string | null
   updatedAt: string
 }
 
@@ -11,8 +13,14 @@ export async function fetchSettings(): Promise<ClubSettings> {
   return data
 }
 
-export async function updateSettings(fffTeamUrl: string): Promise<ClubSettings> {
-  const { data } = await apiClient.patch<ClubSettings>('/settings', { fffTeamUrl })
+export interface UpdateSettingsInput {
+  fffTeamUrl?: string
+  fffChampionshipUrl?: string
+  fffCupUrl?: string
+}
+
+export async function updateSettings(input: UpdateSettingsInput): Promise<ClubSettings> {
+  const { data } = await apiClient.patch<ClubSettings>('/settings', input)
   return data
 }
 

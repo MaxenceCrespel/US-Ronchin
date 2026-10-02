@@ -30,7 +30,6 @@ import { MyStatsCard } from './MyStatsCard'
 import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
 import { MonthlyAwardCard } from '@/features/awards/MonthlyAwardCard'
-import { StandingsCard } from '@/features/standings/StandingsCard'
 import { fetchMatches } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
@@ -524,11 +523,10 @@ export function StatsPage() {
           <RosterStatsTable season={activeSeason} />
         </TabsContent>
 
+        {/* The classement itself moved to /championship — it's about the competition, not
+            about us, unlike this club-only win/draw/loss tally. */}
         <TabsContent value="season">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <StandingsCard />
-            <SeasonRecordCard season={activeSeason} />
-          </div>
+          <SeasonRecordCard season={activeSeason} />
         </TabsContent>
 
         <TabsContent value="team" className="flex flex-col gap-4">

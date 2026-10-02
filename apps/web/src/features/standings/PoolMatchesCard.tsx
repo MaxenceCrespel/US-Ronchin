@@ -1,0 +1,139 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { TeamLogo } from '@/components/TeamLogo'
+import { cn } from '@/lib/utils'
+import { fetchPoolMatches } from './api'
+import type { PoolMatch } from '@/lib/types'
+
+function formatDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
+
+/** "Journée 5" -> 5, so journées sort and navigate in the order they're actually played in —
+ * not always the same as sorting by date (a postponed match can push one journée's own date
+ * past the next one's). Anything that doesn't match (e.g. a fixture with no journée at all)
+ * sorts last. */
+function journeeNumber(label: string): number {
+  const match = /\d+/.exec(label)
+  return match ? Number(match[0]) : Number.POSITIVE_INFINITY
+}
+
+function MatchRow({ match }: { match: PoolMatch }) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+        match.isUs && 'bg-club-blue/5 font-semibold',
+      )}
+    >
+      <span className="text-muted-foreground w-12 shrink-0 text-xs tabular-nums">{formatDate(match.date)}</span>
+      <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5 truncate">
+        <span className="min-w-0 truncate">{match.homeTeam}</span>
+        <TeamLogo src={match.homeLogo} />
+      </span>
+      <span className="shrink-0 tabular-nums">
+        {match.played ? `${match.scoreHome} - ${match.scoreAway}` : 'à venir'}
+      </span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+        <TeamLogo src={match.awayLogo} />
+        <span className="min-w-0 truncate">{match.awayTeam}</span>
+      </span>
+    </div>
+  )
+}
+
+/** Every match of the poule, ours included but not singled out to its own list — the whole
+ * point is seeing how the rest of the group is actually doing, side by side with us, not
+ * just our own results (already shown elsewhere on the calendar). One journée at a time,
+ * navigated with arrows, rather than the whole season stacked — easier to actually read on a
+ * phone, and the "current" journée (the first one with a match still to play) is where it
+ * opens by default. */
+export function PoolMatchesCard() {
+  const poolQuery = useQuery({ queryKey: ['pool-matches'], queryFn: fetchPoolMatches })
+  const matches = poolQuery.data ?? []
+
+  const journees = useMemo(() => {
+    const groups = new Map<string, PoolMatch[]>()
+    for (const m of matches) {
+      const key = m.matchday ?? 'Autres rencontres'
+      const list = groups.get(key) ?? []
+      list.push(m)
+      groups.set(key, list)
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const diff = journeeNumber(a[0]) - journeeNumber(b[0])
+      return diff !== 0 ? diff : a[1][0].date < b[1][0].date ? -1 : 1
+    })
+  }, [matches])
+
+  const [index, setIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (journees.length === 0) {
+      setIndex(null)
+      return
+    }
+    // Default to the first journée that still has an unplayed match — the "current" one — and
+    // only once, so navigating around doesn't keep snapping back on every refetch.
+    setIndex((current) => {
+      if (current !== null && current < journees.length) return current
+      const firstUpcoming = journees.findIndex(([, list]) => list.some((m) => !m.played))
+      return firstUpcoming === -1 ? journees.length - 1 : firstUpcoming
+    })
+  }, [journees])
+
+  const current = index !== null ? journees[index] : undefined
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarRange className="text-club-blue size-4" />
+          Résultats de la poule
+        </CardTitle>
+        <CardDescription>Nos matchs et ceux des autres équipes, journée par journée.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {!current ? (
+          <p className="text-muted-foreground text-sm">Pas encore de résultats synchronisés.</p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8 shrink-0"
+                disabled={index === 0}
+                onClick={() => setIndex((i) => (i !== null ? Math.max(0, i - 1) : i))}
+                aria-label="Journée précédente"
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <p className="min-w-0 truncate text-sm font-semibold">{current[0]}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-8 shrink-0"
+                disabled={index === journees.length - 1}
+                onClick={() => setIndex((i) => (i !== null ? Math.min(journees.length - 1, i + 1) : i))}
+                aria-label="Journée suivante"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+            <div className="flex flex-col divide-y">
+              {current[1].map((m) => (
+                <MatchRow key={m.id} match={m} />
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}

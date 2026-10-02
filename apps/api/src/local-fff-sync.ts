@@ -23,6 +23,8 @@ import type { ScrapedMatch } from './fff-sync/scraped-match';
 const API_BASE_URL = process.env.SYNC_API_BASE_URL;
 const API_KEY = process.env.SYNC_API_KEY;
 const FFF_TEAM_URL_OVERRIDE = process.env.SYNC_FFF_TEAM_URL;
+const FFF_CHAMPIONSHIP_URL_OVERRIDE = process.env.SYNC_FFF_CHAMPIONSHIP_URL;
+const FFF_CUP_URL_OVERRIDE = process.env.SYNC_FFF_CUP_URL;
 
 // The calendar changes at most once a week (a new fixture), so once a day is plenty; the
 // standings can change mid-Sunday afternoon as other pools' matches finish, so `sync:fff:local
@@ -68,9 +70,14 @@ async function main() {
   }
 
   console.log(`Connexion à ${API_BASE_URL}...`);
-  const teamUrl =
-    FFF_TEAM_URL_OVERRIDE ??
-    (await apiFetch<{ fffTeamUrl: string | null }>(API_BASE_URL, '/fff-sync/sync-target', API_KEY)).fffTeamUrl;
+  const syncTarget = await apiFetch<{
+    fffTeamUrl: string | null;
+    fffChampionshipUrl: string | null;
+    fffCupUrl: string | null;
+  }>(API_BASE_URL, '/fff-sync/sync-target', API_KEY);
+  const teamUrl = FFF_TEAM_URL_OVERRIDE ?? syncTarget.fffTeamUrl;
+  const championshipUrl = FFF_CHAMPIONSHIP_URL_OVERRIDE ?? syncTarget.fffChampionshipUrl;
+  const cupUrl = FFF_CUP_URL_OVERRIDE ?? syncTarget.fffCupUrl;
   if (!teamUrl) {
     console.error(
       "Aucune URL FFF configurée — renseigne-la dans Paramètres en production, ou passe SYNC_FFF_TEAM_URL.",
@@ -133,6 +140,40 @@ async function main() {
       { method: 'POST', body: JSON.stringify({ standings }) },
     );
     console.log(`Classement : ${standingsLog.status} — ${standingsLog.teamsFound} équipe(s).`);
+
+    if (championshipUrl) {
+      console.log('Scraping des résultats de la poule...');
+      const poolMatches = await scraper.scrapeChampionshipCalendar(championshipUrl);
+      console.log(`${poolMatches.length} match(s) de poule trouvé(s).`);
+
+      console.log('Envoi des résultats de la poule vers la prod...');
+      const poolLog = await apiFetch<{ importedCount: number }>(
+        API_BASE_URL,
+        '/standings/pool-matches/import',
+        API_KEY,
+        { method: 'POST', body: JSON.stringify({ matches: poolMatches }) },
+      );
+      console.log(`Résultats de la poule : ${poolLog.importedCount} match(s) importé(s).`);
+    } else {
+      console.log("Pas d'URL de championnat configurée — résultats de la poule ignorés.");
+    }
+
+    if (cupUrl) {
+      console.log('Scraping du parcours en coupe...');
+      const cupMatches = await scraper.scrapeCupResults(cupUrl);
+      console.log(`${cupMatches.length} match(s) de coupe trouvé(s).`);
+
+      console.log('Envoi du parcours en coupe vers la prod...');
+      const cupLog = await apiFetch<{ importedCount: number }>(
+        API_BASE_URL,
+        '/standings/cup-matches/import',
+        API_KEY,
+        { method: 'POST', body: JSON.stringify({ matches: cupMatches }) },
+      );
+      console.log(`Parcours en coupe : ${cupLog.importedCount} match(s) importé(s).`);
+    } else {
+      console.log("Pas d'URL de coupe configurée — parcours en coupe ignoré.");
+    }
   }
 }
 

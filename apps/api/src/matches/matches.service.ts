@@ -16,6 +16,7 @@ import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 import { SetCompositionDto } from './dto/set-composition.dto';
 import { SetConvocationDto, SetLineupDto } from './dto/set-convocation.dto';
+import { AddMatchGuestDto } from './dto/add-match-guest.dto';
 import { CreateMatchEventDto } from './dto/create-match-event.dto';
 import { UpdateMatchEventDto } from './dto/update-match-event.dto';
 import { RatePlayerDto } from './dto/rate-player.dto';
@@ -501,6 +502,24 @@ export class MatchesService {
     });
   }
 
+  /** Coach declares a real, licensed player who has no app account as present — see
+   * MatchAttendance.guestFirstName's own doc comment for why this exists apart from
+   * MatchAttendanceGuest's "+1 tagalong". Always PRESENT: a guest can't log in to answer
+   * for themselves, and the coach only adds one because they already know they're coming. */
+  async addGuestAttendance(matchId: string, dto: AddMatchGuestDto): Promise<MatchAttendance> {
+    await this.findById(matchId);
+    const attendance = this.attendancesRepository.create({
+      matchId,
+      userId: null,
+      status: AttendanceStatus.PRESENT,
+      guestFirstName: dto.firstName,
+      guestLastName: dto.lastName ?? null,
+      guestPosition: dto.position ?? null,
+      respondedAt: new Date(),
+    });
+    return this.attendancesRepository.save(attendance);
+  }
+
   /** Coach announces (or updates) who's called among the players who answered PRESENT. Only
    * players whose status actually changes get a push: on the first announcement everyone
    * present is told (called / not retained), afterwards only the added and withdrawn ones —
@@ -513,7 +532,13 @@ export class MatchesService {
     }
     const attendances = await this.attendancesRepository.find({ where: { matchId } });
     const present = attendances.filter((a) => a.status === AttendanceStatus.PRESENT);
-    const presentIds = new Set(present.map((a) => a.userId));
+    // Keyed by the attendance row's own id, not userId — a guest attendance row (see
+    // MatchAttendance.guestFirstName) has no userId at all, but goes through the exact same
+    // convocation/lineup flow as a real player, so it needs an identity key that always
+    // exists. Nothing outside this method and setLineup/getLineup reads calledUserIds/slots
+    // as "real user ids" — push notifications below look the real userId back up instead of
+    // assuming the key itself is one.
+    const presentIds = new Set(present.map((a) => a.id));
     const nextCalled = new Set(dto.calledUserIds);
     for (const id of nextCalled) {
       if (!presentIds.has(id)) {
@@ -526,10 +551,12 @@ export class MatchesService {
     const removed: string[] = [];
     const notRetained: string[] = [];
     for (const a of attendances) {
-      const willBeCalled = nextCalled.has(a.userId);
-      if (willBeCalled && !a.called) added.push(a.userId);
-      if (!willBeCalled && a.called && a.status === AttendanceStatus.PRESENT) removed.push(a.userId);
-      if (!willBeCalled && firstAnnouncement && a.status === AttendanceStatus.PRESENT) {
+      const willBeCalled = nextCalled.has(a.id);
+      // Guest rows have no userId to push a notification to — they're simply never added to
+      // these lists, `called` still gets flipped for them below like anyone else.
+      if (willBeCalled && !a.called && a.userId) added.push(a.userId);
+      if (!willBeCalled && a.called && a.status === AttendanceStatus.PRESENT && a.userId) removed.push(a.userId);
+      if (!willBeCalled && firstAnnouncement && a.status === AttendanceStatus.PRESENT && a.userId) {
         notRetained.push(a.userId);
       }
       if (a.called !== willBeCalled) {
@@ -591,7 +618,8 @@ export class MatchesService {
       throw new BadRequestException('Une composition compte 11 joueurs au maximum.');
     }
     const called = await this.attendancesRepository.find({ where: { matchId, called: true } });
-    const calledIds = new Set(called.map((a) => a.userId));
+    // Same attendance-row-id key as setConvocation's nextCalled — see its own comment.
+    const calledIds = new Set(called.map((a) => a.id));
     if (dto.slots.some((id) => !calledIds.has(id))) {
       throw new BadRequestException('Seuls les joueurs convoqués peuvent être titulaires.');
     }

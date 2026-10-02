@@ -2,9 +2,13 @@ import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeAll, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-// The recorded API fixtures were taken on 20 Sept 2026 (evening): freeze the clock there so
-// "upcoming" and "past" stay what they were when recorded, whatever day the tests run.
-vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-09-20T18:00:00Z') })
+// The recorded API fixtures were taken on 2 Oct 2026 (evening): freeze the clock there so
+// "upcoming" and "past" stay what they were when recorded, whatever day the tests run. Bump
+// this to roughly "now" every time fixtures are regenerated (`DUMP_FIXTURES=1 npx jest
+// dump-fixtures` from apps/api) — the seed dates are real-time-relative (see
+// season-seed.ts's own comment), so a stale frozen clock here eventually drifts a session
+// meant to read as "already finished" into reading as "still upcoming" instead.
+vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T18:00:00Z') })
 
 afterEach(() => {
   cleanup()

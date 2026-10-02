@@ -28,6 +28,8 @@ const WARM_ROUTES: [string, Role][] = [
   ['/matches', 'coach'],
   [`/matches/${fixtures.meta.upcomingMatchId}`, 'coach'],
   ['/stats', 'coach'],
+  ['/championship', 'coach'],
+  ['/coupe', 'coach'],
   ['/profile', 'player'],
   ['/profile/edit', 'player'],
   ['/profile/badges', 'player'],

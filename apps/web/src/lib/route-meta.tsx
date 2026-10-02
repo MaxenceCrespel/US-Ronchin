@@ -20,6 +20,8 @@ const ROUTES: RouteMeta[] = [
   { pattern: /^\/matches$/, title: 'Matchs', ownH1: true },
   { pattern: /^\/matches\/[^/]+$/, title: 'Détail du match', ownH1: false },
   { pattern: /^\/stats$/, title: 'Stats', ownH1: true },
+  { pattern: /^\/championship$/, title: 'Championnat', ownH1: true },
+  { pattern: /^\/coupe$/, title: 'Coupe', ownH1: true },
   { pattern: /^\/players$/, title: 'Effectif', ownH1: true },
   { pattern: /^\/player-ratings$/, title: 'Noter les joueurs', ownH1: true },
   { pattern: /^\/profile$/, title: 'Mon profil', ownH1: false },

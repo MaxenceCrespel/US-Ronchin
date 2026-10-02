@@ -1,6 +1,6 @@
 import { errorMessage } from '@/lib/error-message'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
 import {
@@ -162,9 +162,26 @@ function PlayerTrainingHistoryDialog({ player }: { player: User }) {
   )
 }
 
-function EditPlayerDialog({ player }: { player: User }) {
+function EditPlayerDialog({ player, variant }: { player: User; variant: 'mobile' | 'desktop' }) {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('edit') !== player.id) return
+    // The player list renders a mobile card layout and a desktop table side by side (one
+    // hidden via CSS depending on viewport, see the sm:hidden/hidden sm:block split below) —
+    // both mount an EditPlayerDialog for the same player, so without this check the deep-link
+    // opens both dialogs stacked on top of each other. Only the one matching the current
+    // viewport claims the param.
+    const isDesktopViewport = window.matchMedia('(min-width: 640px)').matches
+    if ((variant === 'desktop') !== isDesktopViewport) return
+    setOpen(true)
+    const next = new URLSearchParams(searchParams)
+    next.delete('edit')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, player.id, variant])
   const [role, setRole] = useState<UserRole>(player.role)
   const [isPlayingCoach, setIsPlayingCoach] = useState(player.isPlayingCoach)
   const [isLicensed, setIsLicensed] = useState(player.isLicensed)
@@ -550,12 +567,22 @@ function InvitePlayerDialog() {
 
 /** The row of coach-only icon buttons (badges, training history, edit, delete) — shared by the desktop table row and the mobile card so the two layouts
  * never drift out of sync with each other. */
-function PlayerActions({ player, isAdmin, currentUserId }: { player: User; isAdmin: boolean; currentUserId?: string }) {
+function PlayerActions({
+  player,
+  isAdmin,
+  currentUserId,
+  variant,
+}: {
+  player: User
+  isAdmin: boolean
+  currentUserId?: string
+  variant: 'mobile' | 'desktop'
+}) {
   return (
     <div className="flex items-center gap-1">
       {isAdmin && <PlayerBadgesDialog player={player} />}
       <PlayerTrainingHistoryDialog player={player} />
-      <EditPlayerDialog player={player} />
+      <EditPlayerDialog player={player} variant={variant} />
       {player.id !== currentUserId && <DeletePlayerDialog player={player} />}
     </div>
   )
@@ -759,7 +786,7 @@ export function PlayersPage() {
                         ) : (
                           <Badge variant="outline">En attente d'activation</Badge>
                         )}
-                        <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} />
+                        <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} variant="mobile" />
                       </div>
                     )}
                   </div>
@@ -841,7 +868,7 @@ export function PlayersPage() {
                         )}
                         {isCoach && (
                           <TableCell>
-                            <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} />
+                            <PlayerActions player={player} isAdmin={isAdmin} currentUserId={user?.id} variant="desktop" />
                           </TableCell>
                         )}
                       </TableRow>

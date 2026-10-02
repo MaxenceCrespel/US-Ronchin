@@ -19,12 +19,6 @@ import { PlayerPosition } from '../users/entities/user.entity';
  * assertions are deliberately about behaviour that matters (who tops what), on top of
  * exercising every stats / badge / ranking read path. */
 
-const day = (offset: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
-};
-
 export interface SeasonData {
   coach: TestUser;
   admin: TestUser;
@@ -35,8 +29,17 @@ export interface SeasonData {
 
 /** A realistic mini-season written straight into the DB: five finished matches with
  * goals/cards/votes/ratings and ten trainings with declared + real attendance. Shared by the
- * season integration spec and the fixture dumper used by the web tests. */
+ * season integration spec and the fixture dumper used by the web tests — every date is real
+ * `Date.now()`-relative, matching the server's own business-logic guards (e.g. "presence is
+ * locked after kickoff"), which only ever compare against real time too. See
+ * dump-fixtures.spec.ts's own comment, and apps/web/src/test/setup.ts's, for why the web
+ * tests' frozen clock needs bumping to roughly "now" every time fixtures are regenerated. */
 export async function seedSeason(t: TestApp): Promise<SeasonData> {
+  const day = (offset: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
   const matchIds: string[] = [];
   const sessionIds: string[] = [];
   const coach = await t.createUser({ role: UserRole.COACH });

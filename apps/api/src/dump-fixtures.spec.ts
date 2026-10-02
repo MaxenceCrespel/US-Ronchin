@@ -22,6 +22,11 @@ maybe('dump API fixtures for the web tests', () => {
   afterAll(() => t.close());
 
   it('writes the fixtures', async () => {
+    // Real time, not a fixed reference: the server's own business-logic guards (e.g.
+    // "presence is locked after kickoff") compare against real Date.now() too, so a seed
+    // anchored to a stale fixed instant starts silently failing those checks as real time
+    // keeps moving on — see apps/web/src/test/setup.ts's own comment for the matching half
+    // of this: its frozen clock needs bumping to roughly "now" every time this is re-run.
     const { coach, admin, players, matchIds, sessionIds } = await seedSeason(t);
     const auth = (u: { token: string }) => bearer(u.token);
     const post = async (u: { token: string }, url: string, body: object) => {
@@ -33,7 +38,14 @@ maybe('dump API fixtures for the web tests', () => {
     // an upcoming match: everybody present, convocation announced, lineup validated
     const upcoming = await post(coach, '/api/matches', { date: day(2), kickOffTime: '15:00', opponent: 'FC À Venir', homeAway: 'HOME', source: 'FRIENDLY' });
     for (const p of players) await t.http().put(`/api/matches/${upcoming.id}/attendance`).set(auth(p)).send({ status: 'PRESENT' });
-    const calledIds = players.slice(0, 12).map((p) => p.user.id);
+    // Convocation/lineup are keyed off the attendance row's own id, not userId — a guest
+    // attendance row (MatchAttendance.guestFirstName) has no userId at all.
+    const attendanceRows = (await t.http().get(`/api/matches/${upcoming.id}/attendance`).set(auth(coach))).body as {
+      id: string;
+      userId: string | null;
+    }[];
+    const attIdFor = (userId: string) => attendanceRows.find((a) => a.userId === userId)!.id;
+    const calledIds = players.slice(0, 12).map((p) => attIdFor(p.user.id));
     await t.http().put(`/api/matches/${upcoming.id}/convocation`).set(auth(coach)).send({ calledUserIds: calledIds });
     await t.http().put(`/api/matches/${upcoming.id}/lineup`).set(auth(coach)).send({ formation: '4-4-2 à plat', slots: calledIds.slice(0, 11), validate: true });
 
@@ -50,7 +62,7 @@ maybe('dump API fixtures for the web tests', () => {
       '/api/stats/monthly-challenges', '/api/stats/my-attendance-trophies', '/api/stats/my-training-champion-trophies',
       '/api/stats/last-attendance-trophy-winner', '/api/stats/last-training-champion-winner',
       '/api/badges/me', '/api/badges/level', '/api/badges/levels', '/api/awards/categories', '/api/awards/monthly',
-      '/api/awards/trophy-count', '/api/standings', '/api/standings/logs', '/api/training-ranking', '/api/settings',
+      '/api/awards/trophy-count', '/api/standings', '/api/standings/logs', '/api/standings/pool-matches', '/api/standings/cup-matches', '/api/training-ranking', '/api/settings',
       '/api/push/vapid-public-key', '/api/fff-sync/logs', '/api/player-ratings/mine',
       `/api/matches/${matchIds[0]}/ratings`,
       '/api/badges/holders', '/api/admin/kpis', '/api/player-separation-rules/all',

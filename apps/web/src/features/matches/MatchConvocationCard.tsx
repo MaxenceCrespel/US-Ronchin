@@ -1,11 +1,12 @@
 import { errorMessage } from '@/lib/error-message'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ClipboardList, Megaphone } from 'lucide-react'
+import { Check, ClipboardList, Megaphone, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PositionLegend } from '@/components/PositionLegend'
 import { cn } from '@/lib/utils'
 import type { Match, MatchAttendance, PlayerSubPosition } from '@/lib/types'
-import { fetchMatchAttendance, fetchMatchLineup, saveMatchLineup, setMatchConvocation } from './api'
+import { addMatchGuest, fetchMatchAttendance, fetchMatchLineup, saveMatchLineup, setMatchConvocation } from './api'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import { DEFAULT_FORMATION, FORMATIONS, positionCodes, slotCodes } from './formations'
 
@@ -73,7 +74,20 @@ const DONE_CLASS =
   'border-emerald-600 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-700'
 
 function fullName(a: MatchAttendance) {
-  return `${a.user.firstName} ${a.user.lastName}`.trim()
+  if (a.user) return `${a.user.firstName} ${a.user.lastName}`.trim()
+  return `${a.guestFirstName ?? ''} ${a.guestLastName ?? ''}`.trim()
+}
+
+/** A guest's positions, in the same array shape a real player's `user.positions` comes in —
+ * so every call site that reads positions off an attendance row can treat the two the same
+ * way, no separate guest branch needed. */
+function attendancePositions(a: MatchAttendance): PlayerSubPosition[] {
+  if (a.user) return a.user.positions ?? []
+  return a.guestPosition ? [a.guestPosition] : []
+}
+
+function attendanceJerseyNumber(a: MatchAttendance): number | null {
+  return a.user?.jerseyNumber ?? null
 }
 
 /** Coach-only: call the players who'll be in the squad among those who said PRESENT, then
@@ -81,10 +95,22 @@ function fullName(a: MatchAttendance) {
 export function MatchConvocationCard({ match }: { match: Match }) {
   const queryClient = useQueryClient()
   const [dialog, setDialog] = useState<'convocation' | 'lineup' | null>(null)
+  const [addingGuest, setAddingGuest] = useState(false)
+  const [guestFirstName, setGuestFirstName] = useState('')
+  const [guestLastName, setGuestLastName] = useState('')
 
   const attendanceQuery = useQuery({
     queryKey: ['match-attendance', match.id],
     queryFn: () => fetchMatchAttendance(match.id),
+  })
+  const addGuestMutation = useMutation({
+    mutationFn: () => addMatchGuest(match.id, { firstName: guestFirstName.trim(), lastName: guestLastName.trim() || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['match-attendance', match.id] })
+      setGuestFirstName('')
+      setGuestLastName('')
+      setAddingGuest(false)
+    },
   })
   const lineupQuery = useQuery({
     queryKey: ['match-lineup', match.id],
@@ -97,7 +123,7 @@ export function MatchConvocationCard({ match }: { match: Match }) {
   )
   const announced = match.convocationAnnouncedAt !== null
   const announcedIds = useMemo(
-    () => new Set(present.filter((a) => a.called).map((a) => a.userId)),
+    () => new Set(present.filter((a) => a.called).map((a) => a.id)),
     [present],
   )
   const lineupValidated = lineupQuery.data?.validatedAt != null
@@ -115,6 +141,70 @@ export function MatchConvocationCard({ match }: { match: Match }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
+        {/* A real, licensed player the coach knows is coming but who has no app account —
+            goes straight into the présents list below, exactly like a player who answered
+            themselves, so they can be convoqué/titularisé the same way. */}
+        {addingGuest ? (
+          <div className="flex flex-col gap-2 rounded-lg border p-3">
+            <p className="text-muted-foreground text-xs">
+              Un joueur licencié sans compte sur l'appli, présent dimanche.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                placeholder="Prénom"
+                value={guestFirstName}
+                onChange={(e) => setGuestFirstName(e.target.value)}
+                className="h-8 flex-1 text-xs"
+                aria-label="Prénom du joueur"
+              />
+              <Input
+                placeholder="Nom"
+                value={guestLastName}
+                onChange={(e) => setGuestLastName(e.target.value)}
+                className="h-8 flex-1 text-xs"
+                aria-label="Nom du joueur"
+              />
+            </div>
+            {addGuestMutation.isError && (
+              <p role="alert" className="text-destructive text-xs">
+                {errorMessage(addGuestMutation.error, 'Échec — réessaie.')}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setAddingGuest(false)
+                  setGuestFirstName('')
+                  setGuestLastName('')
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!guestFirstName.trim() || addGuestMutation.isPending}
+                onClick={() => addGuestMutation.mutate()}
+              >
+                {addGuestMutation.isPending ? 'Ajout...' : 'Ajouter'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => setAddingGuest(true)}
+          >
+            <UserPlus className="size-3.5" />
+            Ajouter un joueur non inscrit
+          </Button>
+        )}
         <ConvocationEntry
           icon={<Megaphone className="size-4" />}
           title="Convocation"
@@ -240,8 +330,8 @@ function ConvocationDialog({
   const counts = useMemo(() => {
     const c: Record<Band, number> = { GOALKEEPER: 0, DEFENDER: 0, MIDFIELDER: 0, FORWARD: 0 }
     for (const a of present) {
-      const band = bandForPosition(a.user.positions?.[0])
-      if (draft.has(a.userId) && band) c[band]++
+      const band = bandForPosition(attendancePositions(a)[0])
+      if (draft.has(a.id) && band) c[band]++
     }
     return c
   }, [present, draft])
@@ -286,24 +376,27 @@ function ConvocationDialog({
               </p>
             )}
             {present.map((a) => {
-              const positions = positionCodes(a.user.positions)
+              const positions = positionCodes(attendancePositions(a))
               return (
                 <button
-                  key={a.userId}
+                  key={a.id}
                   type="button"
-                  onClick={() => toggle(a.userId)}
+                  onClick={() => toggle(a.id)}
                   className={cn(
                     'hover:bg-accent flex w-full items-center gap-2.5 border-b px-3 py-2 text-left last:border-b-0',
-                    draft.has(a.userId) && 'bg-club-blue/5',
+                    draft.has(a.id) && 'bg-club-blue/5',
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{fullName(a)}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {fullName(a)}
+                    {!a.user && <span className="text-muted-foreground"> · invité</span>}
+                  </span>
                   {positions.slice(0, 3).map((code) => (
                     <Badge key={code} variant="outline">
                       {code}
                     </Badge>
                   ))}
-                  <Checkbox checked={draft.has(a.userId)} tabIndex={-1} className="pointer-events-none" />
+                  <Checkbox checked={draft.has(a.id)} tabIndex={-1} className="pointer-events-none" />
                 </button>
               )
             })}
@@ -361,7 +454,7 @@ function LineupDialog({
   const [validated, setValidated] = useState(false)
   const [pendingBench, setPendingBench] = useState<string | null>(null)
 
-  const byId = useMemo(() => new Map(called.map((a) => [a.userId, a])), [called])
+  const byId = useMemo(() => new Map(called.map((a) => [a.id, a])), [called])
   const target = Math.min(MAX_STARTERS, called.length)
 
   // Each time the dialog opens: start from the saved XI, then top it up to a full team.
@@ -377,9 +470,9 @@ function LineupDialog({
   }, [open])
 
   const codes = slotCodes(formation, slots)
-  const bench = called.filter((a) => !slots.includes(a.userId))
+  const bench = called.filter((a) => !slots.includes(a.id))
   const pending = pendingBench ? byId.get(pendingBench) : undefined
-  const pendingCodes = positionCodes(pending?.user.positions)
+  const pendingCodes = positionCodes(pending ? attendancePositions(pending) : [])
   const fitIds = new Set(slots.filter((id) => pendingCodes.includes(codes[id])))
   const noFit = !!pending && fitIds.size === 0
 
@@ -401,9 +494,9 @@ function LineupDialog({
     }
     return {
       userId: id,
-      firstName: a?.user.firstName ?? '',
-      lastName: a?.user.lastName ?? '',
-      shirtNumber: a?.user.jerseyNumber ?? null,
+      firstName: a?.user?.firstName ?? a?.guestFirstName ?? '',
+      lastName: a?.user?.lastName ?? a?.guestLastName ?? '',
+      shirtNumber: a ? attendanceJerseyNumber(a) : null,
       label: pending ? codes[id] : undefined,
       x: pos.x,
       y: pos.y,
@@ -489,7 +582,8 @@ function LineupDialog({
               {pending ? (
                 <>
                   <strong className="text-foreground">
-                    {pending.user.firstName} joue {pendingCodes.join(' · ') || 'à un poste non renseigné'}.
+                    {pending.user?.firstName ?? pending.guestFirstName} joue{' '}
+                    {pendingCodes.join(' · ') || 'à un poste non renseigné'}.
                   </strong>{' '}
                   {noFit
                     ? 'Aucun de ses postes n’est dans ce système : tous les emplacements restent possibles.'
@@ -507,16 +601,16 @@ function LineupDialog({
               )}
               {bench.map((a) => (
                 <button
-                  key={a.userId}
+                  key={a.id}
                   type="button"
-                  onClick={() => setPendingBench((cur) => (cur === a.userId ? null : a.userId))}
+                  onClick={() => setPendingBench((cur) => (cur === a.id ? null : a.id))}
                   className={cn(
                     'hover:bg-accent flex w-full items-center gap-2 border-b px-3 py-2 text-left last:border-b-0',
-                    pendingBench === a.userId && 'bg-club-blue/10 ring-club-blue ring-2 ring-inset',
+                    pendingBench === a.id && 'bg-club-blue/10 ring-club-blue ring-2 ring-inset',
                   )}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{fullName(a)}</span>
-                  {positionCodes(a.user.positions).map((code) => (
+                  {positionCodes(attendancePositions(a)).map((code) => (
                     <Badge key={code} variant="outline">
                       {code}
                     </Badge>
@@ -555,19 +649,19 @@ function autoFill(formation: string, kept: string[], called: MatchAttendance[]):
   const target = Math.min(MAX_STARTERS, called.length)
   const used = new Set(kept)
   const result = [...kept]
-  const pool = called.filter((a) => !used.has(a.userId))
+  const pool = called.filter((a) => !used.has(a.id))
   const take = (predicate: (a: MatchAttendance) => boolean) => {
-    const found = pool.find((a) => !used.has(a.userId) && predicate(a))
+    const found = pool.find((a) => !used.has(a.id) && predicate(a))
     if (found) {
-      used.add(found.userId)
-      result.push(found.userId)
+      used.add(found.id)
+      result.push(found.id)
     }
     return !!found
   }
   for (let i = kept.length; i < wanted.length && result.length < target; i++) {
     const code = wanted[i]
-    if (take((a) => positionCodes(a.user.positions).includes(code))) continue
-    if (take((a) => bandForPosition(a.user.positions?.[0]) === bandOfCode(code))) continue
+    if (take((a) => positionCodes(attendancePositions(a)).includes(code))) continue
+    if (take((a) => bandForPosition(attendancePositions(a)[0]) === bandOfCode(code))) continue
     take(() => true)
   }
   return result

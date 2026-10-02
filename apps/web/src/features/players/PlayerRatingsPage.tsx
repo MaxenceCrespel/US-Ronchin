@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CircleHelp, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -64,6 +65,24 @@ export function PlayerRatingsPage() {
   const [filter, setFilter] = useState<'all' | 'todo'>('all')
   const [justSaved, setJustSaved] = useState(false)
   const h1Ref = useRef<HTMLHeadingElement>(null)
+
+  // "À traiter" on the accueil deep-links a single pending player here via ?userId= — scroll
+  // to their row once it's actually rendered and flash it, instead of leaving the coach to
+  // find them in the list themselves. Read once (not kept in sync with the URL after): a
+  // stray re-scroll every time `rows` recomputes (e.g. the coach rates someone else first)
+  // would be disorienting, not helpful.
+  const [searchParams] = useSearchParams()
+  const focusUserId = searchParams.get('userId')
+  const [highlightedUserId, setHighlightedUserId] = useState<string | null>(focusUserId)
+  useEffect(() => {
+    if (!focusUserId || isLoading) return
+    const el = document.getElementById(`rating-${focusUserId}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timeout = window.setTimeout(() => setHighlightedUserId(null), 2500)
+    return () => window.clearTimeout(timeout)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusUserId, isLoading])
 
   // A player still shown under "À noter" even once rated in this session — the list must
   // not jump under the coach's thumb while they're still working through it (see the
@@ -242,7 +261,14 @@ export function PlayerRatingsPage() {
           const half = p.effectiveRating != null && p.effectiveRating % 1 !== 0
           const name = `${p.firstName} ${p.lastName}`.trim()
           return (
-            <li key={p.userId} className="rounded-xl border p-3">
+            <li
+              key={p.userId}
+              id={`rating-${p.userId}`}
+              className={cn(
+                'rounded-xl border p-3 transition-colors',
+                highlightedUserId === p.userId && 'border-club-blue bg-club-blue/5',
+              )}
+            >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold">{name}</span>
                 <span className={cn('text-xs font-semibold', p.effectiveRating != null ? 'text-club-blue-dark' : 'text-muted-foreground')}>

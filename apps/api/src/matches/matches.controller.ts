@@ -28,6 +28,7 @@ import { SubmitRatingsDto } from './dto/submit-ratings.dto';
 import { VoteMotmDto } from './dto/vote-motm.dto';
 import { VoteDefenseBossDto } from './dto/vote-defense-boss.dto';
 import { SetAttendanceDto } from '../attendances/dto/set-attendance.dto';
+import { AddMatchGuestDto } from './dto/add-match-guest.dto';
 import { sanitizeUser } from '../common/utils/sanitize-user';
 
 @UseGuards(JwtAuthGuard)
@@ -190,7 +191,14 @@ export class MatchesController {
   @Get(':id/attendance')
   async getAttendance(@Param('id') id: string) {
     const attendances = await this.matchesService.getAttendance(id);
-    return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
+    return attendances.map((a) => ({ ...a, user: a.user ? sanitizeUser(a.user) : null }));
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
+  @Post(':id/attendance/guest')
+  addGuestAttendance(@Param('id') id: string, @Body() dto: AddMatchGuestDto) {
+    return this.matchesService.addGuestAttendance(id, dto);
   }
 
   @UseGuards(RolesGuard)
@@ -198,7 +206,7 @@ export class MatchesController {
   @Put(':id/convocation')
   async setConvocation(@Param('id') id: string, @Body() dto: SetConvocationDto) {
     const attendances = await this.matchesService.setConvocation(id, dto);
-    return attendances.map((a) => ({ ...a, user: sanitizeUser(a.user) }));
+    return attendances.map((a) => ({ ...a, user: a.user ? sanitizeUser(a.user) : null }));
   }
 
   @UseGuards(RolesGuard)
