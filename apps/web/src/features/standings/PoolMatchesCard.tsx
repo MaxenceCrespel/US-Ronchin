@@ -3,10 +3,19 @@ import { useQuery } from '@tanstack/react-query'
 import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { TeamLogo } from '@/components/TeamLogo'
 import { cn } from '@/lib/utils'
 import { fetchPoolMatches } from './api'
 import type { PoolMatch } from '@/lib/types'
+
+const ALL_TEAMS = 'ALL'
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
@@ -45,7 +54,9 @@ function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function MatchRow({ match }: { match: PoolMatch }) {
+/** `journeeLabel` only shows up in the "all matches of one team" view — grouped by journée
+ * already, the label would just repeat the heading above each row. */
+function MatchRow({ match, journeeLabel }: { match: PoolMatch; journeeLabel?: string }) {
   return (
     <div
       className={cn(
@@ -53,7 +64,10 @@ function MatchRow({ match }: { match: PoolMatch }) {
         match.isUs && 'bg-club-blue/5 font-semibold',
       )}
     >
-      <span className="text-muted-foreground w-12 shrink-0 text-xs tabular-nums">{formatDate(match.date)}</span>
+      <span className="text-muted-foreground flex w-16 shrink-0 flex-col text-xs">
+        <span className="tabular-nums">{formatDate(match.date)}</span>
+        {journeeLabel && <span className="truncate">{journeeLabel}</span>}
+      </span>
       <span className="flex min-w-0 flex-1 items-center justify-end gap-1.5 truncate">
         <span className="min-w-0 truncate">{match.homeTeam}</span>
         <TeamLogo src={match.homeLogo} />
@@ -79,6 +93,21 @@ function MatchRow({ match }: { match: PoolMatch }) {
 export function PoolMatchesCard() {
   const poolQuery = useQuery({ queryKey: ['pool-matches'], queryFn: fetchPoolMatches })
   const matches = poolQuery.data ?? []
+
+  const [team, setTeam] = useState(ALL_TEAMS)
+  const teamOptions = useMemo(
+    () => [...new Set(matches.flatMap((m) => [m.homeTeam, m.awayTeam]))].sort((a, b) => a.localeCompare(b)),
+    [matches],
+  )
+  const teamMatches = useMemo(
+    () =>
+      team === ALL_TEAMS
+        ? []
+        : matches
+            .filter((m) => m.homeTeam === team || m.awayTeam === team)
+            .sort((a, b) => (a.date < b.date ? -1 : 1)),
+    [matches, team],
+  )
 
   const journees = useMemo(() => {
     const groups = new Map<string, PoolMatch[]>()
@@ -134,43 +163,73 @@ export function PoolMatchesCard() {
           <CalendarRange className="text-club-blue size-4" />
           Résultats de la poule
         </CardTitle>
-        <CardDescription>Nos matchs et ceux des autres équipes, journée par journée.</CardDescription>
+        <CardDescription>Nos matchs et ceux des autres équipes, journée par journée — ou tous les matchs d'une équipe.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {!current ? (
+        {matches.length === 0 ? (
           <p className="text-muted-foreground text-sm">Pas encore de résultats synchronisés.</p>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-8 shrink-0"
-                disabled={index === 0}
-                onClick={() => setIndex((i) => (i !== null ? Math.max(0, i - 1) : i))}
-                aria-label="Journée précédente"
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <p className="min-w-0 truncate text-sm font-semibold">{current[0]}</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="size-8 shrink-0"
-                disabled={index === journees.length - 1}
-                onClick={() => setIndex((i) => (i !== null ? Math.min(journees.length - 1, i + 1) : i))}
-                aria-label="Journée suivante"
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-            <div className="flex flex-col divide-y">
-              {current[1].map((m) => (
-                <MatchRow key={m.id} match={m} />
-              ))}
-            </div>
+            <Select value={team} onValueChange={setTeam}>
+              <SelectTrigger aria-label="Filtrer par équipe" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_TEAMS}>Toutes les équipes</SelectItem>
+                {teamOptions.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {team !== ALL_TEAMS ? (
+              teamMatches.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Aucun match trouvé.</p>
+              ) : (
+                <div className="flex flex-col divide-y">
+                  {teamMatches.map((m) => (
+                    <MatchRow key={m.id} match={m} journeeLabel={m.matchday ?? undefined} />
+                  ))}
+                </div>
+              )
+            ) : !current ? (
+              <p className="text-muted-foreground text-sm">Pas encore de résultats synchronisés.</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    disabled={index === 0}
+                    onClick={() => setIndex((i) => (i !== null ? Math.max(0, i - 1) : i))}
+                    aria-label="Journée précédente"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Button>
+                  <p className="min-w-0 truncate text-sm font-semibold">{current[0]}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    disabled={index === journees.length - 1}
+                    onClick={() => setIndex((i) => (i !== null ? Math.min(journees.length - 1, i + 1) : i))}
+                    aria-label="Journée suivante"
+                  >
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-col divide-y">
+                  {current[1].map((m) => (
+                    <MatchRow key={m.id} match={m} />
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </CardContent>

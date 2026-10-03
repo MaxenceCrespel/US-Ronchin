@@ -23,7 +23,7 @@ import {
 import { cn, pluralize } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSeasonBounds, isInSeason } from '@/lib/season'
-import { getMatchCategory, MATCH_CATEGORY_FILL, MATCH_CATEGORY_LABELS, type MatchCategory } from '@/lib/match-category'
+import { getMatchCategory } from '@/lib/match-category'
 import type { DuoStats, PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
@@ -239,30 +239,21 @@ function GoalsBars({ goalsFor, goalsAgainst }: { goalsFor: number; goalsAgainst:
   )
 }
 
-/** Same paired-bar idea as GoalsBars, one row per competition type actually played this
- * season — reusing the same accent colors as everywhere else a match's category shows up
- * (Matchs, Championnat, Coupe) so it reads as the same classification at a glance. */
-function CategoryBars({ counts }: { counts: [MatchCategory, number][] }) {
-  const max = Math.max(...counts.map(([, n]) => n), 1)
-  return (
-    <div className="flex flex-col gap-2">
-      {counts.map(([category, count]) => (
-        <div key={category} className="flex items-center gap-2">
-          <span className="text-muted-foreground w-24 shrink-0 text-xs">{MATCH_CATEGORY_LABELS[category]}</span>
-          <div className="bg-muted h-2.5 flex-1 overflow-hidden rounded-full">
-            <div className={cn('h-full rounded-full', MATCH_CATEGORY_FILL[category])} style={{ width: `${(count / max) * 100}%` }} />
-          </div>
-          <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums">{count}</span>
-        </div>
-      ))}
-    </div>
-  )
+type SeasonRecordFilter = 'ALL' | 'LEAGUE' | 'CUP'
+
+const SEASON_RECORD_FILTER_LABELS: Record<SeasonRecordFilter, string> = {
+  ALL: 'Total',
+  LEAGUE: 'Championnat',
+  CUP: 'Coupe',
 }
 
 function SeasonRecordCard({ season }: { season: string }) {
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
+  const [filter, setFilter] = useState<SeasonRecordFilter>('ALL')
   const bounds = season !== CAREER ? getSeasonBounds(season) : null
-  const inSeason = (matchesQuery.data ?? []).filter((m) => !bounds || isInSeason(m.date, bounds))
+  const inSeason = (matchesQuery.data ?? [])
+    .filter((m) => !bounds || isInSeason(m.date, bounds))
+    .filter((m) => filter === 'ALL' || getMatchCategory(m) === filter)
   const played = inSeason.filter((m) => m.status === 'PLAYED').sort((a, b) => (a.date < b.date ? -1 : 1))
 
   let won = 0
@@ -284,14 +275,6 @@ function SeasonRecordCard({ season }: { season: string }) {
     form.push({ date: m.date, outcome, opponent: m.opponent, scoreHome: m.scoreHome, scoreAway: m.scoreAway })
   }
   const goalDifference = goalsFor - goalsAgainst
-  const upcoming = inSeason.filter((m) => m.status === 'SCHEDULED').length
-
-  const byCategory = new Map<MatchCategory, number>()
-  for (const m of inSeason) {
-    const category = getMatchCategory(m)
-    byCategory.set(category, (byCategory.get(category) ?? 0) + 1)
-  }
-  const categories = (['LEAGUE', 'CUP', 'FRIENDLY'] as const).filter((c) => byCategory.has(c))
 
   return (
     <Card>
@@ -299,6 +282,22 @@ function SeasonRecordCard({ season }: { season: string }) {
         <CardTitle className="text-base">Bilan de la saison</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
+        <div className="flex gap-1.5">
+          {(['ALL', 'LEAGUE', 'CUP'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                filter === f ? 'bg-club-blue text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              )}
+            >
+              {SEASON_RECORD_FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
             <p className="text-2xl font-bold text-emerald-600">{won}</p>
@@ -330,20 +329,6 @@ function SeasonRecordCard({ season }: { season: string }) {
               </p>
             </div>
             <GoalsBars goalsFor={goalsFor} goalsAgainst={goalsAgainst} />
-          </div>
-        )}
-
-        {categories.length > 0 && (
-          <div className="flex flex-col gap-2 border-t pt-4">
-            <div className="flex items-center justify-between">
-              <p className="text-muted-foreground text-xs">Matchs par compétition</p>
-              {upcoming > 0 && (
-                <Badge variant="secondary">
-                  {upcoming} {pluralize('match', upcoming)} à venir
-                </Badge>
-              )}
-            </div>
-            <CategoryBars counts={categories.map((c) => [c, byCategory.get(c)!] as [MatchCategory, number])} />
           </div>
         )}
       </CardContent>
