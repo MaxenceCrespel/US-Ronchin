@@ -21,6 +21,30 @@ function journeeNumber(label: string): number {
   return match ? Number(match[0]) : Number.POSITIVE_INFINITY
 }
 
+/** A journée's "real" date — the one most of its matches share, not just the first one
+ * alphabetically/chronologically. A single postponed fixture (ours, say) moves only that one
+ * match's own date forward, which previously made "pick the first journée with an unplayed
+ * match" get stuck on journée 1 indefinitely instead of moving on with the rest of the poule. */
+function journeeDate(list: PoolMatch[]): string {
+  const counts = new Map<string, number>()
+  for (const m of list) counts.set(m.date, (counts.get(m.date) ?? 0) + 1)
+  let best = list[0].date
+  let bestCount = 0
+  for (const [date, count] of counts) {
+    if (count > bestCount) {
+      best = date
+      bestCount = count
+    }
+  }
+  return best
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 function MatchRow({ match }: { match: PoolMatch }) {
   return (
     <div
@@ -49,8 +73,9 @@ function MatchRow({ match }: { match: PoolMatch }) {
  * point is seeing how the rest of the group is actually doing, side by side with us, not
  * just our own results (already shown elsewhere on the calendar). One journée at a time,
  * navigated with arrows, rather than the whole season stacked — easier to actually read on a
- * phone, and the "current" journée (the first one with a match still to play) is where it
- * opens by default. */
+ * phone, and the "current" journée (the most recent one whose date has already come) is
+ * where it opens by default — see journeeDate's own comment for why that's date-based rather
+ * than "first journée with an unplayed match". */
 export function PoolMatchesCard() {
   const poolQuery = useQuery({ queryKey: ['pool-matches'], queryFn: fetchPoolMatches })
   const matches = poolQuery.data ?? []
@@ -76,12 +101,27 @@ export function PoolMatchesCard() {
       setIndex(null)
       return
     }
-    // Default to the first journée that still has an unplayed match — the "current" one — and
-    // only once, so navigating around doesn't keep snapping back on every refetch.
+    // Default to whichever journée is "current" by a short window after it's played, not the
+    // instant it's played — the weekend's results stay worth showing through the following
+    // Wednesday, then it flips to the upcoming journée rather than lingering on last
+    // weekend's. Not "the first unplayed match" either: a single postponed fixture would pin
+    // that forever on an early journée even once the rest of the poule has moved on.
     setIndex((current) => {
       if (current !== null && current < journees.length) return current
-      const firstUpcoming = journees.findIndex(([, list]) => list.some((m) => !m.played))
-      return firstUpcoming === -1 ? journees.length - 1 : firstUpcoming
+      const today = new Date().toISOString().slice(0, 10)
+      let lastPlayed = -1
+      let lastPlayedDate = ''
+      journees.forEach(([, list], i) => {
+        const d = journeeDate(list)
+        if (d <= today && d > lastPlayedDate) {
+          lastPlayedDate = d
+          lastPlayed = i
+        }
+      })
+      if (lastPlayed === -1) return 0 // season hasn't started yet
+      const stillCurrentUntil = addDays(lastPlayedDate, 3) // the Wednesday after a Sunday journée
+      if (today <= stillCurrentUntil) return lastPlayed
+      return lastPlayed + 1 < journees.length ? lastPlayed + 1 : lastPlayed
     })
   }, [journees])
 
