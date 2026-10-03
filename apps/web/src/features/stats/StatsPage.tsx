@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ArrowUpDown, Crown, Shield } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarDays, Crown, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -24,14 +26,14 @@ import { cn, pluralize } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSeasonBounds, isInSeason } from '@/lib/season'
 import { getMatchCategory } from '@/lib/match-category'
-import type { DuoStats, PlayerStats } from '@/lib/types'
+import type { DuoStats, MatchEvent, PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
 import { MyStatsCard } from './MyStatsCard'
 import { PlayerTrainingHistoryPanel } from '@/features/trainings/PlayerTrainingHistoryPanel'
 import { MonthlyChallengesCard } from './MonthlyChallengesCard'
 import { MonthlyAwardCard } from '@/features/awards/MonthlyAwardCard'
-import { fetchMatches } from '@/features/matches/api'
+import { fetchEvents, fetchMatches } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 
 const CAREER = 'career'
@@ -192,29 +194,154 @@ const OUTCOME_LETTER: Record<MatchOutcome, string> = {
   LOSS: 'D',
 }
 
+const OUTCOME_SUMMARY_LABEL: Record<MatchOutcome, string> = {
+  WIN: 'Victoire',
+  DRAW: 'Match nul',
+  LOSS: 'Défaite',
+}
+
+interface FormMatch {
+  id: string
+  date: string
+  kickOffTime: string | null
+  outcome: MatchOutcome
+  opponent: string
+  scoreHome: number | null
+  scoreAway: number | null
+  homeAway: 'HOME' | 'AWAY'
+}
+
+function formatFormMatchDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+const EVENT_LABELS: Record<MatchEvent['type'], string> = {
+  GOAL: 'But',
+  YELLOW_CARD: 'Carton jaune',
+  RED_CARD: 'Carton rouge',
+}
+
+function EventIcon({ event }: { event: MatchEvent }) {
+  if (event.type === 'GOAL') return <span className="text-sm leading-none">⚽</span>
+  return (
+    <span
+      className={cn('h-3.5 w-2.5 shrink-0 rounded-sm', event.type === 'YELLOW_CARD' ? 'bg-amber-400' : 'bg-rose-600')}
+      aria-hidden
+    />
+  )
+}
+
+/** Just the events of one match, fetched on demand when its summary dialog opens — nobody
+ * needs every match's events preloaded, only whichever one was just clicked. */
+function MatchEventsList({ matchId }: { matchId: string }) {
+  const eventsQuery = useQuery({ queryKey: ['match-events', matchId], queryFn: () => fetchEvents(matchId) })
+  const events = [...(eventsQuery.data ?? [])].sort((a, b) => (a.minute ?? 999) - (b.minute ?? 999))
+
+  if (eventsQuery.isLoading) {
+    return <p className="text-muted-foreground border-t pt-3 text-sm">Chargement des événements…</p>
+  }
+  if (events.length === 0) {
+    return <p className="text-muted-foreground border-t pt-3 text-sm">Aucun événement enregistré.</p>
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 border-t pt-3">
+      {events.map((event) => (
+        <div key={event.id} className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground w-8 shrink-0 text-xs tabular-nums">
+            {event.minute != null ? `${event.minute}'` : '—'}
+          </span>
+          <EventIcon event={event} />
+          <span className="min-w-0 flex-1 truncate">
+            {event.user ? `${event.user.firstName} ${event.user.lastName}` : (event.scorerName ?? EVENT_LABELS[event.type])}
+            {event.assistUser && (
+              <span className="text-muted-foreground"> (passe de {event.assistUser.firstName} {event.assistUser.lastName})</span>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Each played match as one lettered chip, oldest to newest — the "forme" strip football apps
  * show, letting a run of wins or losses jump out at a glance instead of being buried in a
  * W/D/L count. The most recent match gets a ring so "where are we now" doesn't require
- * counting from either end; a horizontal scroller rather than flex-wrap keeps a long season
- * from turning into a wall of chips. */
-function FormStrip({ matches }: { matches: { date: string; outcome: MatchOutcome; opponent: string; scoreHome: number | null; scoreAway: number | null }[] }) {
+ * counting from either end. Capped to 5 by the caller, so a plain wrapping row is all that's
+ * needed — no scroll container, which matters here: `overflow-x-auto` forces `overflow-y` to
+ * `auto` too (a real CSS quirk, not a Tailwind bug) and clips the ring's own box-shadow at
+ * that boundary regardless of how much padding compensates horizontally, which is why the
+ * ring kept getting visibly cut off no matter how that padding was tuned. Clicking a chip
+ * opens that match's own summary with a link to its full page. */
+function FormStrip({ matches }: { matches: FormMatch[] }) {
+  const [selected, setSelected] = useState<FormMatch | null>(null)
   if (matches.length === 0) return null
   return (
-    <div className="-mx-2 flex gap-1.5 overflow-x-auto px-2 pb-1">
-      {matches.map((m, i) => (
-        <span
-          key={i}
-          className={cn(
-            'flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white shadow-sm',
-            OUTCOME_FILL[m.outcome],
-            i === matches.length - 1 && 'ring-foreground/30 ring-2 ring-offset-2',
+    <>
+      <div className="flex flex-wrap gap-1.5 py-1">
+        {matches.map((m, i) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setSelected(m)}
+            className={cn(
+              'flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white shadow-sm transition-transform hover:scale-110',
+              OUTCOME_FILL[m.outcome],
+              i === matches.length - 1 && 'ring-foreground/30 ring-2 ring-offset-2',
+            )}
+            aria-label={`${m.opponent} — ${m.scoreHome} - ${m.scoreAway}`}
+          >
+            {OUTCOME_LETTER[m.outcome]}
+          </button>
+        ))}
+      </div>
+      <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
+        <DialogContent className="max-w-sm">
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  <span
+                    className={cn(
+                      'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white',
+                      OUTCOME_FILL[selected.outcome],
+                    )}
+                  >
+                    {OUTCOME_SUMMARY_LABEL[selected.outcome]}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="flex min-w-0 items-center justify-center gap-3 py-2 text-center">
+                <span className={cn('min-w-0 flex-1 text-sm', selected.homeAway === 'HOME' && 'font-semibold')}>
+                  {selected.homeAway === 'HOME' ? 'US Ronchin' : selected.opponent}
+                </span>
+                <span className="shrink-0 text-2xl font-bold tabular-nums">
+                  {selected.scoreHome} - {selected.scoreAway}
+                </span>
+                <span className={cn('min-w-0 flex-1 text-sm', selected.homeAway === 'AWAY' && 'font-semibold')}>
+                  {selected.homeAway === 'HOME' ? selected.opponent : 'US Ronchin'}
+                </span>
+              </div>
+
+              <div className="text-muted-foreground flex items-center gap-2 border-t pt-3 text-sm">
+                <CalendarDays className="size-4 shrink-0" />
+                <span>
+                  {formatFormMatchDate(selected.date)}
+                  {selected.kickOffTime && ` à ${selected.kickOffTime.slice(0, 5)}`}
+                </span>
+              </div>
+
+              <MatchEventsList matchId={selected.id} />
+
+              <Button asChild className="w-full">
+                <Link to={`/matches/${selected.id}`}>Voir la fiche du match</Link>
+              </Button>
+            </>
           )}
-          title={`${m.opponent} — ${m.scoreHome} - ${m.scoreAway}`}
-        >
-          {OUTCOME_LETTER[m.outcome]}
-        </span>
-      ))}
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -239,12 +366,13 @@ function GoalsBars({ goalsFor, goalsAgainst }: { goalsFor: number; goalsAgainst:
   )
 }
 
-type SeasonRecordFilter = 'ALL' | 'LEAGUE' | 'CUP'
+type SeasonRecordFilter = 'ALL' | 'LEAGUE' | 'CUP' | 'FRIENDLY'
 
 const SEASON_RECORD_FILTER_LABELS: Record<SeasonRecordFilter, string> = {
   ALL: 'Total',
   LEAGUE: 'Championnat',
   CUP: 'Coupe',
+  FRIENDLY: 'Amical',
 }
 
 function SeasonRecordCard({ season }: { season: string }) {
@@ -261,7 +389,7 @@ function SeasonRecordCard({ season }: { season: string }) {
   let lost = 0
   let goalsFor = 0
   let goalsAgainst = 0
-  const form: { date: string; outcome: MatchOutcome; opponent: string; scoreHome: number | null; scoreAway: number | null }[] = []
+  const form: FormMatch[] = []
   for (const m of played) {
     const ourScore = m.homeAway === 'HOME' ? m.scoreHome : m.scoreAway
     const theirScore = m.homeAway === 'HOME' ? m.scoreAway : m.scoreHome
@@ -272,7 +400,16 @@ function SeasonRecordCard({ season }: { season: string }) {
     if (outcome === 'WIN') won += 1
     else if (outcome === 'DRAW') drawn += 1
     else lost += 1
-    form.push({ date: m.date, outcome, opponent: m.opponent, scoreHome: m.scoreHome, scoreAway: m.scoreAway })
+    form.push({
+      id: m.id,
+      date: m.date,
+      kickOffTime: m.kickOffTime,
+      outcome,
+      opponent: m.opponent,
+      scoreHome: m.scoreHome,
+      scoreAway: m.scoreAway,
+      homeAway: m.homeAway,
+    })
   }
   const goalDifference = goalsFor - goalsAgainst
 
@@ -282,8 +419,8 @@ function SeasonRecordCard({ season }: { season: string }) {
         <CardTitle className="text-base">Bilan de la saison</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <div className="flex gap-1.5">
-          {(['ALL', 'LEAGUE', 'CUP'] as const).map((f) => (
+        <div className="flex flex-wrap gap-1.5">
+          {(['ALL', 'LEAGUE', 'CUP', 'FRIENDLY'] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -627,7 +764,7 @@ export function StatsPage() {
                   <CardTitle>Historique d'entraînements</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <PlayerTrainingHistoryPanel userId={user.id} hideUpcoming pageSize={10} />
+                  <PlayerTrainingHistoryPanel userId={user.id} hideUpcoming pageSize={5} />
                 </CardContent>
               </Card>
             )}

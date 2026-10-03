@@ -3,7 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import { cn } from '@/lib/utils'
@@ -14,6 +20,14 @@ const TEAM_LABELS = ['Équipe Bleue', 'Équipe Rouge']
 
 function formatSessionDate(date: string) {
   return format(new Date(`${date}T00:00:00`), 'd MMM yyyy', { locale: fr })
+}
+
+/** "Mardi 15 septembre 2026" — the full weekday the select picker shows, since picking a
+ * session by "which day of the week" is how a coach actually remembers it ("c'était le mardi
+ * d'avant les vacances"), not by a bare "15 sept." the table rows use elsewhere. */
+function formatFullSessionDate(date: string) {
+  const text = format(new Date(`${date}T00:00:00`), 'EEEE d MMMM yyyy', { locale: fr })
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 function DeclaredBadge({ entry }: { entry: PlayerTrainingHistoryEntry }) {
@@ -64,15 +78,18 @@ export function PlayerTrainingHistoryPanel({
    * coach dispute-resolution view (untangling a wrong team/score) needs the full list,
    * upcoming sessions included. */
   hideUpcoming?: boolean
-  /** Shows this many most-recent entries with a "Voir plus" button revealing the rest,
-   * instead of the full list at once — keeps a player's own view light by default. */
+  /** Shows this many most-recent entries by default; anything older is reachable one at a
+   * time through a "choisir un entraînement" select (labelled by full weekday + date) rather
+   * than a "Voir plus" that dumps the rest of the season at once. */
   pageSize?: number
 }) {
   const historyQuery = useQuery({
     queryKey: ['training-history', userId],
     queryFn: () => fetchPlayerTrainingHistory(userId),
   })
-  const [visibleCount, setVisibleCount] = useState(pageSize ?? Infinity)
+  // Older sessions picked one at a time via the select below, added to what's shown without
+  // replacing the default "most recent" set.
+  const [extraSessionIds, setExtraSessionIds] = useState<Set<string>>(new Set())
 
   // "en-CA" gives a plain YYYY-MM-DD in the browser's own local time — the club plays in
   // one timezone (Europe/Paris) and this only ever runs in a player's own browser there, so
@@ -82,7 +99,11 @@ export function PlayerTrainingHistoryPanel({
     const all = historyQuery.data ?? []
     return hideUpcoming ? all.filter((entry) => entry.date <= today) : all
   }, [historyQuery.data, hideUpcoming, today])
-  const visibleHistory = history.slice(0, visibleCount)
+  const visibleHistory =
+    pageSize === undefined
+      ? history
+      : history.filter((entry, i) => i < pageSize || extraSessionIds.has(entry.sessionId))
+  const olderOptions = pageSize === undefined ? [] : history.slice(pageSize).filter((entry) => !extraSessionIds.has(entry.sessionId))
 
   if (historyQuery.isLoading) {
     return <p className="text-muted-foreground text-sm">Chargement…</p>
@@ -163,16 +184,24 @@ export function PlayerTrainingHistoryPanel({
         ))}
       </div>
 
-      {visibleCount < history.length && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="self-center"
-          onClick={() => setVisibleCount((c) => c + (pageSize ?? history.length))}
+      {olderOptions.length > 0 && (
+        <Select
+          value=""
+          onValueChange={(sessionId) =>
+            setExtraSessionIds((ids) => new Set(ids).add(sessionId))
+          }
         >
-          Voir plus ({history.length - visibleCount} restant{history.length - visibleCount > 1 ? 's' : ''})
-        </Button>
+          <SelectTrigger aria-label="Choisir un entraînement" className="w-full">
+            <SelectValue placeholder="Choisir un entraînement plus ancien…" />
+          </SelectTrigger>
+          <SelectContent>
+            {olderOptions.map((entry) => (
+              <SelectItem key={entry.sessionId} value={entry.sessionId}>
+                {formatFullSessionDate(entry.date)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
     </div>
   )
