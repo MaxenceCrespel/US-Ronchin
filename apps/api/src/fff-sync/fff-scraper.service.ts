@@ -147,9 +147,14 @@ interface RawConfrontation {
   homeLogoSrc: string | null;
   awayLogoSrc: string | null;
   matchHref: string | null;
-  /** `.score_match img.number[src]`, home then away — see the big doc comment above
-   * CONFRONTATION_SELECTOR for why this, not the `.name` text, is the real score. */
-  scoreImageSrcs: string[];
+  /** `.score_match img.number[src]`, split into home/away groups at the " - " text node
+   * between them — see the big doc comment above CONFRONTATION_SELECTOR for why this, not the
+   * `.name` text, is the real score. A score can be multi-digit (e.g. "10 - 1"): grouping by
+   * that text-node split rather than assuming exactly one image per side is the fix for a real
+   * bug confirmed live (Bondues 10-1 over Marquette, journée 2) — the old "exactly 2 images
+   * total" assumption silently dropped it as unplayed since 3 digit images isn't 2. */
+  scoreHomeDigitSrcs: string[];
+  scoreAwayDigitSrcs: string[];
 }
 
 interface ParsedConfrontation {
@@ -370,6 +375,22 @@ export class FffScraperService {
           confrontations: Array.from(section.querySelectorAll('app-confrontation .confrontation')).map(
             (block) => {
               const anchor = block.closest('a');
+              // A score can be multi-digit ("10 - 1"): group the `.score_match img.number`
+              // elements by which side of the " - " text node they fall on, rather than
+              // assuming exactly one image per side.
+              const scoreHomeDigitSrcs: string[] = [];
+              const scoreAwayDigitSrcs: string[] = [];
+              const scoreContainer = block.querySelector('.score_match');
+              let side: 'home' | 'away' = 'home';
+              for (const child of Array.from(scoreContainer?.childNodes ?? [])) {
+                if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).matches('img.number')) {
+                  (side === 'home' ? scoreHomeDigitSrcs : scoreAwayDigitSrcs).push(
+                    (child as HTMLImageElement).src,
+                  );
+                } else if (child.nodeType === Node.TEXT_NODE && child.textContent?.includes('-')) {
+                  side = 'away';
+                }
+              }
               return {
                 dateText: block.querySelector('.date')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
                 homeText: block.querySelector('.equipe1 .name')?.textContent ?? '',
@@ -377,9 +398,8 @@ export class FffScraperService {
                 homeLogoSrc: block.querySelector<HTMLImageElement>('.equipe1 .logo img')?.src ?? null,
                 awayLogoSrc: block.querySelector<HTMLImageElement>('.equipe2 .logo img')?.src ?? null,
                 matchHref: anchor?.getAttribute('href') ?? null,
-                scoreImageSrcs: Array.from(block.querySelectorAll('.score_match img.number')).map(
-                  (img) => (img as HTMLImageElement).src,
-                ),
+                scoreHomeDigitSrcs,
+                scoreAwayDigitSrcs,
               };
             },
           ),
@@ -749,6 +769,17 @@ export class FffScraperService {
     return page.$$eval(CONFRONTATION_SELECTOR, (blocks) =>
       blocks.map((block) => {
         const anchor = block.closest('a');
+        const scoreHomeDigitSrcs: string[] = [];
+        const scoreAwayDigitSrcs: string[] = [];
+        const scoreContainer = block.querySelector('.score_match');
+        let side: 'home' | 'away' = 'home';
+        for (const child of Array.from(scoreContainer?.childNodes ?? [])) {
+          if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).matches('img.number')) {
+            (side === 'home' ? scoreHomeDigitSrcs : scoreAwayDigitSrcs).push((child as HTMLImageElement).src);
+          } else if (child.nodeType === Node.TEXT_NODE && child.textContent?.includes('-')) {
+            side = 'away';
+          }
+        }
         return {
           dateText: block.querySelector('.date')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
           homeText: block.querySelector('.equipe1 .name')?.textContent ?? '',
@@ -756,9 +787,8 @@ export class FffScraperService {
           homeLogoSrc: block.querySelector<HTMLImageElement>('.equipe1 .logo img')?.src ?? null,
           awayLogoSrc: block.querySelector<HTMLImageElement>('.equipe2 .logo img')?.src ?? null,
           matchHref: anchor?.getAttribute('href') ?? null,
-          scoreImageSrcs: Array.from(block.querySelectorAll('.score_match img.number')).map(
-            (img) => (img as HTMLImageElement).src,
-          ),
+          scoreHomeDigitSrcs,
+          scoreAwayDigitSrcs,
         };
       }),
     );
@@ -783,11 +813,17 @@ export class FffScraperService {
     const awayTeam = this.parseConfrontationName(raw.awayText);
     if (!homeTeam || !awayTeam) return null;
 
-    const digits = raw.scoreImageSrcs
-      .map((src) => /origin\/(\d+)\.png/.exec(src)?.[1])
-      .filter((d): d is string => d !== undefined)
-      .map(Number);
-    const played = digits.length === 2;
+    // Each side's digit images concatenate into a (possibly multi-digit) number — "10 - 1"
+    // renders as two <img> on the home side, one on the away side, not one each.
+    const parseDigits = (srcs: string[]): number | null => {
+      if (srcs.length === 0) return null;
+      const digits = srcs.map((src) => /origin\/(\d+)\.png/.exec(src)?.[1]);
+      if (digits.some((d) => d === undefined)) return null;
+      return Number(digits.join(''));
+    };
+    const scoreHome = parseDigits(raw.scoreHomeDigitSrcs);
+    const scoreAway = parseDigits(raw.scoreAwayDigitSrcs);
+    const played = scoreHome !== null && scoreAway !== null;
     const fffMatchId = /match_id=(\d+)/.exec(raw.matchHref ?? '')?.[1] ?? null;
 
     return {
@@ -797,8 +833,8 @@ export class FffScraperService {
       awayTeam,
       homeLogo: raw.homeLogoSrc,
       awayLogo: raw.awayLogoSrc,
-      scoreHome: played ? digits[0] : null,
-      scoreAway: played ? digits[1] : null,
+      scoreHome: played ? scoreHome : null,
+      scoreAway: played ? scoreAway : null,
       played,
     };
   }

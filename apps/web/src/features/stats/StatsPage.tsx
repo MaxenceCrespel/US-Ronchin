@@ -23,6 +23,7 @@ import {
 import { cn, pluralize } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import { getSeasonBounds, isInSeason } from '@/lib/season'
+import { getMatchCategory, MATCH_CATEGORY_FILL, MATCH_CATEGORY_LABELS, type MatchCategory } from '@/lib/match-category'
 import type { DuoStats, PlayerStats } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
 import { fetchAvailableSeasons, fetchPlayerStats, fetchTeamStats } from './api'
@@ -177,31 +178,127 @@ function FullDuosDialog({ duos, onClose }: { duos: DuoStats[]; onClose: () => vo
   )
 }
 
+type MatchOutcome = 'WIN' | 'DRAW' | 'LOSS'
+
+const OUTCOME_FILL: Record<MatchOutcome, string> = {
+  WIN: 'bg-emerald-500',
+  DRAW: 'bg-amber-500',
+  LOSS: 'bg-rose-500',
+}
+
+const OUTCOME_LETTER: Record<MatchOutcome, string> = {
+  WIN: 'V',
+  DRAW: 'N',
+  LOSS: 'D',
+}
+
+/** Each played match as one lettered chip, oldest to newest — the "forme" strip football apps
+ * show, letting a run of wins or losses jump out at a glance instead of being buried in a
+ * W/D/L count. The most recent match gets a ring so "where are we now" doesn't require
+ * counting from either end; a horizontal scroller rather than flex-wrap keeps a long season
+ * from turning into a wall of chips. */
+function FormStrip({ matches }: { matches: { date: string; outcome: MatchOutcome; opponent: string; scoreHome: number | null; scoreAway: number | null }[] }) {
+  if (matches.length === 0) return null
+  return (
+    <div className="-mx-2 flex gap-1.5 overflow-x-auto px-2 pb-1">
+      {matches.map((m, i) => (
+        <span
+          key={i}
+          className={cn(
+            'flex size-7 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white shadow-sm',
+            OUTCOME_FILL[m.outcome],
+            i === matches.length - 1 && 'ring-foreground/30 ring-2 ring-offset-2',
+          )}
+          title={`${m.opponent} — ${m.scoreHome} - ${m.scoreAway}`}
+        >
+          {OUTCOME_LETTER[m.outcome]}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** Buts marqués/encaissés as paired bars scaled to whichever side is higher — reading "11 vs
+ * 9" takes a beat; two bars of visibly different length don't. */
+function GoalsBars({ goalsFor, goalsAgainst }: { goalsFor: number; goalsAgainst: number }) {
+  const max = Math.max(goalsFor, goalsAgainst, 1)
+  const row = (label: string, value: number, fill: string) => (
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground w-20 shrink-0 text-xs">{label}</span>
+      <div className="bg-muted h-2.5 flex-1 overflow-hidden rounded-full">
+        <div className={cn('h-full rounded-full', fill)} style={{ width: `${(value / max) * 100}%` }} />
+      </div>
+      <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums">{value}</span>
+    </div>
+  )
+  return (
+    <div className="flex flex-col gap-2">
+      {row('Marqués', goalsFor, 'bg-emerald-500')}
+      {row('Encaissés', goalsAgainst, 'bg-rose-500')}
+    </div>
+  )
+}
+
+/** Same paired-bar idea as GoalsBars, one row per competition type actually played this
+ * season — reusing the same accent colors as everywhere else a match's category shows up
+ * (Matchs, Championnat, Coupe) so it reads as the same classification at a glance. */
+function CategoryBars({ counts }: { counts: [MatchCategory, number][] }) {
+  const max = Math.max(...counts.map(([, n]) => n), 1)
+  return (
+    <div className="flex flex-col gap-2">
+      {counts.map(([category, count]) => (
+        <div key={category} className="flex items-center gap-2">
+          <span className="text-muted-foreground w-24 shrink-0 text-xs">{MATCH_CATEGORY_LABELS[category]}</span>
+          <div className="bg-muted h-2.5 flex-1 overflow-hidden rounded-full">
+            <div className={cn('h-full rounded-full', MATCH_CATEGORY_FILL[category])} style={{ width: `${(count / max) * 100}%` }} />
+          </div>
+          <span className="w-5 shrink-0 text-right text-xs font-semibold tabular-nums">{count}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SeasonRecordCard({ season }: { season: string }) {
   const matchesQuery = useQuery({ queryKey: ['matches'], queryFn: fetchMatches })
   const bounds = season !== CAREER ? getSeasonBounds(season) : null
-  const played = (matchesQuery.data ?? []).filter(
-    (m) => m.status === 'PLAYED' && (!bounds || isInSeason(m.date, bounds)),
-  )
+  const inSeason = (matchesQuery.data ?? []).filter((m) => !bounds || isInSeason(m.date, bounds))
+  const played = inSeason.filter((m) => m.status === 'PLAYED').sort((a, b) => (a.date < b.date ? -1 : 1))
 
   let won = 0
   let drawn = 0
   let lost = 0
+  let goalsFor = 0
+  let goalsAgainst = 0
+  const form: { date: string; outcome: MatchOutcome; opponent: string; scoreHome: number | null; scoreAway: number | null }[] = []
   for (const m of played) {
     const ourScore = m.homeAway === 'HOME' ? m.scoreHome : m.scoreAway
     const theirScore = m.homeAway === 'HOME' ? m.scoreAway : m.scoreHome
     if (ourScore == null || theirScore == null) continue
-    if (ourScore > theirScore) won += 1
-    else if (ourScore === theirScore) drawn += 1
+    goalsFor += ourScore
+    goalsAgainst += theirScore
+    const outcome: MatchOutcome = ourScore > theirScore ? 'WIN' : ourScore === theirScore ? 'DRAW' : 'LOSS'
+    if (outcome === 'WIN') won += 1
+    else if (outcome === 'DRAW') drawn += 1
     else lost += 1
+    form.push({ date: m.date, outcome, opponent: m.opponent, scoreHome: m.scoreHome, scoreAway: m.scoreAway })
   }
+  const goalDifference = goalsFor - goalsAgainst
+  const upcoming = inSeason.filter((m) => m.status === 'SCHEDULED').length
+
+  const byCategory = new Map<MatchCategory, number>()
+  for (const m of inSeason) {
+    const category = getMatchCategory(m)
+    byCategory.set(category, (byCategory.get(category) ?? 0) + 1)
+  }
+  const categories = (['LEAGUE', 'CUP', 'FRIENDLY'] as const).filter((c) => byCategory.has(c))
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Bilan de la saison</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-5">
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
             <p className="text-2xl font-bold text-emerald-600">{won}</p>
@@ -216,6 +313,39 @@ function SeasonRecordCard({ season }: { season: string }) {
             <p className="text-muted-foreground text-xs">Défaites</p>
           </div>
         </div>
+
+        {form.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t pt-4">
+            <p className="text-muted-foreground text-xs">Forme (5 derniers matchs)</p>
+            <FormStrip matches={form.slice(-5)} />
+          </div>
+        )}
+
+        {played.length > 0 && (
+          <div className="flex flex-col gap-2 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-muted-foreground text-xs">Buts</p>
+              <p className={cn('text-xs font-semibold', goalDifference > 0 && 'text-emerald-600', goalDifference < 0 && 'text-rose-600')}>
+                {goalDifference > 0 ? `+${goalDifference}` : goalDifference} de différence
+              </p>
+            </div>
+            <GoalsBars goalsFor={goalsFor} goalsAgainst={goalsAgainst} />
+          </div>
+        )}
+
+        {categories.length > 0 && (
+          <div className="flex flex-col gap-2 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <p className="text-muted-foreground text-xs">Matchs par compétition</p>
+              {upcoming > 0 && (
+                <Badge variant="secondary">
+                  {upcoming} {pluralize('match', upcoming)} à venir
+                </Badge>
+              )}
+            </div>
+            <CategoryBars counts={categories.map((c) => [c, byCategory.get(c)!] as [MatchCategory, number])} />
+          </div>
+        )}
       </CardContent>
     </Card>
   )
