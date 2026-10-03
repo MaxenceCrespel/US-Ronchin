@@ -273,6 +273,10 @@ CVE-2026-96889
 # 6.28.1+) — same unfixable-by-us situation, just a different round of it:
 # nothing in our control (not our package.json, not `overrides` — these
 # live inside the globally-installed npm binary, not our dependency tree).
+# Re-verified 2026-10-03: npm@latest is still 12.2.0 (no newer release
+# published) and now also vendors http-cache-semantics@4.2.0, newly caught by
+# CVE-2026-93748 (information disclosure via the max-stale directive) — no
+# fixed version published for it yet either. Same situation, same reasoning.
 # Not reachable either way: this npm install is only ever used to bootstrap
 # the image at build time and for the one `npx playwright install chrome`
 # call below it — never invoked at runtime, never fed attacker- or
@@ -285,3 +289,4 @@ CVE-2026-69192
 CVE-2026-102276
 CVE-2026-102278
 CVE-2026-19534
+CVE-2026-93748
