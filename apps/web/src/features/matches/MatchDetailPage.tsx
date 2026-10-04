@@ -650,8 +650,8 @@ export function MatchDetailPage() {
         const key = entry.userId ?? entry.id
         map[key] = { played: !entry.isSpectator, starter: entry.isStarter, spectator: entry.isSpectator }
         if (entry.note) notes[key] = entry.note
-        if (!entry.userId && entry.guestFirstName && entry.guestLastName) {
-          guestMap[key] = { firstName: entry.guestFirstName, lastName: entry.guestLastName }
+        if (!entry.userId && entry.guestFirstName) {
+          guestMap[key] = { firstName: entry.guestFirstName, lastName: entry.guestLastName ?? '' }
         }
       }
       setSelectedPlayers(map)
@@ -685,7 +685,7 @@ export function MatchDetailPage() {
   function addGuest() {
     const firstName = newGuestFirstName.trim()
     const lastName = newGuestLastName.trim()
-    if (!firstName || !lastName) return
+    if (!firstName) return
     const key = `guest-${crypto.randomUUID()}`
     setGuests((prev) => ({ ...prev, [key]: { firstName, lastName } }))
     setSelectedPlayers((prev) => ({ ...prev, [key]: { played: true, starter: false, spectator: false } }))
@@ -773,7 +773,7 @@ export function MatchDetailPage() {
             const identity = guest
               ? {
                   guestFirstName: guest.firstName,
-                  guestLastName: guest.lastName,
+                  guestLastName: guest.lastName || undefined,
                   ...(key.startsWith('guest-') ? {} : { id: key }),
                 }
               : { userId: key }
@@ -1600,7 +1600,7 @@ export function MatchDetailPage() {
               onChange={(e) => setNewGuestFirstName(e.target.value)}
             />
             <Input
-              placeholder="Nom"
+              placeholder="Nom (optionnel)"
               className="h-8 w-28 text-xs"
               value={newGuestLastName}
               onChange={(e) => setNewGuestLastName(e.target.value)}
@@ -1609,7 +1609,7 @@ export function MatchDetailPage() {
               type="button"
               size="sm"
               variant="outline"
-              disabled={!newGuestFirstName.trim() || !newGuestLastName.trim()}
+              disabled={!newGuestFirstName.trim()}
               onClick={addGuest}
             >
               <UserPlus className="size-3.5" />

@@ -23,8 +23,9 @@ export class CompositionEntryDto {
   @IsUUID()
   id?: string;
 
-  /** Exactly one of userId/(guestFirstName+guestLastName) must be set — enforced in
-   * MatchesService.setComposition, same convention as CreateMatchEventDto's scorerName. */
+  /** Exactly one of userId/guestFirstName must be set (guestLastName is optional, same as
+   * MatchAttendance's own guest fields) — enforced in MatchesService.setComposition, same
+   * convention as CreateMatchEventDto's scorerName. */
   @IsOptional()
   @IsUUID()
   userId?: string;

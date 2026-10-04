@@ -208,7 +208,7 @@ export class MatchesService {
     await this.findById(matchId);
     for (const entry of dto.entries) {
       const hasUser = !!entry.userId;
-      const hasGuestName = !!entry.guestFirstName && !!entry.guestLastName;
+      const hasGuestName = !!entry.guestFirstName;
       if (hasUser === hasGuestName) {
         throw new BadRequestException(
           'Chaque joueur doit être soit un compte du club, soit un nom pour un joueur non inscrit',

@@ -113,7 +113,7 @@ describe('match wizard (coach, composition already saved → events step)', () =
     await user.click(screen.getByRole('button', { name: 'Précédent' }))
     await settle()
     await user.type(screen.getByPlaceholderText('Prénom'), 'Nouveau')
-    await user.type(screen.getByPlaceholderText('Nom'), 'Joueur')
+    await user.type(screen.getByPlaceholderText('Nom (optionnel)'), 'Joueur')
     await user.click(screen.getByRole('button', { name: /Ajouter un joueur non inscrit/ }))
     await settle()
     expect(document.body.textContent).toContain('Nouveau Joueur')
