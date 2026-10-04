@@ -39,11 +39,13 @@ describe('onboarding tour', () => {
     }
   })
 
-  it('can be replayed from the header', async () => {
+  it('can be replayed from the per-screen help dialog', async () => {
     const user = userEvent.setup()
     renderApp('/', 'player')
     await settle()
-    await user.click(screen.getByRole('button', { name: /Revoir le tutoriel/ }))
+    await user.click(screen.getByRole('button', { name: /Aide sur cet écran/ }))
+    await settle(300)
+    await user.click(screen.getByRole('button', { name: /Revoir le tuto de bienvenue/ }))
     await settle(800)
     expect(screen.queryAllByRole('button').some((b) => /Suivant|Commencer|Passer/i.test(b.textContent ?? ''))).toBe(true)
   })

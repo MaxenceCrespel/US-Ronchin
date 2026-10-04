@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/lib/types'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
@@ -15,7 +16,7 @@ import { PlayerRatingsReminder } from '@/features/players/PlayerRatingsReminder'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
-import { SkipLink, SrHeading } from '@/lib/route-meta'
+import { SkipLink, SrHeading, getRouteHelp } from '@/lib/route-meta'
 
 // Full-screen celebrations and the tour are rarely on screen — keep their (heavy) code out of
 // the first load.
@@ -58,9 +59,15 @@ export function Layout() {
   const roleLabel = user?.role === 'SUPERADMIN' ? 'Super-admin' : user?.role === 'COACH' ? 'Coach' : 'Joueur'
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const pageHelp = getRouteHelp(location.pathname)
 
   useEffect(() => {
     setSidebarOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    setHelpOpen(false)
   }, [location.pathname])
 
   return (
@@ -162,21 +169,45 @@ export function Layout() {
                 </div>
               </Link>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 rounded-full"
-              onClick={replayOnboarding}
-              aria-label="Revoir le tutoriel"
-              title="Revoir le tutoriel"
-            >
-              <CircleHelp className="size-4" />
-            </Button>
+            {pageHelp && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-full"
+                onClick={() => setHelpOpen(true)}
+                aria-label="Aide sur cet écran"
+                title="Aide sur cet écran"
+              >
+                <CircleHelp className="size-4" />
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={logout}>
               Déconnexion
             </Button>
           </div>
         </header>
+
+        {pageHelp && (
+          <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle>{pageHelp.title}</DialogTitle>
+              </DialogHeader>
+              <p className="text-muted-foreground text-sm">{pageHelp.help}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="self-start"
+                onClick={() => {
+                  setHelpOpen(false)
+                  replayOnboarding()
+                }}
+              >
+                Revoir le tuto de bienvenue
+              </Button>
+            </DialogContent>
+          </Dialog>
+        )}
         <OfflineBanner />
         <VoteReminderBanner />
         <PlayerRatingsReminder />

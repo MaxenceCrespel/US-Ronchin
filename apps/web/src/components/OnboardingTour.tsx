@@ -74,17 +74,26 @@ const STEPS: TourStep[] = [
     coachOnly: true,
   },
   {
-    path: '/stats',
-    target: 'stats-monthly-challenges',
-    title: 'Défis du mois',
-    description: 'Qui marque le plus, qui est le plus présent ce mois-ci — remis à zéro chaque mois.',
+    path: '/championship',
+    target: 'championship-page',
+    title: 'Championnat',
+    description:
+      'Le classement et les résultats de toute la poule, journée par journée — pas seulement nos matchs.',
+  },
+  {
+    path: '/coupe',
+    target: 'coupe-page',
+    title: 'Coupe',
+    description:
+      'Le parcours en coupe tour par tour — il se complète au fil des tirages, jamais connu à l’avance.',
   },
   {
     path: '/stats',
     target: 'stats-roster-table',
-    title: 'Récapitulatif de l’effectif',
+    title: 'Stats',
     description:
-      'Buts, passes, cartons, note moyenne et assiduité de chaque joueur, calculés à partir de tes matchs et entraînements.',
+      'Quatre onglets : tes stats, l’effectif, le bilan de la saison et l’équipe. Le ? en haut de chaque écran détaille ce qu’il y a dedans.',
+    prerequisite: 'stats-tab-roster',
   },
   {
     path: '/players',
@@ -212,6 +221,11 @@ export function OnboardingTour() {
       if (!clickedPrerequisite && step.prerequisite && tries >= 3) {
         clickedPrerequisite = true
         const prereq = document.querySelector<HTMLElement>(`[data-tour="${step.prerequisite}"]`)
+        // Radix's Tabs activates on focus (its default `activationMode="automatic"`), not on
+        // the click event alone — a plain `.click()` fires the click handler but doesn't move
+        // focus the way a real pointer click does, so it silently no-ops on a TabsTrigger.
+        // Confirmed live: focusing first is what actually switches the tab.
+        prereq?.focus()
         prereq?.click()
       }
       if (tries < FIND_MAX_TRIES) {

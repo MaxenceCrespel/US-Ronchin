@@ -743,7 +743,7 @@ export function StatsPage() {
                 Mes stats
               </TabsTrigger>
             )}
-            <TabsTrigger value="roster" className="flex-none px-3">
+            <TabsTrigger value="roster" className="flex-none px-3" data-tour="stats-tab-roster">
               Effectif
             </TabsTrigger>
             <TabsTrigger value="season" className="flex-none px-3">
