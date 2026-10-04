@@ -1179,7 +1179,17 @@ export function MatchDetailPage() {
   const defenseBossRevealed = defenseBossQuery.data?.revealed ?? false
   const needsDefenseBossVote = defenseBossApplies && !hasVotedDefenseBoss && !defenseBossRevealed
   const needsRatings = !ratingsSubmitted
-  const showVoteModal = votingApplies && (needsMotmVote || needsDefenseBossVote || needsRatings)
+  // Each gate above defaults to "needs it" while its own query is still loading (so the
+  // step never flickers past before we actually know) — but that same default made the
+  // modal itself flash open then instantly close on arrival, for anyone who'd already
+  // voted: it opened optimistically before any of the three queries had resolved, then
+  // closed the moment they did. Hold off showing it at all until all three are in.
+  const votingDataReady =
+    motmQuery.data !== undefined &&
+    defenseBossQuery.data !== undefined &&
+    ratingsSubmittedQuery.data !== undefined
+  const showVoteModal =
+    votingApplies && votingDataReady && (needsMotmVote || needsDefenseBossVote || needsRatings)
   const votesTabApplies = resultConfirmed && hasComposition
 
   const scoreCard = (
