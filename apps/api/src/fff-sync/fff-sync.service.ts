@@ -148,6 +148,8 @@ export class FffSyncService {
         existing.competition = scraped.competition ?? existing.competition;
         existing.venue = scraped.venue ?? existing.venue;
         existing.surface = scraped.surface ?? existing.surface;
+        existing.homeLogo = scraped.homeLogo ?? existing.homeLogo;
+        existing.awayLogo = scraped.awayLogo ?? existing.awayLogo;
         if (scraped.played) {
           existing.scoreHome = scraped.scoreHome;
           existing.scoreAway = scraped.scoreAway;
@@ -165,6 +167,8 @@ export class FffSyncService {
           homeAway: scraped.homeAway as Match['homeAway'],
           venue: scraped.venue,
           surface: scraped.surface,
+          homeLogo: scraped.homeLogo,
+          awayLogo: scraped.awayLogo,
           competition: scraped.competition,
           scoreHome: scraped.played ? scraped.scoreHome : null,
           scoreAway: scraped.played ? scraped.scoreAway : null,

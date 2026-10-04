@@ -4,6 +4,10 @@ export interface ScrapedMatch {
   kickOffTime: string | null;
   opponent: string;
   homeAway: 'HOME' | 'AWAY';
+  /** Home then away, same CDN as the district pages' crests (see parseBlock's own comment for
+   * why this isn't actually scraped from an <img> here). */
+  homeLogo: string | null;
+  awayLogo: string | null;
   venue: string | null;
   competition: string | null;
   scoreHome: number | null;

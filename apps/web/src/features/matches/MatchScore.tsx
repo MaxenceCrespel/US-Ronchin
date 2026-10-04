@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Check, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -18,7 +19,21 @@ function crest(name: string, isUs: boolean) {
   return isUs ? 'USR' : name.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase()
 }
 
-function Crest({ name, isUs }: { name: string; isUs: boolean }) {
+/** Shows the real crest when one was scraped (see Match.homeLogo/awayLogo), falling back to
+ * lettered initials — for a friendly, or when the CDN has no image for that club — rather than
+ * a broken-image icon. */
+function Crest({ name, isUs, logo }: { name: string; isUs: boolean; logo?: string | null }) {
+  const [broken, setBroken] = useState(false)
+  if (logo && !broken) {
+    return (
+      <img
+        src={logo}
+        alt=""
+        className="bg-muted size-9 shrink-0 rounded-full object-contain"
+        onError={() => setBroken(true)}
+      />
+    )
+  }
   return (
     <div
       className={cn(
@@ -33,9 +48,19 @@ function Crest({ name, isUs }: { name: string; isUs: boolean }) {
 
 /** Both teams in the order of the match sheet — the home side always on the left, so
  * "which number is whose" never depends on knowing the convention. */
-function sides(match: Pick<Match, 'homeAway' | 'opponent'>) {
-  const us = { key: 'us' as const, name: CLUB_NAME, isUs: true }
-  const them = { key: 'them' as const, name: match.opponent, isUs: false }
+function sides(match: Pick<Match, 'homeAway' | 'opponent' | 'homeLogo' | 'awayLogo'>) {
+  const us = {
+    key: 'us' as const,
+    name: CLUB_NAME,
+    isUs: true,
+    logo: match.homeAway === 'HOME' ? match.homeLogo : match.awayLogo,
+  }
+  const them = {
+    key: 'them' as const,
+    name: match.opponent,
+    isUs: false,
+    logo: match.homeAway === 'HOME' ? match.awayLogo : match.homeLogo,
+  }
   return match.homeAway === 'HOME' ? { left: us, right: them } : { left: them, right: us }
 }
 
@@ -50,7 +75,7 @@ export function ScoreEditor({
   saving,
   saved,
 }: {
-  match: Pick<Match, 'homeAway' | 'opponent'>
+  match: Pick<Match, 'homeAway' | 'opponent' | 'homeLogo' | 'awayLogo'>
   scoreHome: number
   scoreAway: number
   onChange: (next: { scoreHome: number; scoreAway: number }) => void
@@ -82,7 +107,7 @@ export function ScoreEditor({
           s.isUs ? 'border-club-blue/60 bg-club-blue/5' : 'bg-card',
         )}
       >
-        <Crest name={s.name} isUs={s.isUs} />
+        <Crest name={s.name} isUs={s.isUs} logo={s.logo} />
         <span className="text-center text-sm leading-tight font-bold [overflow-wrap:anywhere]">
           {s.name}
         </span>
@@ -168,7 +193,7 @@ export function ScoreEditor({
 export function FinalScore({
   match,
 }: {
-  match: Pick<Match, 'homeAway' | 'opponent' | 'scoreHome' | 'scoreAway'>
+  match: Pick<Match, 'homeAway' | 'opponent' | 'scoreHome' | 'scoreAway' | 'homeLogo' | 'awayLogo'>
 }) {
   const { left, right } = sides(match)
   const goals = (s: typeof left) =>
@@ -176,7 +201,7 @@ export function FinalScore({
   const result = getMatchResult(match)
   const team = (s: typeof left) => (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
-      <Crest name={s.name} isUs={s.isUs} />
+      <Crest name={s.name} isUs={s.isUs} logo={s.logo} />
       <span className="text-center text-xs leading-tight font-bold [overflow-wrap:anywhere]">
         {s.name}
       </span>

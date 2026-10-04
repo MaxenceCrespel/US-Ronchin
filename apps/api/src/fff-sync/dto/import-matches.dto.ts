@@ -58,6 +58,14 @@ export class ImportScrapedMatchDto {
   @IsOptional()
   @IsString()
   surface?: string | null;
+
+  @IsOptional()
+  @IsString()
+  homeLogo?: string | null;
+
+  @IsOptional()
+  @IsString()
+  awayLogo?: string | null;
 }
 
 export class ImportMatchesDto {

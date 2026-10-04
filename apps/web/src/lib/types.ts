@@ -172,6 +172,9 @@ export interface Match {
   /** e.g. "Pelouse Naturelle"/"Pelouse Synthétique" — only ever known for an OFFICIAL_FFF
    * match, scraped alongside the venue itself; null for a friendly. */
   surface: string | null
+  /** Club crest — only ever known for an OFFICIAL_FFF match; null for a friendly. */
+  homeLogo: string | null
+  awayLogo: string | null
   scoreHome: number | null
   scoreAway: number | null
   status: MatchStatus

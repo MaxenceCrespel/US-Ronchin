@@ -78,6 +78,8 @@ export class FffSyncController {
       played: m.played,
       matchDetailUrl: m.matchDetailUrl ?? null,
       surface: m.surface ?? null,
+      homeLogo: m.homeLogo ?? null,
+      awayLogo: m.awayLogo ?? null,
     }));
     // Not a real user — triggeredBy/createdBy are uuid columns tied to an actual account, so
     // this stays null (the log's own timing is enough to tell it apart from a coach-triggered

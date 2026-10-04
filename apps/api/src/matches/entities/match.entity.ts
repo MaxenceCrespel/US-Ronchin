@@ -59,6 +59,15 @@ export class Match {
   @Column({ type: 'varchar', nullable: true })
   surface: string | null;
 
+  /** Club crest, constructed (not scraped) from the FFF club id already extracted from this
+   * match's own team links — see FffScraperService.parseBlock. Only ever known for an
+   * OFFICIAL_FFF match; a friendly has no FFF club id to build one from. */
+  @Column({ name: 'home_logo', type: 'varchar', nullable: true })
+  homeLogo: string | null;
+
+  @Column({ name: 'away_logo', type: 'varchar', nullable: true })
+  awayLogo: string | null;
+
   @Column({ name: 'score_home', type: 'int', nullable: true })
   scoreHome: number | null;
 

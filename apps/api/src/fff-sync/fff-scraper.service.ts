@@ -740,6 +740,17 @@ export class FffScraperService {
     const opponent = isHome ? block.awayName : block.homeName;
     if (!opponent) return null;
 
+    // This list view never exposes a club crest `<img>` (see the DOM structure comment above
+    // MATCH_BLOCK_SELECTOR) — but the district pages' own crests (scraped for PoolMatch/CupMatch)
+    // sit at a URL keyed only by the FFF club id, e.g. "BC500112.jpg" for our own club id 500112
+    // (confirmed: that's the exact id embedded in this very team's configured fffTeamUrl). Since
+    // `homeHref`/`awayHref` already carry each side's club id, the same crest can be constructed
+    // here without scraping anything new.
+    const clubLogo = (href: string): string | null => {
+      const clubId = /\/club\/(\d+)-/.exec(href)?.[1];
+      return clubId ? `https://cdn-transverse.azureedge.net/phlogos/BC${clubId}.jpg` : null;
+    };
+
     const fffMatchId = /\/competition\/match\/(\d+)/.exec(block.matchHref ?? '')?.[1] ?? null;
     const played =
       block.scoreDigits.length === 2 && block.scoreDigits.every((d) => /^\d+$/.test(d));
@@ -755,6 +766,8 @@ export class FffScraperService {
       kickOffTime: dateMatch.time,
       opponent,
       homeAway: isHome === false ? 'AWAY' : 'HOME',
+      homeLogo: clubLogo(block.homeHref),
+      awayLogo: clubLogo(block.awayHref),
       venue: null,
       competition: block.competitionText ? block.competitionText.replace(/\s*Journ[ée]e\s*\d+\s*$/i, '').trim() : null,
       scoreHome,
