@@ -1,5 +1,6 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
   Index,
   JoinColumn,
@@ -67,4 +68,11 @@ export class MatchComposition {
    * correctly attributed to whoever actually played. */
   @Column({ type: 'varchar', length: 200, nullable: true })
   note: string | null;
+
+  /** When this entry was added — lets MatchesService.getPendingRatingTargets tell a
+   * teammate forgotten mid-vote (added before the match closed, still owed notes from
+   * whoever already submitted) apart from one added long after for pure record-keeping
+   * (added after closure, not worth reopening the prompt for). */
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt: Date;
 }

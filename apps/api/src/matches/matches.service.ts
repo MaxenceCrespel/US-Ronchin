@@ -336,9 +336,17 @@ export class MatchesService {
    *
    * Once the match's MOTM vote is revealed, the whole post-match voting ritual is considered
    * closed for good — same boundary voteMotm() itself already enforces ("Le vote homme du
-   * match est clos"). Past that point nothing is pending any more, even for a teammate the
-   * coach adds to the composition afterward for record-keeping — a closed match stays closed,
-   * it doesn't reopen the vote prompt for anyone.
+   * match est clos"). Past that point nothing new becomes pending for a teammate the coach
+   * adds to the composition afterward purely for record-keeping — a closed match stays
+   * closed, it doesn't reopen the prompt for everyone over an edit made weeks later.
+   *
+   * But a teammate added WHILE voting was still live (their own composition row predates the
+   * closure timestamp) is a different case — most often a forgotten substitute the coach
+   * adds mid-vote. If their own first vote happens to be what tips the "everyone's voted"
+   * count and closes the match in the same beat, the raters who'd already submitted before
+   * that edit never got a chance to rate them, and the real notes/ratings end up permanently
+   * short one player. Those stay pending regardless of closure, so the straggler still
+   * eventually gets rated instead of silently skewing the average forever.
    *
    * Deliberately keyed off motmRevealedNotifiedAt (set once, persisted, by the 15-minute
    * reveal-notification cron) rather than a live isMotmRevealed() recompute: that function's
@@ -351,14 +359,15 @@ export class MatchesService {
       this.ratingsRepository.find({ where: { matchId, raterId } }),
       this.findById(matchId),
     ]);
-    if (match.motmRevealedNotifiedAt !== null) {
-      return [];
-    }
     return composition
       .filter((entry) => entry.userId !== raterId)
       // A spectator (came to watch, didn't play) is a valid voter/rater but never a valid
       // target — see MatchComposition.isSpectator's own doc comment.
       .filter((entry) => !entry.isSpectator)
+      .filter(
+        (entry) =>
+          match.motmRevealedNotifiedAt === null || entry.createdAt < match.motmRevealedNotifiedAt,
+      )
       .filter(
         (entry) =>
           !myRatings.some(
