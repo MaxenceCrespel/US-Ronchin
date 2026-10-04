@@ -72,7 +72,7 @@ const MOIS_PARFAIT_MIN_OCCASIONS = 3;
  * every other badge is kept forever once earned, but these get their row deleted the
  * moment they stop being true, so they stay evolutive instead of piling up on whoever
  * briefly held the record or skipping a single vote after having earned it once. */
-const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee', 'fair_play']);
+const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee', 'fair_play', 'metronome']);
 
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
@@ -604,14 +604,24 @@ export class BadgesService {
 
       // "Note moyenne sur l'ensemble de tes matchs notés" — the per-match average (not each
       // individual note, so a match rated by many teammates doesn't outweigh one rated by
-      // few) of every match ever rated, not just the last 3: a badge is permanent once
-      // earned (see the toCreate/toUpdate split below — nothing here is ever revoked), so a
-      // short recent window mostly punished a good career average for a bad patch that came
-      // right before the check ran, rather than rewarding genuine consistency. At least 3
-      // rated matches are still required so 1-2 generous notes early on can't unlock it.
+      // few) of every fully-rated match, not just the last 3: a short recent window mostly
+      // punished a good career average for a bad patch that came right before the check ran,
+      // rather than rewarding genuine consistency. At least 3 rated matches are still
+      // required so 1-2 generous notes early on can't unlock it.
+      //
+      // Only counts a match once its whole post-match voting ritual is closed for good
+      // (motmRevealedNotifiedAt set — same boundary hasFairPlay/closedVoteMatches uses above,
+      // and the one getPendingRatingTargets itself treats as "nothing pending any more").
+      // Without this, a match's average was included the moment its FIRST rating landed — 1-2
+      // generous teammates could tip the career average over the threshold and unlock the
+      // badge hours before the rest of the squad had even rated, on a number nowhere near
+      // what the match would actually average once everyone's in. Unlike most badges this one
+      // IS revocable (see REVOCABLE_BADGE_KEYS) specifically so a late harsh note on an
+      // otherwise-open match can still pull it back under the threshold before that match
+      // counts for real.
       const ratingsByMatch = new Map<string, { date: string; ratings: number[] }>();
       for (const r of myRatings) {
-        if (!r.match || r.match.status !== 'PLAYED') continue;
+        if (!r.match || r.match.status !== 'PLAYED' || r.match.motmRevealedNotifiedAt === null) continue;
         const entry = ratingsByMatch.get(r.matchId) ?? { date: r.match.date, ratings: [] };
         entry.ratings.push(r.rating);
         ratingsByMatch.set(r.matchId, entry);
