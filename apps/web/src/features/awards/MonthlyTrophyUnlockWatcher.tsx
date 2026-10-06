@@ -11,6 +11,7 @@ import {
   saveSeenMonthlyTrophyIds,
 } from '@/lib/monthly-trophy-seen'
 import { monthLabelDisplay } from '@/lib/month-label'
+import { namesLine, topVoted } from '@/lib/winners'
 import { fetchLastAttendanceTrophyWinner, fetchLastTrainingChampionWinner } from '@/features/stats/api'
 import { fetchMonthlyAward } from './api'
 import { MonthlyTrophyReveal, type MonthlyTrophyWin } from './MonthlyTrophyReveal'
@@ -19,21 +20,6 @@ const POLL_INTERVAL_MS = 60_000
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
-}
-
-/** Ties beyond two names would turn one line into a paragraph — past that, name the first
- * and count the rest instead of listing everyone. */
-function namesLine(names: string[]): string {
-  if (names.length <= 2) return names.join(' et ')
-  return `${names[0]} et ${names.length - 1} autres`
-}
-
-/** `results` is every player who got at least one vote, sorted by votes — only the ones tied
- * at the top actually won. Passing the whole list told anyone with a single vote
- * "Félicitations !" while the trophy case (rightly) never gave them the trophy. */
-function topVoted<T extends { votes: number }>(results: T[]): T[] {
-  const top = results[0]?.votes ?? 0
-  return top > 0 ? results.filter((r) => r.votes === top) : []
 }
 
 function buildWin(params: {
@@ -50,6 +36,9 @@ function buildWin(params: {
   const headline = isViewerWinner
     ? `Félicitations ${viewerFirstName} !`
     : `Félicitations ${namesLine(winners.map((w) => `${w.firstName} ${w.lastName}`))} !`
+  // A winner's own headline only names them — a tie still credits whoever they share it with.
+  const coWinners = winners.filter((w) => w.userId !== viewerId).map((w) => `${w.firstName} ${w.lastName}`)
+  const tieNote = isViewerWinner && coWinners.length > 0 ? ` · ex æquo avec ${namesLine(coWinners)}` : ''
   return {
     id,
     categoryKey,
@@ -57,7 +46,7 @@ function buildWin(params: {
     label,
     period: monthLabelDisplay(month).toUpperCase(),
     headline,
-    subtitle: `${label} — ${capitalize(monthLabelDisplay(month))}`,
+    subtitle: `${label} — ${capitalize(monthLabelDisplay(month))}${tieNote}`,
     showBetterLuckNote: !isViewerWinner,
   }
 }
@@ -106,7 +95,7 @@ export function MonthlyTrophyUnlockWatcher() {
     const lastClosedMonth = monthlyQuery.data!.history[0]?.season ?? null
     const votedWins: MonthlyTrophyWin[] = lastClosedMonth
       ? (monthlyQuery.data!.history ?? [])
-          .filter((c) => c.season === lastClosedMonth && c.results && topVoted(c.results).length > 0)
+          .filter((c) => c.season === lastClosedMonth && topVoted(c.results).length > 0)
           .map((c) =>
             buildWin({
               id: `${c.key}:${c.season}`,
@@ -115,7 +104,7 @@ export function MonthlyTrophyUnlockWatcher() {
               month: c.season!,
               viewerId: user.id,
               viewerFirstName: user.firstName,
-              winners: topVoted(c.results!),
+              winners: topVoted(c.results),
             }),
           )
       : []

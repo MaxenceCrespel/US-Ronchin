@@ -4,6 +4,7 @@ import { Trophy } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { monthLabelDisplay } from '@/lib/month-label'
+import { namesLine, topVoted } from '@/lib/winners'
 import { fetchMonthlyAward } from './api'
 
 /** "Joueur du mois" & co, à la LOSC — sits on the stats page next to the monthly challenges.
@@ -38,16 +39,22 @@ export function MonthlyAwardCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {lastClosedCategories.map((category) => {
-          const winner = category.results?.[0]
-          if (!winner) return null
+          // A tie at the top is shared — every co-winner gets named, not just whoever sorted first.
+          const winners = topVoted(category.results)
+          if (winners.length === 0) return null
           return (
             <div key={category.id} className="flex items-center gap-3">
-              <PlayerAvatar avatarUrl={null} firstName={winner.firstName} lastName={winner.lastName} size="md" />
+              <div className="flex shrink-0 -space-x-3">
+                {winners.map((w) => (
+                  <PlayerAvatar key={w.userId} avatarUrl={null} firstName={w.firstName} lastName={w.lastName} size="md" />
+                ))}
+              </div>
               <div>
-                <p className="text-xs text-white/50">{category.title}</p>
-                <p className="font-semibold">
-                  {winner.firstName} {winner.lastName}
+                <p className="text-xs text-white/50">
+                  {category.title}
+                  {winners.length > 1 && ' · ex æquo'}
                 </p>
+                <p className="font-semibold">{namesLine(winners.map((w) => `${w.firstName} ${w.lastName}`))}</p>
               </div>
             </div>
           )

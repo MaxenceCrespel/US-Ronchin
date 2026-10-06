@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Confetti } from '@/components/Confetti'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { cn, pluralize } from '@/lib/utils'
+import { namesLine, topVoted } from '@/lib/winners'
 import type { AwardCategory, PlayerStats, TeamStats } from '@/lib/types'
 
 // three.js + @react-three/fiber are a meaningful chunk of weight nothing else in the app
@@ -110,7 +111,16 @@ export function useFireOnce(onRevealed: () => void) {
   }
 }
 
-export function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show: boolean }) {
+export function RunnersUpList({
+  runners,
+  show,
+  startRank = 2,
+}: {
+  runners: PodiumEntry[]
+  show: boolean
+  /** Rank of the first runner — past co-winners tied for 1st, not always 2. */
+  startRank?: number
+}) {
   if (runners.length === 0) return null
   return (
     <AnimatePresence>
@@ -122,7 +132,7 @@ export function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show:
         >
           {runners.map((r, i) => (
             <p key={i} className="text-xs text-white/45">
-              {i + 2}. {r.firstName} {r.lastName} · {r.value} {pluralize('vote', r.value)}
+              {i + startRank}. {r.firstName} {r.lastName} · {r.value} {pluralize('vote', r.value)}
             </p>
           ))}
         </motion.div>
@@ -133,11 +143,12 @@ export function RunnersUpList({ runners, show }: { runners: PodiumEntry[]; show:
 
 function CategoryTrophy3DReveal({
   category,
-  winner,
+  winners,
   onRevealed,
 }: {
   category: AwardCategory
-  winner: PodiumEntry
+  /** Everyone tied at the top — usually one, but a shared trophy names every co-winner. */
+  winners: PodiumEntry[]
   onRevealed: () => void
 }) {
   const [spinning, setSpinning] = useState(false)
@@ -192,10 +203,11 @@ function CategoryTrophy3DReveal({
               className="text-2xl font-semibold tracking-tight text-white"
               style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
             >
-              {winner.firstName} {winner.lastName}
+              {namesLine(winners.map((w) => `${w.firstName} ${w.lastName}`))}
             </p>
             <p className="text-sm text-[#f4b400]">
-              {winner.value} {pluralize('vote', winner.value)}
+              {winners[0].value} {pluralize('vote', winners[0].value)}
+              {winners.length > 1 && ' chacun · ex æquo'}
             </p>
           </motion.div>
         )}
@@ -211,23 +223,31 @@ function CategoryReveal({
   category: AwardCategory
   onRevealed: () => void
 }) {
-  const ranked = useMemo(
-    () =>
-      (category.results ?? [])
+  // Every co-winner tied at the top, then the next ones up to three names on screen in total.
+  const { winners, runners } = useMemo(() => {
+    const toEntry = (r: { firstName: string; lastName: string; votes: number }): PodiumEntry => ({
+      firstName: r.firstName,
+      lastName: r.lastName,
+      value: r.votes,
+    })
+    const top = topVoted(category.results)
+    return {
+      winners: top.map(toEntry),
+      runners: (category.results ?? [])
         .filter((r) => r.votes > 0)
-        .slice(0, 3)
-        .map((r): PodiumEntry => ({ firstName: r.firstName, lastName: r.lastName, value: r.votes })),
+        .slice(top.length, Math.max(3, top.length))
+        .map(toEntry),
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [category.id],
-  )
+  }, [category.id])
   const fireOnce = useFireOnce(onRevealed)
 
   useEffect(() => {
-    if (ranked.length === 0) fireOnce()
+    if (winners.length === 0) fireOnce()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ranked.length])
+  }, [winners.length])
 
-  if (ranked.length === 0) {
+  if (winners.length === 0) {
     return (
       <div className="flex flex-col items-center gap-6">
         <SectionLabel>{category.title}</SectionLabel>
@@ -239,8 +259,8 @@ function CategoryReveal({
   return (
     <div className="flex flex-col items-center gap-6">
       <SectionLabel>{category.title}</SectionLabel>
-      <CategoryTrophy3DReveal category={category} winner={ranked[0]} onRevealed={onRevealed} />
-      <RunnersUpList runners={ranked.slice(1)} show />
+      <CategoryTrophy3DReveal category={category} winners={winners} onRevealed={onRevealed} />
+      <RunnersUpList runners={runners} show startRank={winners.length + 1} />
     </div>
   )
 }
@@ -670,10 +690,9 @@ function CeremonyRecap({
 }) {
   const categoryLines = categories.map((c) => ({
     title: c.title,
-    winner:
-      c.results && c.results.length > 0 && c.results[0].votes > 0
-        ? `${c.results[0].firstName} ${c.results[0].lastName}`
-        : null,
+    winner: topVoted(c.results).length > 0
+      ? namesLine(topVoted(c.results).map((r) => `${r.firstName} ${r.lastName}`))
+      : null,
   }))
 
   if (statLines.length === 0 && categoryLines.length === 0 && record.played === 0) return null

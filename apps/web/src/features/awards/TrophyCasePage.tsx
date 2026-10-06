@@ -4,6 +4,7 @@ import { Trophy, X } from 'lucide-react'
 import { useAuthStore } from '@/lib/auth-store'
 import { monthLabelDisplay } from '@/lib/month-label'
 import { getSeasonBounds, isInSeason, isMonthInSeason } from '@/lib/season'
+import { isTopVoted } from '@/lib/winners'
 import { fetchMyMatchTrophies } from '@/features/matches/api'
 import { fetchAvailableSeasons, fetchMyAttendanceTrophies, fetchMyTrainingChampionTrophies } from '@/features/stats/api'
 import { fetchAwardCategories, fetchMonthlyAward } from './api'
@@ -381,7 +382,7 @@ export function TrophyCasePage() {
   const currentSeason = seasonsQuery.data?.current
 
   const seasonWon: WonTrophy[] = (seasonQuery.data ?? [])
-    .filter((c) => !c.isActive && c.results?.[0]?.userId === user?.id)
+    .filter((c) => !c.isActive && isTopVoted(c.results, user?.id))
     .map((c) => ({
       id: c.id,
       categoryKey: c.key,
@@ -397,8 +398,7 @@ export function TrophyCasePage() {
   // required here (unlike on WonTrophy itself) so the season filter/sort below can rely on it
   // before it gets stripped off ahead of display.
   const votedMonthlyWon: (WonTrophy & { month: string })[] = (monthlyQuery.data?.history ?? [])
-    // Ties at the top are co-winners, same as the reveal and the match trophies.
-    .filter((c) => !!c.results?.some((r) => r.userId === user?.id && r.votes === c.results![0].votes))
+    .filter((c) => isTopVoted(c.results, user?.id))
     .map((c) => ({
       id: c.id,
       categoryKey: c.key,

@@ -5,6 +5,7 @@ import { useOnboardingUiStore } from '@/lib/onboarding-store'
 import { useCeremonyGateStore } from '@/lib/ceremony-gate'
 import { hasNeverSeenMatchTrophies, loadSeenMatchTrophyIds, saveSeenMatchTrophyIds } from '@/lib/match-trophy-seen'
 import type { MatchTrophyWinners } from '@/lib/types'
+import { namesLine } from '@/lib/winners'
 import { fetchComposition, fetchRecentMatchTrophyWinners } from './api'
 import { MatchTrophyReveal, type MatchTrophyRevealItem } from './MatchTrophyReveal'
 
@@ -12,13 +13,6 @@ const POLL_INTERVAL_MS = 60_000
 
 function formatMatchDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-/** Ties beyond two names would turn one line into a paragraph — past that, name the first
- * and count the rest instead of listing everyone. */
-function namesLine(names: string[]): string {
-  if (names.length <= 2) return names.join(' et ')
-  return `${names[0]} et ${names.length - 1} autres`
 }
 
 const LABELS = { motm: 'Homme du match', defense_boss: 'Patron de la défense' } as const
@@ -42,11 +36,13 @@ function buildItems(match: MatchTrophyWinners, viewerId: string, viewerFirstName
       const headline = isViewerWinner
         ? `Félicitations ${viewerFirstName} !`
         : `Félicitations ${namesLine(winners.map((w) => `${w.firstName} ${w.lastName}`))} !`
+      const coWinners = winners.filter((w) => w.userId !== viewerId).map((w) => `${w.firstName} ${w.lastName}`)
+      const tieNote = isViewerWinner && coWinners.length > 0 ? ` · ex æquo avec ${namesLine(coWinners)}` : ''
       return {
         id: `${match.matchId}:${kind}`,
         kind,
         headline,
-        subtitle: `${LABELS[kind]} — ${dateLine}`,
+        subtitle: `${LABELS[kind]} — ${dateLine}${tieNote}`,
         showBetterLuckNote: !isViewerWinner,
       }
     })

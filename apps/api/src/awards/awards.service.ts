@@ -43,6 +43,15 @@ export interface AwardCategoryResponse {
 /** True for anyone the mandatory-vote gate applies to — regular players, and a coach who
  * also plays — same rule as the frontend's isRosterPlayer, only counting active accounts
  * (a still-pending signup isn't forced to vote and doesn't hold up the whole roster). */
+/** A tie at the top is shared: every player on the top vote count wins the trophy. */
+function isTopVoted(category: AwardCategoryResponse, userId: string): boolean {
+  const top = category.results?.[0]?.votes ?? 0;
+  return (
+    top > 0 &&
+    !!category.results?.some((r) => r.userId === userId && r.votes === top)
+  );
+}
+
 function isRosterPlayer(user: User): boolean {
   return user.status === UserStatus.ACTIVE && (user.role === UserRole.PLAYER || user.isPlayingCoach);
 }
@@ -119,12 +128,8 @@ export class AwardsService {
         this.statsService.getMyTrainingChampionTrophies(userId),
       ]);
     return (
-      categories.filter((c) => !c.isActive && c.results?.[0]?.userId === userId).length +
-      monthly.history.filter((c) =>
-        c.results?.some(
-          (r) => r.userId === userId && r.votes === c.results![0].votes,
-        ),
-      ).length +
+      categories.filter((c) => !c.isActive && isTopVoted(c, userId)).length +
+      monthly.history.filter((c) => isTopVoted(c, userId)).length +
       matchTrophies.length +
       attendanceTrophies.length +
       trainingChampionTrophies.length
