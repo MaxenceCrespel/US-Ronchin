@@ -28,6 +28,14 @@ function namesLine(names: string[]): string {
   return `${names[0]} et ${names.length - 1} autres`
 }
 
+/** `results` is every player who got at least one vote, sorted by votes — only the ones tied
+ * at the top actually won. Passing the whole list told anyone with a single vote
+ * "Félicitations !" while the trophy case (rightly) never gave them the trophy. */
+function topVoted<T extends { votes: number }>(results: T[]): T[] {
+  const top = results[0]?.votes ?? 0
+  return top > 0 ? results.filter((r) => r.votes === top) : []
+}
+
 function buildWin(params: {
   id: string
   categoryKey: string
@@ -98,7 +106,7 @@ export function MonthlyTrophyUnlockWatcher() {
     const lastClosedMonth = monthlyQuery.data!.history[0]?.season ?? null
     const votedWins: MonthlyTrophyWin[] = lastClosedMonth
       ? (monthlyQuery.data!.history ?? [])
-          .filter((c) => c.season === lastClosedMonth && c.results && c.results.length > 0)
+          .filter((c) => c.season === lastClosedMonth && c.results && topVoted(c.results).length > 0)
           .map((c) =>
             buildWin({
               id: `${c.key}:${c.season}`,
@@ -107,7 +115,7 @@ export function MonthlyTrophyUnlockWatcher() {
               month: c.season!,
               viewerId: user.id,
               viewerFirstName: user.firstName,
-              winners: c.results!,
+              winners: topVoted(c.results!),
             }),
           )
       : []

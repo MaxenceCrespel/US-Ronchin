@@ -397,7 +397,8 @@ export function TrophyCasePage() {
   // required here (unlike on WonTrophy itself) so the season filter/sort below can rely on it
   // before it gets stripped off ahead of display.
   const votedMonthlyWon: (WonTrophy & { month: string })[] = (monthlyQuery.data?.history ?? [])
-    .filter((c) => c.results && c.results[0]?.userId === user?.id)
+    // Ties at the top are co-winners, same as the reveal and the match trophies.
+    .filter((c) => !!c.results?.some((r) => r.userId === user?.id && r.votes === c.results![0].votes))
     .map((c) => ({
       id: c.id,
       categoryKey: c.key,

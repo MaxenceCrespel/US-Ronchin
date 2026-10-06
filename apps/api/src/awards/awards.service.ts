@@ -120,7 +120,11 @@ export class AwardsService {
       ]);
     return (
       categories.filter((c) => !c.isActive && c.results?.[0]?.userId === userId).length +
-      monthly.history.filter((c) => c.results?.[0]?.userId === userId).length +
+      monthly.history.filter((c) =>
+        c.results?.some(
+          (r) => r.userId === userId && r.votes === c.results![0].votes,
+        ),
+      ).length +
       matchTrophies.length +
       attendanceTrophies.length +
       trainingChampionTrophies.length
