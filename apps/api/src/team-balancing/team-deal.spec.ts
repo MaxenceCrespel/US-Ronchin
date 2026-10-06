@@ -1,5 +1,8 @@
-import { dealTeams, DealPlayer } from './team-deal';
-import { PlayerSubPosition as P } from '../users/entities/user.entity';
+import { dealTeams, DealPlayer, Line } from './team-deal';
+import {
+  PlayerPosition,
+  PlayerSubPosition as P,
+} from '../users/entities/user.entity';
 
 const player = (userId: string, score: number, ...positions: P[]): DealPlayer => ({
   userId,
@@ -11,15 +14,28 @@ const player = (userId: string, score: number, ...positions: P[]): DealPlayer =>
 const teamOf = (r: ReturnType<typeof dealTeams>, id: string) => r.teamByUserId.get(id);
 const members = (r: ReturnType<typeof dealTeams>, team: number) =>
   [...r.teamByUserId].filter(([, t]) => t === team).map(([id]) => id).sort();
+const totals = (
+  r: ReturnType<typeof dealTeams>,
+  squad: DealPlayer[],
+  teamCount = 2,
+) => {
+  const sums = new Array<number>(teamCount).fill(0);
+  for (const p of squad) sums[r.teamByUserId.get(p.userId)!] += p.score;
+  return sums;
+};
 
 describe('dealTeams', () => {
-  it('deals a line best player first, one team after the other', () => {
-    const r = dealTeams(
-      [player('f1', 90, P.STRIKER), player('f2', 80, P.STRIKER), player('f3', 70, P.STRIKER), player('f4', 60, P.STRIKER)],
-      2,
-    );
-    expect(members(r, 0)).toEqual(['f1', 'f3']);
-    expect(members(r, 1)).toEqual(['f2', 'f4']);
+  it('splits a line evenly, not just one team after the other', () => {
+    const squad = [
+      player('f1', 90, P.STRIKER),
+      player('f2', 80, P.STRIKER),
+      player('f3', 70, P.STRIKER),
+      player('f4', 60, P.STRIKER),
+    ];
+    const r = dealTeams(squad, 2);
+    // straight alternation would give f1+f3 (160) against f2+f4 (140)
+    expect(totals(r, squad)).toEqual([150, 150]);
+    expect(teamOf(r, 'f1')).toBe(teamOf(r, 'f4'));
   });
 
   it("doesn't give the team with the best forward the best midfielder too", () => {
@@ -65,6 +81,79 @@ describe('dealTeams', () => {
     }
   });
 
+  describe('evening out the totals', () => {
+    it("doesn't let the three best players stack up on one team", () => {
+      // f1 and m1 both open their line on the same team once the goalkeepers are split
+      const squad = [
+        player('g1', 50, P.GOALKEEPER),
+        player('g2', 40, P.GOALKEEPER),
+        player('f1', 84, P.STRIKER),
+        player('f2', 72, P.STRIKER),
+        player('f3', 60, P.STRIKER),
+        player('m1', 77, P.CENTER_MIDFIELDER),
+        player('m2', 71, P.CENTER_MIDFIELDER),
+        player('m3', 52, P.CENTER_MIDFIELDER),
+        player('d1', 51, P.CENTER_BACK),
+        player('d2', 46, P.CENTER_BACK),
+        player('d3', 35, P.CENTER_BACK),
+        player('d4', 19, P.CENTER_BACK),
+      ];
+      const [a, b] = totals(dealTeams(squad, 2), squad);
+      expect(Math.abs(a - b)).toBeLessThanOrEqual(5);
+    });
+
+    it('keeps every headcount and every line exactly as dealt', () => {
+      const random = (() => {
+        let seed = 42;
+        return () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+      })();
+      const positions = [
+        P.GOALKEEPER,
+        P.STRIKER,
+        P.CENTER_MIDFIELDER,
+        P.CENTER_BACK,
+      ];
+      const lines: Line[] = [
+        PlayerPosition.GOALKEEPER,
+        PlayerPosition.FORWARD,
+        PlayerPosition.MIDFIELDER,
+        PlayerPosition.DEFENDER,
+        'NONE',
+      ];
+      for (let run = 0; run < 200; run++) {
+        const n = 4 + Math.floor(random() * 18);
+        const squad = Array.from({ length: n }, (_, i) =>
+          player(
+            `p${i}`,
+            Math.round(random() * 1000) / 10,
+            positions[Math.floor(random() * positions.length)],
+          ),
+        );
+        const r = dealTeams(squad, 2);
+        expect(
+          Math.abs(members(r, 0).length - members(r, 1).length),
+        ).toBeLessThanOrEqual(1);
+        for (const line of lines) {
+          const inLine = squad.filter(
+            (p) => r.lineByUserId.get(p.userId) === line,
+          );
+          const onTeam0 = inLine.filter(
+            (p) => teamOf(r, p.userId) === 0,
+          ).length;
+          expect(Math.abs(2 * onTeam0 - inLine.length)).toBeLessThanOrEqual(1);
+        }
+        const keepers = squad.filter(
+          (p) => r.lineByUserId.get(p.userId) === PlayerPosition.GOALKEEPER,
+        );
+        if (keepers.length === 2) {
+          expect(teamOf(r, keepers[0].userId)).not.toBe(
+            teamOf(r, keepers[1].userId),
+          );
+        }
+      }
+    });
+  });
+
   describe('goalkeepers', () => {
     it('splits two goalkeepers, one per team', () => {
       const r = dealTeams([player('g1', 70, P.GOALKEEPER), player('g2', 60, P.GOALKEEPER)], 2);
@@ -77,8 +166,8 @@ describe('dealTeams', () => {
         2,
       );
       expect(r.lineByUserId.get('g')).toBe('DEFENDER');
-      // ranked with the defenders: d1 (80), g (70), d2 (60)
-      expect(teamOf(r, 'd1')).toBe(teamOf(r, 'd2'));
+      // ranked with the defenders: d1 (80), g (70), d2 (60) — then evened out to g+d2 against d1
+      expect(teamOf(r, 'g')).toBe(teamOf(r, 'd2'));
       expect(teamOf(r, 'g')).not.toBe(teamOf(r, 'd1'));
     });
 
