@@ -53,6 +53,12 @@ function outfieldLine(positions: PlayerSubPosition[]): Line {
  *    two (for two teams) they go one to each team; a lone goalkeeper is dealt in his
  *    secondary position instead (and a goalkeeper left over from an odd number too).
  *
+ * 4. Then the skill totals are evened out: dealing alternates strictly inside a line, so the
+ *    team that opens a line keeps the 1st, 3rd, 5th... of it, and three strong players of the
+ *    same team can pile up across lines. Two players of the SAME line on different teams are
+ *    swapped as long as it narrows the gap between the strongest and weakest team totals —
+ *    headcounts and lines (goalkeepers included) stay exactly as dealt.
+ *
  * The admin-declared "never together" pairs are applied afterwards, by swapping players (see
  * TeamBalancingService.resolveSeparationRules), which keeps every headcount as it is. */
 export function dealTeams(
@@ -89,5 +95,49 @@ export function dealTeams(
     });
   }
 
+  balanceTotals(players, teamByUserId, lineByUserId, sums);
+
   return { teamByUserId, lineByUserId };
+}
+
+const spreadOf = (sums: number[]) => Math.max(...sums) - Math.min(...sums);
+
+/** Rule 4 of dealTeams: repeatedly applies the same-line swap that narrows the spread of the
+ * team totals the most, until no swap narrows it any further. Each applied swap strictly
+ * lowers the spread, so this always terminates. */
+function balanceTotals(
+  players: DealPlayer[],
+  teamByUserId: Map<string, number>,
+  lineByUserId: Map<string, Line>,
+  sums: number[],
+): void {
+  for (;;) {
+    let best: { a: DealPlayer; b: DealPlayer } | null = null;
+    let bestSpread = spreadOf(sums) - 1e-9;
+    for (let i = 0; i < players.length; i++) {
+      for (let j = i + 1; j < players.length; j++) {
+        const a = players[i];
+        const b = players[j];
+        const teamA = teamByUserId.get(a.userId)!;
+        const teamB = teamByUserId.get(b.userId)!;
+        if (teamA === teamB || a.score === b.score) continue;
+        if (lineByUserId.get(a.userId) !== lineByUserId.get(b.userId)) continue;
+        const next = [...sums];
+        next[teamA] += b.score - a.score;
+        next[teamB] += a.score - b.score;
+        const spread = spreadOf(next);
+        if (spread < bestSpread) {
+          best = { a, b };
+          bestSpread = spread;
+        }
+      }
+    }
+    if (!best) return;
+    const teamA = teamByUserId.get(best.a.userId)!;
+    const teamB = teamByUserId.get(best.b.userId)!;
+    teamByUserId.set(best.a.userId, teamB);
+    teamByUserId.set(best.b.userId, teamA);
+    sums[teamA] += best.b.score - best.a.score;
+    sums[teamB] += best.a.score - best.b.score;
+  }
 }
