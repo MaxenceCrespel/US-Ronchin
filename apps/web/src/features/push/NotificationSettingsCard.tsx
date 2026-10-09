@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { unsubscribePush } from './api'
-import { enablePushNotifications, isPushSupported } from './subscribe'
+import { enablePushNotifications, isPushSupported, rememberEndpoint, setOptedOut } from './subscribe'
 
 export function NotificationSettingsCard() {
   const [enabled, setEnabled] = useState(false)
@@ -43,6 +43,8 @@ export function NotificationSettingsCard() {
         await unsubscribePush(subscription.endpoint)
         await subscription.unsubscribe()
       }
+      rememberEndpoint(null)
+      setOptedOut(true)
       setEnabled(false)
     } catch {
       setError('Impossible de désactiver les notifications.')

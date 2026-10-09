@@ -213,6 +213,19 @@ describe('users, auth, settings, awards, admin tools (real stack)', () => {
       expect((await t.http().post('/api/activity/pwa-install').set(as(player))).status).toBeLessThan(300);
       const kpis = await t.http().get('/api/admin/kpis').set(as(admin));
       expect(kpis.status).toBe(200);
+      type Row = { userId: string; pwaInstalled: boolean; pwaInstalledAt: string; pwaLastOpenedAt: string };
+      const first = (kpis.body.players as Row[]).find((p) => p.userId === player.user.id)!;
+      expect(first.pwaInstalled).toBe(true);
+      expect(first.pwaLastOpenedAt).toBeTruthy();
+
+      // every launch of the installed app moves "last opened" forward, the install date stays
+      await new Promise((r) => setTimeout(r, 20));
+      await t.http().post('/api/activity/pwa-install').set(as(player));
+      const again = ((await t.http().get('/api/admin/kpis').set(as(admin))).body.players as Row[]).find(
+        (p) => p.userId === player.user.id,
+      )!;
+      expect(again.pwaInstalledAt).toBe(first.pwaInstalledAt);
+      expect(new Date(again.pwaLastOpenedAt).getTime()).toBeGreaterThan(new Date(first.pwaLastOpenedAt).getTime());
     });
 
     it('registers and removes a push subscription', async () => {
@@ -220,7 +233,19 @@ describe('users, auth, settings, awards, admin tools (real stack)', () => {
       const body = { endpoint: 'https://push.example.com/abc', keys: { p256dh: 'key', auth: 'auth' } };
       expect((await t.http().post('/api/push/subscribe').set(as(player)).send(body)).status).toBeLessThan(300);
       expect((await t.http().post('/api/push/subscribe').set(as(player)).send({ endpoint: 'nope' })).status).toBe(400);
+      type Row = { userId: string; notificationsEnabled: boolean; notificationsLastSeenAt: string | null };
+      const row = async () =>
+        ((await t.http().get('/api/admin/kpis').set(as(admin))).body.players as Row[]).find(
+          (p) => p.userId === player.user.id,
+        )!;
+      const subscribed = await row();
+      expect(subscribed.notificationsEnabled).toBe(true);
+      expect(subscribed.notificationsLastSeenAt).toBeTruthy();
+
       expect((await t.http().delete('/api/push/subscribe').set(as(player)).send({ endpoint: body.endpoint })).status).toBeLessThan(300);
+      const unsubscribed = await row();
+      expect(unsubscribed.notificationsEnabled).toBe(false);
+      expect(unsubscribed.notificationsLastSeenAt).toBeNull();
     });
   });
 

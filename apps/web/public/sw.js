@@ -72,3 +72,18 @@ self.addEventListener('notificationclick', (event) => {
   const url = event.notification.data?.url ?? '/'
   event.waitUntil(self.clients.openWindow(url))
 })
+
+// The browser can renew a push subscription on its own (expiry, key rotation). Without
+// handling it the old one just dies and the device silently stops receiving notifications.
+// Re-subscribe right away with the same server key so the device stays reachable; the app
+// registers the new subscription with the server (and drops the old one) the next time it
+// opens — see PushSync.tsx. The worker can't call the API itself: it has no session token.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const options = event.oldSubscription && event.oldSubscription.options
+  if (!options || !options.applicationServerKey) return
+  event.waitUntil(
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: options.applicationServerKey })
+      .catch(() => {}),
+  )
+})

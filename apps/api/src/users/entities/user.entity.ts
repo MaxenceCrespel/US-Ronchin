@@ -143,6 +143,12 @@ export class User {
   @Column({ name: 'pwa_installed_at', type: 'timestamp', nullable: true })
   pwaInstalledAt: Date | null;
 
+  /** Last time the installed app (standalone mode) was opened — refreshed on every such
+   * launch, unlike pwaInstalledAt. An uninstall can't be detected, but an app that hasn't
+   * been opened for weeks most likely was removed: the dashboard shows this date. */
+  @Column({ name: 'pwa_last_opened_at', type: 'timestamp', nullable: true })
+  pwaLastOpenedAt: Date | null;
+
   /** Incremented passively (ActivityTrackingService.recordActivity) whenever a request
    * arrives more than SESSION_GAP_MS after they were last seen — not tied to an actual
    * login event, since a still-valid refresh token silently renews a session forever

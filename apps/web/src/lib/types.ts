@@ -23,6 +23,8 @@ export interface User {
   email: string
   role: UserRole
   isPlayingCoach: boolean
+  /** Last launch of the installed app (standalone) — see InstallAppBanner. */
+  pwaLastOpenedAt?: string | null
   status: UserStatus
   firstName: string
   lastName: string
