@@ -131,13 +131,29 @@ describe('AuthService.login', () => {
 });
 
 describe('AuthService.refresh', () => {
+  const account = (
+    over: Partial<{ role: UserRole; status: UserStatus }> = {},
+  ) => ({
+    id: 'u1',
+    email: 'a@b.c',
+    role: UserRole.PLAYER,
+    status: UserStatus.ACTIVE,
+    ...over,
+  });
+
   it('issues new tokens from a valid refresh token', async () => {
-    const { service, jwt } = await build();
+    const { service, jwt } = await build({
+      users: {
+        findById: jest
+          .fn()
+          .mockResolvedValue(account({ role: UserRole.COACH })),
+      },
+    });
     const refresh = jwt.sign(
       { sub: 'u1', email: 'a@b.c', role: 'COACH' },
       { secret: SECRETS.JWT_REFRESH_SECRET },
     );
-    const tokens = service.refresh(refresh);
+    const tokens = await service.refresh(refresh);
     expect(
       jwt.verify<{ role: string }>(tokens.accessToken, {
         secret: SECRETS.JWT_ACCESS_SECRET,
@@ -145,14 +161,78 @@ describe('AuthService.refresh', () => {
     ).toBe('COACH');
   });
 
+  it('takes the current role from the account, not the old token', async () => {
+    // promoted to coach after logging in as a player
+    const promoted = await build({
+      users: {
+        findById: jest
+          .fn()
+          .mockResolvedValue(account({ role: UserRole.COACH })),
+      },
+    });
+    const asPlayer = promoted.jwt.sign(
+      { sub: 'u1', email: 'a@b.c', role: 'PLAYER' },
+      { secret: SECRETS.JWT_REFRESH_SECRET },
+    );
+    const up = await promoted.service.refresh(asPlayer);
+    expect(
+      promoted.jwt.verify<{ role: string }>(up.refreshToken, {
+        secret: SECRETS.JWT_REFRESH_SECRET,
+      }).role,
+    ).toBe('COACH');
+
+    // and the other way round: a demoted coach loses coach access
+    const demoted = await build({
+      users: { findById: jest.fn().mockResolvedValue(account()) },
+    });
+    const asCoach = demoted.jwt.sign(
+      { sub: 'u1', email: 'a@b.c', role: 'COACH' },
+      { secret: SECRETS.JWT_REFRESH_SECRET },
+    );
+    const down = await demoted.service.refresh(asCoach);
+    expect(
+      demoted.jwt.verify<{ role: string }>(down.accessToken, {
+        secret: SECRETS.JWT_ACCESS_SECRET,
+      }).role,
+    ).toBe('PLAYER');
+  });
+
+  it('refuses to renew the session of a deleted or inactive account', async () => {
+    const deleted = await build({
+      users: {
+        findById: jest.fn().mockRejectedValue(new Error('Joueur introuvable')),
+      },
+    });
+    const pending = await build({
+      users: {
+        findById: jest
+          .fn()
+          .mockResolvedValue(account({ status: UserStatus.PENDING })),
+      },
+    });
+    for (const { service, jwt } of [deleted, pending]) {
+      const refresh = jwt.sign(
+        { sub: 'u1', email: 'a@b.c', role: 'PLAYER' },
+        { secret: SECRETS.JWT_REFRESH_SECRET },
+      );
+      await expect(service.refresh(refresh)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    }
+  });
+
   it('rejects garbage and tokens signed with the wrong secret', async () => {
     const { service, jwt } = await build();
-    expect(() => service.refresh('garbage')).toThrow(UnauthorizedException);
+    await expect(service.refresh('garbage')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     const access = jwt.sign(
       { sub: 'u1' },
       { secret: SECRETS.JWT_ACCESS_SECRET },
     );
-    expect(() => service.refresh(access)).toThrow(UnauthorizedException);
+    await expect(service.refresh(access)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 });
 
