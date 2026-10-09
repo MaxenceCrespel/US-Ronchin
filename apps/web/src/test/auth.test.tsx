@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import axios from 'axios'
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
@@ -115,5 +116,28 @@ describe('accept invitation', () => {
     await user.click(screen.getByRole('button', { name: /Créer|Valider|Continuer|Définir|Activer/ }))
     await waitFor(() => expect(fakeApi.called('POST', /accept-invitation$/)).toHaveLength(1))
     expect(fakeApi.called('POST', /accept-invitation$/)[0].data).toMatchObject({ token: 'tok-1', password: 'Password-123' })
+  })
+})
+
+describe('role changed while signed in', () => {
+  it('picks up a promotion to coach-joueur without logging out', async () => {
+    const post = vi.spyOn(axios, 'post').mockResolvedValue({ data: { accessToken: 'new-a', refreshToken: 'new-r' } })
+    renderApp('/', 'player')
+    fakeApi.on('GET', /users\/me$/, { ...(me as object), role: 'COACH', isPlayingCoach: true })
+    await waitFor(() => expect(useAuthStore.getState().user?.role).toBe('COACH'))
+    expect(useAuthStore.getState().user?.isPlayingCoach).toBe(true)
+    await waitFor(() => expect(useAuthStore.getState().accessToken).toBe('new-a'))
+    expect(post).toHaveBeenCalledWith('/api/auth/refresh', { refreshToken: 'test-refresh' })
+    post.mockRestore()
+  })
+
+  it('leaves the session alone when nothing changed', async () => {
+    const post = vi.spyOn(axios, 'post')
+    renderApp('/', 'player')
+    await waitFor(() => expect(fakeApi.called('GET', /users\/me$/).length).toBeGreaterThan(0))
+    await settle()
+    expect(post).not.toHaveBeenCalled()
+    expect(useAuthStore.getState().accessToken).toBe('test-access')
+    post.mockRestore()
   })
 })

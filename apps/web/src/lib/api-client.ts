@@ -25,6 +25,15 @@ async function refreshAccessToken(): Promise<string> {
   return data.accessToken
 }
 
+/** One shared refresh at a time — a burst of 401s, or a role change spotted while requests
+ * are failing, all wait on the same call instead of each burning the refresh token. */
+export function refreshSession(): Promise<string> {
+  refreshPromise ??= refreshAccessToken().finally(() => {
+    refreshPromise = null
+  })
+  return refreshPromise
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -35,10 +44,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true
       try {
-        refreshPromise ??= refreshAccessToken().finally(() => {
-          refreshPromise = null
-        })
-        const accessToken = await refreshPromise
+        const accessToken = await refreshSession()
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
         return apiClient(originalRequest)
       } catch {

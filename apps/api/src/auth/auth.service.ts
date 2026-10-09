@@ -15,7 +15,7 @@ import { UsersService } from '../users/users.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { JoinDto } from './dto/join.dto';
 import { AuthenticatedUser } from './types/authenticated-user';
-import { UserRole, UserStatus } from '../users/entities/user.entity';
+import { UserStatus } from '../users/entities/user.entity';
 
 const INVITATION_TTL_DAYS = 14;
 const SALT_ROUNDS = 10;
@@ -73,8 +73,13 @@ export class AuthService {
     await this.usersService.setPassword(userId, passwordHash);
   }
 
-  refresh(refreshToken: string) {
-    let payload: { sub: string; email: string; role: UserRole };
+  /** Re-reads the account instead of copying the old token's claims: a refresh used to carry
+   * the role over from one token to the next, so a session silently renewed forever kept
+   * whatever role it was opened with — a player promoted to coach never got the coach tools
+   * until he logged out, and a demoted coach kept them. A deleted or no-longer-active account
+   * can't renew its session either. */
+  async refresh(refreshToken: string) {
+    let payload: { sub: string };
     try {
       payload = this.jwtService.verify(refreshToken, {
         secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
@@ -82,7 +87,13 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Refresh token invalide');
     }
-    return this.signTokens({ id: payload.sub, email: payload.email, role: payload.role });
+    const user = await this.usersService
+      .findById(payload.sub)
+      .catch(() => null);
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Refresh token invalide');
+    }
+    return this.signTokens({ id: user.id, email: user.email, role: user.role });
   }
 
   async createInvitation(dto: CreateInvitationDto) {
