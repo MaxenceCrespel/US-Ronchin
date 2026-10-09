@@ -83,6 +83,18 @@ CVE-2026-9538
 CVE-2026-84782
 CVE-2026-103111
 
+# CVE-2026-77214 (expat heap buffer over-read in XML_ParseBuffer, information
+# disclosure) affects libexpat1 2.5.0-1+deb12u4 — the same system expat whose
+# earlier CVE-2025-59375 is already listed above, pulled in by the source-1
+# Chrome dependency chain (fontconfig, dbus, python3). Status: affected, no
+# Fixed Version, no Debian bookworm fix published yet (`apt-get upgrade` in
+# the Dockerfile already runs). Not reachable from our code: the API never
+# parses XML (no XML parser in apps/api at all — Node's own HTTP/JSON stack
+# doesn't use expat), and the only expat consumers in the image read local,
+# image-baked files (fontconfig's font configuration) — never XML supplied
+# by a user or a remote server.
+CVE-2026-77214
+
 # CVE-2026-16742 (systemd-homed local privilege escalation via missing
 # home-record signature verification) affects libnss-systemd, libpam-
 # systemd, libsystemd-shared, libsystemd0, libudev1, systemd, systemd-sysv
