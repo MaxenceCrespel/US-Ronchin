@@ -48,6 +48,7 @@ export class PushNotificationsService {
       existing.userId = userId;
       existing.p256dh = dto.keys.p256dh;
       existing.auth = dto.keys.auth;
+      existing.lastSeenAt = new Date();
       await this.subscriptionsRepository.save(existing);
       return;
     }
@@ -57,6 +58,7 @@ export class PushNotificationsService {
         endpoint: dto.endpoint,
         p256dh: dto.keys.p256dh,
         auth: dto.keys.auth,
+        lastSeenAt: new Date(),
       }),
     );
   }

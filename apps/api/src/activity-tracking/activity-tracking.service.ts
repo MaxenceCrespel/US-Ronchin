@@ -21,7 +21,11 @@ export interface UserActivityKpi {
   last7Days: boolean[];
   pwaInstalled: boolean;
   pwaInstalledAt: Date | null;
+  pwaLastOpenedAt: Date | null;
   notificationsEnabled: boolean;
+  /** Most recent confirmation from any of the player's devices that its subscription is
+   * still live — null when none has reported since this was tracked. */
+  notificationsLastSeenAt: Date | null;
 }
 
 export interface AdminKpisResponse {
@@ -86,13 +90,17 @@ export class ActivityTrackingService {
     ]);
   }
 
-  /** Client self-reports once it detects standalone/installed display mode (see
-   * InstallAppBanner.tsx) — a no-op once already recorded. */
+  /** Client self-reports on every launch in standalone/installed display mode (see
+   * InstallAppBanner.tsx): the install date is kept from the first report, the last-opened
+   * date moves forward each time. */
   async recordPwaInstall(userId: string): Promise<void> {
     await this.usersRepository
       .createQueryBuilder()
       .update(User)
-      .set({ pwaInstalledAt: () => 'COALESCE(pwa_installed_at, now())' })
+      .set({
+        pwaInstalledAt: () => 'COALESCE(pwa_installed_at, now())',
+        pwaLastOpenedAt: () => 'now()',
+      })
       .where('id = :userId', { userId })
       .execute();
   }
@@ -108,6 +116,14 @@ export class ActivityTrackingService {
     ]);
     const recentDays = allDays.filter((r) => r.date >= sinceIso);
     const subscribedUserIds = new Set(subscriptions.map((s) => s.userId));
+    const notificationsLastSeenByUser = new Map<string, Date>();
+    for (const s of subscriptions) {
+      if (!s.lastSeenAt) continue;
+      const current = notificationsLastSeenByUser.get(s.userId);
+      if (!current || s.lastSeenAt > current) {
+        notificationsLastSeenByUser.set(s.userId, s.lastSeenAt);
+      }
+    }
 
     const daysByUser = new Map<string, Set<string>>();
     for (const row of recentDays) {
@@ -147,7 +163,10 @@ export class ActivityTrackingService {
         last7Days: last7Dates.map((d) => activeDates.has(d)),
         pwaInstalled: user.pwaInstalledAt !== null,
         pwaInstalledAt: user.pwaInstalledAt,
+        pwaLastOpenedAt: user.pwaLastOpenedAt,
         notificationsEnabled: subscribedUserIds.has(user.id),
+        notificationsLastSeenAt:
+          notificationsLastSeenByUser.get(user.id) ?? null,
       };
     });
 

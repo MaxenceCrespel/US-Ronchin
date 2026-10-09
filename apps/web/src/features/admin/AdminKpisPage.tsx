@@ -42,6 +42,14 @@ const STATUS_LABELS: Record<UserActivityKpi['status'], string> = {
   PENDING: 'En attente de validation',
 }
 
+/** An install can't be undone in a way the app can see, but an installed app nobody has
+ * opened for this long has most likely been removed from the phone. */
+const STALE_INSTALL_MS = 30 * 24 * 60 * 60 * 1000
+
+function isStale(lastOpenedAt: string | null): boolean {
+  return lastOpenedAt !== null && Date.now() - new Date(lastOpenedAt).getTime() > STALE_INSTALL_MS
+}
+
 function MiniHeatmap({ days }: { days: boolean[] }) {
   return (
     <div className="flex items-center gap-0.5">
@@ -167,9 +175,23 @@ function PlayerDetailDialog({
                       : 'Non'
                   }
                 />
+                {player.pwaInstalled && (
+                  <DetailRow
+                    label="Dernière ouverture de l'appli"
+                    value={
+                      player.pwaLastOpenedAt
+                        ? `${formatDistanceToNow(new Date(player.pwaLastOpenedAt), { locale: fr, addSuffix: true })}${isStale(player.pwaLastOpenedAt) ? ' — probablement désinstallée' : ''}`
+                        : 'Inconnue'
+                    }
+                  />
+                )}
                 <DetailRow
                   label="Notifications"
-                  value={player.notificationsEnabled ? 'Activées' : 'Désactivées'}
+                  value={
+                    player.notificationsEnabled
+                      ? `Activées${player.notificationsLastSeenAt ? ` (vérifié ${formatDistanceToNow(new Date(player.notificationsLastSeenAt), { locale: fr, addSuffix: true })})` : ''}`
+                      : 'Désactivées'
+                  }
                 />
               </div>
               <div className="pt-1">
@@ -564,8 +586,15 @@ export function AdminKpisPage() {
                       <TableCell>
                         {p.pwaInstalled ? (
                           <span
-                            className="inline-flex items-center gap-1 text-emerald-600"
-                            title="Appli installée"
+                            className={cn(
+                              'inline-flex items-center gap-1',
+                              isStale(p.pwaLastOpenedAt) ? 'text-amber-600' : 'text-emerald-600',
+                            )}
+                            title={
+                              p.pwaLastOpenedAt
+                                ? `Appli installée — ouverte ${formatDistanceToNow(new Date(p.pwaLastOpenedAt), { locale: fr, addSuffix: true })}${isStale(p.pwaLastOpenedAt) ? ' (probablement désinstallée)' : ''}`
+                                : 'Appli installée'
+                            }
                           >
                             <Smartphone className="size-3.5" />
                           </span>

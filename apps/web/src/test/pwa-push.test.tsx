@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
 import { NotificationSettingsCard } from '@/features/push/NotificationSettingsCard'
-import { enablePushNotifications, isPushSupported } from '@/features/push/subscribe'
+import { enablePushNotifications, isPushSupported, rememberedEndpoint } from '@/features/push/subscribe'
+import { syncPushSubscription } from '@/features/push/push-sync'
 import { resizeImageFile } from '@/lib/image-resize'
 import { useAuthStore } from '@/lib/auth-store'
 import { fakeApi, fixtures } from './fake-api'
@@ -35,7 +36,10 @@ function stubPush(opts: { subscribed?: boolean; permission?: NotificationPermiss
     getSubscription: vi.fn(async () => current),
     subscribe: vi.fn(async () => (current = makeSub())),
   }
-  Object.defineProperty(navigator, 'serviceWorker', { value: { ready: Promise.resolve({ pushManager }) }, configurable: true })
+  Object.defineProperty(navigator, 'serviceWorker', {
+    value: { ready: Promise.resolve({ pushManager }), getRegistration: async () => ({ pushManager }) },
+    configurable: true,
+  })
   vi.stubGlobal('PushManager', class {})
   ;(window as unknown as { PushManager: unknown }).PushManager = class {}
   vi.stubGlobal('Notification', { permission: opts.permission ?? 'default', requestPermission: vi.fn(async () => opts.permission ?? 'granted') })
@@ -158,6 +162,52 @@ describe('NotificationPrompt', () => {
   })
 })
 
+describe('syncPushSubscription (on every launch)', () => {
+  const ENDPOINT = 'https://push.example.com/abc'
+  const deletes = () => fakeApi.called('DELETE', /push\/subscribe$/)
+
+  it('re-sends a live subscription so the server knows it still works', async () => {
+    stubPush({ subscribed: true, permission: 'granted' })
+    await syncPushSubscription()
+    expect(fakeApi.called('POST', /push\/subscribe$/)[0].data).toMatchObject({ endpoint: ENDPOINT })
+    expect(rememberedEndpoint()).toBe(ENDPOINT)
+  })
+
+  it('silently re-subscribes when permission is granted but the subscription was lost', async () => {
+    const pm = stubPush({ subscribed: false, permission: 'granted' })
+    fakeApi.on('GET', /vapid-public-key$/, { publicKey: 'BEl6' + 'A'.repeat(84) })
+    await syncPushSubscription()
+    expect(pm.subscribe).toHaveBeenCalled()
+    expect(fakeApi.called('POST', /push\/subscribe$/)).toHaveLength(1)
+  })
+
+  it('unregisters the device when permission was revoked from the phone settings', async () => {
+    stubPush({ subscribed: false, permission: 'denied' })
+    localStorage.setItem('push-endpoint', ENDPOINT)
+    await syncPushSubscription()
+    expect(deletes()[0].data).toEqual({ endpoint: ENDPOINT })
+    expect(rememberedEndpoint()).toBeNull()
+  })
+
+  it('respects notifications turned off from Profile even though permission stays granted', async () => {
+    const pm = stubPush({ subscribed: false, permission: 'granted' })
+    localStorage.setItem('push-opted-out', '1')
+    localStorage.setItem('push-endpoint', ENDPOINT)
+    await syncPushSubscription()
+    expect(pm.subscribe).not.toHaveBeenCalled()
+    expect(fakeApi.called('POST', /push\/subscribe$/)).toHaveLength(0)
+    expect(deletes()[0].data).toEqual({ endpoint: ENDPOINT })
+  })
+
+  it('drops the old subscription when the browser renewed it', async () => {
+    stubPush({ subscribed: true, permission: 'granted' })
+    localStorage.setItem('push-endpoint', 'https://push.example.com/old')
+    await syncPushSubscription()
+    expect(deletes()[0].data).toEqual({ endpoint: 'https://push.example.com/old' })
+    expect(rememberedEndpoint()).toBe(ENDPOINT)
+  })
+})
+
 describe('InstallAppBanner', () => {
   it('on Android, offers the native install and reports the outcome', async () => {
     const user = userEvent.setup()
@@ -182,8 +232,39 @@ describe('InstallAppBanner', () => {
     expect(document.body.textContent).toMatch(/Partager|écran d'accueil/i)
   })
 
-  it('stays away once dismissed', async () => {
+  const asIphone = () =>
+    Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', configurable: true })
+  const DAY = 24 * 60 * 60 * 1000
+
+  it('stays away for a while once dismissed', async () => {
+    asIphone()
+    localStorage.setItem('install-banner-dismissed', String(Date.now() - 2 * DAY))
+    render(<InstallAppBanner />)
+    await settle()
+    expect(document.body.textContent).toBe('')
+  })
+
+  it('comes back as a reminder a week after being dismissed', async () => {
+    asIphone()
+    localStorage.setItem('install-banner-dismissed', String(Date.now() - 8 * DAY))
+    render(<InstallAppBanner />)
+    await settle()
+    expect(document.body.textContent).toMatch(/Installe l'appli/)
+  })
+
+  it('also reminds players who dismissed it for good before reminders existed', async () => {
+    asIphone()
     localStorage.setItem('install-banner-dismissed', '1')
+    render(<InstallAppBanner />)
+    await settle()
+    expect(document.body.textContent).toMatch(/Installe l'appli/)
+  })
+
+  it("doesn't nag an iPhone player who opened the installed app recently", async () => {
+    asIphone()
+    useAuthStore.setState({
+      user: { ...(fixtures.roles.player['/users/me'] as User), pwaLastOpenedAt: new Date(Date.now() - 3 * DAY).toISOString() },
+    })
     render(<InstallAppBanner />)
     await settle()
     expect(document.body.textContent).toBe('')

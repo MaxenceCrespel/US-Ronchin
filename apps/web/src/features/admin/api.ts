@@ -17,7 +17,9 @@ export interface UserActivityKpi {
   last7Days: boolean[]
   pwaInstalled: boolean
   pwaInstalledAt: string | null
+  pwaLastOpenedAt: string | null
   notificationsEnabled: boolean
+  notificationsLastSeenAt: string | null
 }
 
 export interface AdminKpisResponse {

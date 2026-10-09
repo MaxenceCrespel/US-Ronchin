@@ -11,6 +11,7 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing } from '@/components/AccountLevelRing'
 import { BadgeUnlockWatcher } from '@/components/BadgeUnlockWatcher'
 import { SessionSync } from '@/features/auth/SessionSync'
+import { PushSync } from '@/features/push/PushSync'
 import { MandatoryVotePopup } from '@/features/awards/MandatoryVotePopup'
 import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
 import { PlayerRatingsReminder } from '@/features/players/PlayerRatingsReminder'
@@ -75,6 +76,7 @@ export function Layout() {
     <div className="flex min-h-svh">
       <SkipLink />
       <SessionSync />
+      <PushSync />
       <BadgeUnlockWatcher />
       <MandatoryVotePopup />
       <Suspense fallback={null}>
