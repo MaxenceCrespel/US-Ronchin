@@ -32,6 +32,7 @@ import { fetchPlayers } from '@/features/players/api'
 import { usePendingPlayerRatings } from '@/features/players/usePendingPlayerRatings'
 import { MyStatsCard } from '@/features/stats/MyStatsCard'
 import { MonthlyChallengesCard } from '@/features/stats/MonthlyChallengesCard'
+import { parisWallTimeToDate } from '@/lib/paris-time'
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', {
@@ -96,7 +97,7 @@ function UpcomingSessionCard({
 
   // Same lock as the dedicated Entraînements page and the API: presence can change until the
   // session starts (teams generated earlier follow along, see syncTeamMembership).
-  const hasStarted = new Date(`${date}T${startTime}`).getTime() <= Date.now()
+  const hasStarted = parisWallTimeToDate(date, startTime).getTime() <= Date.now()
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
   const [guests, setGuests] = useState<GuestNameInput[]>([])
@@ -303,7 +304,7 @@ function UpcomingMatchCard({
 
   // Same rationale as training sessions: locked from 30 min before kickoff, the moment
   // the coach relies on declared presence to finalize the composition.
-  const hasStarted = new Date(`${date}T${kickOffTime ?? '00:00'}`).getTime() - 30 * 60_000 <= Date.now()
+  const hasStarted = parisWallTimeToDate(date, kickOffTime).getTime() - 30 * 60_000 <= Date.now()
   const myAttendance = attendanceQuery.data?.find((a) => a.userId === currentUser?.id)
 
   // Guests only make sense for a friendly — an officially licensed match can't field an
@@ -526,7 +527,7 @@ export function HomePage() {
       if (m.status === 'PLAYED') return false
       if (m.date !== todayKey) return m.date < todayKey
       if (!m.kickOffTime) return false
-      return new Date(`${m.date}T${m.kickOffTime}`).getTime() + MATCH_DURATION_MS <= Date.now()
+      return parisWallTimeToDate(m.date, m.kickOffTime).getTime() + MATCH_DURATION_MS <= Date.now()
     })
     .sort((a, b) => b.date.localeCompare(a.date))
 
@@ -601,7 +602,7 @@ export function HomePage() {
   const upcomingSessions = useMemo(() => {
     const now = Date.now()
     return (sessionsQuery.data ?? [])
-      .filter((s) => !s.cancelled && new Date(`${s.date}T${s.startTime}`).getTime() >= now)
+      .filter((s) => !s.cancelled && parisWallTimeToDate(s.date, s.startTime).getTime() >= now)
       .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
       .slice(0, 3)
   }, [sessionsQuery.data])
@@ -610,7 +611,7 @@ export function HomePage() {
     const now = Date.now()
     return (matchesQuery.data ?? [])
       .filter(
-        (m) => m.status === 'SCHEDULED' && new Date(`${m.date}T${m.kickOffTime ?? '00:00'}`).getTime() >= now,
+        (m) => m.status === 'SCHEDULED' && parisWallTimeToDate(m.date, m.kickOffTime).getTime() >= now,
       )
       .sort((a, b) => (a.date === b.date ? (a.kickOffTime ?? '').localeCompare(b.kickOffTime ?? '') : a.date.localeCompare(b.date)))
       .slice(0, 3)
@@ -670,7 +671,7 @@ export function HomePage() {
   // attendance data instead of a fire-and-forget push, so it doesn't need any of the
   // scheduler's once-only bookkeeping.
   const sessionsNeedingPointage = (sessionsQuery.data ?? [])
-    .filter((s) => !s.cancelled && new Date(`${s.date}T${s.endTime}`).getTime() <= Date.now())
+    .filter((s) => !s.cancelled && parisWallTimeToDate(s.date, s.endTime).getTime() <= Date.now())
     .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
   const pastSessionAttendanceQueries = useQueries({
     queries: isCoach

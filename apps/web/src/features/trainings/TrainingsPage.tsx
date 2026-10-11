@@ -102,6 +102,7 @@ import {
 } from './teams-api'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
+import { parisWallTimeToDate } from '@/lib/paris-time'
 
 interface GuestNameInput {
   firstName: string
@@ -1564,13 +1565,13 @@ export function SessionCard({
   // Presence can be changed right up until the session starts — teams generated earlier just
   // follow (see AttendancesService.syncTeamMembership: placed on a team if there's room,
   // waitlisted if not). Same instant as isPast; kept as its own name for the lock's meaning.
-  const isPast = new Date(`${date}T${startTime}`).getTime() <= Date.now()
+  const isPast = parisWallTimeToDate(date, startTime).getTime() <= Date.now()
   const hasStarted = isPast
   // "Gérer la séance" (pointage réel, équipe jouée, score) only makes sense once training
   // is actually over — same moment PushNotificationsScheduler.handleMissingAttendanceReminders
   // nudges the coach/admin if nobody's pointed yet. Before that, GenerateTeamsDialog /
   // AdjustTeamsDialog below cover generating and adjusting teams.
-  const hasEnded = new Date(`${date}T${endTime}`).getTime() <= Date.now()
+  const hasEnded = parisWallTimeToDate(date, endTime).getTime() <= Date.now()
   const cardTeamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
@@ -1967,7 +1968,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
   const myAttendance = attendanceQuery.data?.find((a) => a.userId === currentUser?.id)
   const played = match.status === 'PLAYED'
   const hasKickedOff =
-    new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
+    parisWallTimeToDate(match.date, match.kickOffTime).getTime() <= Date.now()
   const category = getMatchCategory(match)
   const dimmed = !played && hasKickedOff
 

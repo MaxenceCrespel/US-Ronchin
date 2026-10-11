@@ -98,6 +98,7 @@ import {
   voteDefenseBoss,
   voteMotm,
 } from './api'
+import { parisWallTimeToDate } from '@/lib/paris-time'
 
 /** Largest-remainder split — keeps sensible row sizes even when the squad isn't exactly 11. */
 function shuffle<T>(arr: T[]): T[] {
@@ -592,7 +593,7 @@ export function MatchDetailPage() {
     if (!matchQuery.data || !compositionQuery.data) return
     autoOpenedConfigRef.current = true
     const hasKickedOff =
-      new Date(`${matchQuery.data.date}T${matchQuery.data.kickOffTime ?? '00:00:00'}`).getTime() <=
+      parisWallTimeToDate(matchQuery.data.date, matchQuery.data.kickOffTime).getTime() <=
       Date.now()
     if (compositionQuery.data.length === 0 && matchQuery.data.status !== 'PLAYED' && hasKickedOff) {
       setConfigOpen(true)
@@ -1141,7 +1142,7 @@ export function MatchDetailPage() {
   // actually kicked off — no pre-announcing the lineup, everything is entered after
   // the fact. Falls back to midnight on the match date when no kick-off time is set.
   const matchTimeHasPassed =
-    new Date(`${match.date}T${match.kickOffTime ?? '00:00:00'}`).getTime() <= Date.now()
+    parisWallTimeToDate(match.date, match.kickOffTime).getTime() <= Date.now()
 
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
   // Guests (no account yet) CAN be voted for MOTM/patron de la défense — the vote resolves
