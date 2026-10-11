@@ -17,7 +17,6 @@ import { VoteReminderBanner } from '@/features/awards/VoteReminderBanner'
 import { PlayerRatingsReminder } from '@/features/players/PlayerRatingsReminder'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
 import { OfflineBanner } from '@/components/OfflineBanner'
-import { ParisTimeNotice } from '@/components/ParisTimeNotice'
 import { NotificationPrompt } from '@/components/NotificationPrompt'
 import { SkipLink, SrHeading, getRouteHelp } from '@/lib/route-meta'
 
@@ -216,7 +215,6 @@ export function Layout() {
         <OfflineBanner />
         <VoteReminderBanner />
         <PlayerRatingsReminder />
-        <ParisTimeNotice />
         <InstallAppBanner />
         <NotificationPrompt />
         <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6">

@@ -25,9 +25,3 @@ function parisClockAsUtc(instant: Date): number {
   const get = (type: string) => Number(parts.find((p) => p.type === type)!.value)
   return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
 }
-
-/** Hours the phone's clock is ahead of Paris right now (negative when behind, 0 in France). */
-export function hoursAheadOfParis(now: Date = new Date()): number {
-  const phoneAsUtc = now.getTime() - now.getTimezoneOffset() * 60_000
-  return Math.round((phoneAsUtc - parisClockAsUtc(now)) / 3_600_000)
-}
