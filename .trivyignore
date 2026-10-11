@@ -85,8 +85,8 @@ CVE-2026-103111
 
 # CVE-2026-77214 (expat heap buffer over-read in XML_ParseBuffer, information
 # disclosure) affects libexpat1 2.5.0-1+deb12u4 — the same system expat whose
-# earlier CVE-2025-59375 is already listed above, pulled in by the source-1
-# Chrome dependency chain (fontconfig, dbus, python3). Status: affected, no
+# earlier CVEs are already listed in this file, installed explicitly by
+# apps/api/Dockerfile for headless Chrome (see CVE-2026-93990 below). Status: affected, no
 # Fixed Version, no Debian bookworm fix published yet (`apt-get upgrade` in
 # the Dockerfile already runs). Not reachable from our code: the API never
 # parses XML (no XML parser in apps/api at all — Node's own HTTP/JSON stack
@@ -94,6 +94,17 @@ CVE-2026-103111
 # image-baked files (fontconfig's font configuration) — never XML supplied
 # by a user or a remote server.
 CVE-2026-77214
+
+# CVE-2026-88647 (hostname verification bypass) and CVE-2026-88648 (incomplete X.509
+# name-constraint validation) affect libgnutls30 3.7.9-2+deb12u7 — not installed by
+# apps/api/Dockerfile itself, part of the source-1 Chrome Recommends chain above (CUPS,
+# curl...). Status: affected, no Fixed Version, no Debian bookworm fix published yet
+# (`apt-get upgrade` in the Dockerfile already runs). Not reachable from our code: both are
+# flaws in GnuTLS's TLS certificate checks, and nothing in this image opens a TLS connection
+# through GnuTLS — the API is Node.js (its own bundled OpenSSL) and the FFF scraper drives
+# Chrome, which uses its own BoringSSL, to one fixed, trusted HTTPS domain.
+CVE-2026-88647
+CVE-2026-88648
 
 # CVE-2026-16742 (systemd-homed local privilege escalation via missing
 # home-record signature verification) affects libnss-systemd, libpam-
