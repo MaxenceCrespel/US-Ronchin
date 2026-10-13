@@ -23,6 +23,7 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
   let t: TestApp;
   let coach: TestUser;
   let player: TestUser;
+  let admin: TestUser;
   const scraper = {
     scrapeMatches: jest.fn(),
     scrapeVenue: jest.fn(),
@@ -39,6 +40,7 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     t = await createTestApp([{ provide: FffScraperService, useValue: scraper }]);
     coach = await t.createUser({ role: UserRole.COACH });
     player = await t.createUser();
+    admin = await t.createUser({ role: UserRole.SUPERADMIN });
   });
   afterAll(() => t.close());
 
@@ -121,8 +123,19 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     expect(imp.body).toMatchObject({ status: 'SUCCESS', teamsFound: 3 });
     expect((await t.http().get('/api/standings').set(bearer(player.token))).body).toHaveLength(3);
     expect((await t.http().post('/api/standings/import').set(KEY).send({ standings: [] })).body.teamsFound).toBe(0);
-    const logs = await t.http().get('/api/standings/logs').query({ limit: 2 }).set(bearer(player.token));
+    const logs = await t.http().get('/api/standings/logs').query({ limit: 2 }).set(bearer(admin.token));
     expect(logs.body).toHaveLength(2);
+    // the sync status is the admin's concern only
+    expect((await t.http().get('/api/standings/logs').set(bearer(coach.token))).status).toBe(403);
+    expect((await t.http().get('/api/standings/logs').set(bearer(player.token))).status).toBe(403);
+
+    // a failed local run is reported and becomes the last sync shown
+    expect((await t.http().post('/api/standings/sync-failure').send({ errorMessage: 'x' })).status).toBe(401);
+    expect((await t.http().post('/api/standings/sync-failure').set(KEY).send({})).status).toBe(400);
+    const failure = await t.http().post('/api/standings/sync-failure').set(KEY).send({ errorMessage: 'GET … → 403' });
+    expect(failure.status).toBeLessThan(300);
+    const last = (await t.http().get('/api/standings/logs').query({ limit: 1 }).set(bearer(admin.token))).body[0];
+    expect(last).toMatchObject({ status: 'ERROR', errorMessage: 'Synchro locale : GET … → 403' });
     expect((await t.http().post('/api/standings/sync').set(bearer(player.token))).status).toBe(403);
   });
 

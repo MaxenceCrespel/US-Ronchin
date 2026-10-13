@@ -9,6 +9,7 @@ import { StandingsService } from './standings.service';
 import { ImportStandingsDto } from './dto/import-standings.dto';
 import { ImportPoolMatchesDto } from './dto/import-pool-matches.dto';
 import { ImportCupMatchesDto } from './dto/import-cup-matches.dto';
+import { ReportSyncFailureDto } from './dto/report-sync-failure.dto';
 import { SyncApiKeyGuard } from '../fff-sync/guards/sync-api-key.guard';
 
 @Controller('standings')
@@ -21,7 +22,10 @@ export class StandingsController {
     return this.standingsService.findAll();
   }
 
-  @UseGuards(JwtAuthGuard)
+  /** Admin only — the sync status (and its failures) is a maintenance concern, not something
+   * coaches or players need to see. */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPERADMIN)
   @Get('logs')
   getLogs(@Query('limit') limit?: string) {
     return this.standingsService.getRecentLogs(limit ? Number(limit) : 5);
@@ -42,6 +46,15 @@ export class StandingsController {
   @Post('import')
   importScraped(@Body() dto: ImportStandingsDto) {
     return this.standingsService.importScraped(dto.standings, null);
+  }
+
+  /** The local sync script reports a run that failed before importing anything here, so the
+   * failure shows up as the last sync (with its reason) instead of the app silently keeping
+   * the last success on display — a broken script used to go unnoticed for days. */
+  @UseGuards(SyncApiKeyGuard)
+  @Post('sync-failure')
+  reportSyncFailure(@Body() dto: ReportSyncFailureDto) {
+    return this.standingsService.recordSyncFailure(dto.errorMessage);
   }
 
   @UseGuards(JwtAuthGuard)

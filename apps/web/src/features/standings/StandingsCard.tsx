@@ -12,7 +12,7 @@ import {
 import { TeamLogo } from '@/components/TeamLogo'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
-import { hasCoachAccess } from '@/lib/roles'
+import { hasAdminAccess } from '@/lib/roles'
 import { fetchStandings, fetchStandingsLogs } from './api'
 
 // Read-only status now — the sync itself fires automatically (saving the FFF URL in
@@ -20,16 +20,18 @@ import { fetchStandings, fetchStandingsLogs } from './api'
 // manually trigger from here.
 export function StandingsCard() {
   const user = useAuthStore((s) => s.user)
-  const isCoach = hasCoachAccess(user)
+  // The sync status is a maintenance concern — admin only, coaches and players don't see it.
+  const isAdmin = hasAdminAccess(user)
 
   const standingsQuery = useQuery({ queryKey: ['standings'], queryFn: fetchStandings })
   const logsQuery = useQuery({
     queryKey: ['standings-logs'],
-    queryFn: () => fetchStandingsLogs(1),
-    enabled: isCoach,
+    queryFn: () => fetchStandingsLogs(10),
+    enabled: isAdmin,
   })
 
   const lastLog = logsQuery.data?.[0]
+  const lastSuccess = logsQuery.data?.find((l) => l.status === 'SUCCESS')
   const standings = standingsQuery.data ?? []
 
   return (
@@ -39,12 +41,17 @@ export function StandingsCard() {
           <Trophy className="text-club-gold size-4" />
           Classement du championnat
         </CardTitle>
-        {isCoach && lastLog && (
+        {isAdmin && lastLog && (
           <CardDescription className="text-xs">
             Dernière synchro : {new Date(lastLog.runAt).toLocaleString('fr-FR')} —{' '}
-            {lastLog.status === 'SUCCESS'
-              ? `${lastLog.teamsFound} équipes`
-              : `échec (${lastLog.errorMessage})`}
+            {lastLog.status === 'SUCCESS' ? (
+              `${lastLog.teamsFound} équipes`
+            ) : (
+              <span className="text-destructive">
+                échec ({lastLog.errorMessage})
+                {lastSuccess && ` — dernière réussite : ${new Date(lastSuccess.runAt).toLocaleString('fr-FR')}`}
+              </span>
+            )}
           </CardDescription>
         )}
       </CardHeader>
