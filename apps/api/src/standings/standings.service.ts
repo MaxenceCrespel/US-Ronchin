@@ -195,6 +195,11 @@ export class StandingsService {
     return { importedCount: scraped.length };
   }
 
+  /** A failure reported by the local sync script (see StandingsController.reportSyncFailure). */
+  recordSyncFailure(errorMessage: string): Promise<StandingsSyncLog> {
+    return this.logError(new Error(`Synchro locale : ${errorMessage}`), null);
+  }
+
   private logError(error: unknown, triggeredBy: string | null): Promise<StandingsSyncLog> {
     this.logger.error('Échec de la synchronisation du classement', error);
     const log = this.logsRepository.create({

@@ -79,10 +79,9 @@ async function main() {
   const championshipUrl = FFF_CHAMPIONSHIP_URL_OVERRIDE ?? syncTarget.fffChampionshipUrl;
   const cupUrl = FFF_CUP_URL_OVERRIDE ?? syncTarget.fffCupUrl;
   if (!teamUrl) {
-    console.error(
+    throw new Error(
       "Aucune URL FFF configurée — renseigne-la dans Paramètres en production, ou passe SYNC_FFF_TEAM_URL.",
     );
-    process.exit(1);
   }
 
   const scraper = new FffScraperService();
@@ -177,7 +176,25 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('Échec de la synchro locale :', error instanceof Error ? error.message : error);
+/** Tells the server this run failed, so the admin sees "échec (raison)" as the last sync in
+ * the app instead of the last success staying on display — before this, a broken run left no
+ * trace anywhere but this machine's own logs. Best effort: if the server itself can't be
+ * reached, there's nothing more to do than the console message. */
+async function reportFailure(message: string): Promise<void> {
+  if (!API_BASE_URL || !API_KEY) return;
+  try {
+    await apiFetch(API_BASE_URL, '/standings/sync-failure', API_KEY, {
+      method: 'POST',
+      body: JSON.stringify({ errorMessage: message.slice(0, 500) }),
+    });
+  } catch (error) {
+    console.error("Impossible de signaler l'échec au serveur :", error instanceof Error ? error.message : error);
+  }
+}
+
+main().catch(async (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Échec de la synchro locale :', message);
+  await reportFailure(message);
   process.exit(1);
 });
