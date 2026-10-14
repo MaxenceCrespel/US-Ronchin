@@ -123,6 +123,9 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     expect(imp.body).toMatchObject({ status: 'SUCCESS', teamsFound: 3 });
     expect((await t.http().get('/api/standings').set(bearer(player.token))).body).toHaveLength(3);
     expect((await t.http().post('/api/standings/import').set(KEY).send({ standings: [] })).body.teamsFound).toBe(0);
+    // An empty scrape (transient WAF block, page not loaded...) must never wipe real data —
+    // this silently emptied the table in production on 2026-10-14.
+    expect((await t.http().get('/api/standings').set(bearer(player.token))).body).toHaveLength(3);
     const logs = await t.http().get('/api/standings/logs').query({ limit: 2 }).set(bearer(admin.token));
     expect(logs.body).toHaveLength(2);
     // the sync status is the admin's concern only

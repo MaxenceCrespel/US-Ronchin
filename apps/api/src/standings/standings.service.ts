@@ -95,8 +95,12 @@ export class StandingsService {
     const clubName = this.configService.get<string>('CLUB_NAME', 'Ronchin');
     const normalizedClub = normalize(clubName);
 
-    await this.standingsRepository.clear();
+    // An empty scrape almost never means the real standings are now empty — far more likely
+    // the page didn't load, the WAF blocked this run, or the layout changed. Clearing the
+    // table unconditionally wiped every row on exactly that kind of transient failure (the
+    // district site returning nothing once is not as rare as "the poule now has 0 teams").
     if (scraped.length > 0) {
+      await this.standingsRepository.clear();
       const entities = scraped.map((s) =>
         this.standingsRepository.create({
           ...s,
@@ -104,6 +108,8 @@ export class StandingsService {
         }),
       );
       await this.standingsRepository.save(entities);
+    } else {
+      this.logger.warn('Scraping du classement : 0 équipe trouvée — table laissée inchangée');
     }
 
     const log = this.logsRepository.create({
@@ -141,8 +147,12 @@ export class StandingsService {
     const clubName = this.configService.get<string>('CLUB_NAME', 'Ronchin');
     const normalizedClub = normalize(clubName);
 
-    await this.poolMatchesRepository.clear();
+    // Same guard as applyScraped above, for the same reason — an empty scrape wiped all 90
+    // pool matches in production on 2026-10-14 after a run that found nothing (the site's own
+    // infinite-scroll pagination likely didn't load in time), with nothing left to re-import
+    // until the next successful run. Leave existing matches alone instead.
     if (scraped.length > 0) {
+      await this.poolMatchesRepository.clear();
       const entities = scraped.map((m) =>
         this.poolMatchesRepository.create({
           ...m,
@@ -150,6 +160,8 @@ export class StandingsService {
         }),
       );
       await this.poolMatchesRepository.save(entities);
+    } else {
+      this.logger.warn('Scraping des résultats de poule : 0 match trouvé — table laissée inchangée');
     }
     return { importedCount: scraped.length };
   }
@@ -182,8 +194,10 @@ export class StandingsService {
     const clubName = this.configService.get<string>('CLUB_NAME', 'Ronchin');
     const normalizedClub = normalize(clubName);
 
-    await this.cupMatchesRepository.clear();
+    // Same guard as applyScraped/applyScrapedPoolMatches above — don't wipe a real cup draw
+    // over a transient empty scrape.
     if (scraped.length > 0) {
+      await this.cupMatchesRepository.clear();
       const entities = scraped.map((m) =>
         this.cupMatchesRepository.create({
           ...m,
@@ -191,6 +205,8 @@ export class StandingsService {
         }),
       );
       await this.cupMatchesRepository.save(entities);
+    } else {
+      this.logger.warn('Scraping du parcours en coupe : 0 match trouvé — table laissée inchangée');
     }
     return { importedCount: scraped.length };
   }
