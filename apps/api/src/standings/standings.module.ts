@@ -4,6 +4,7 @@ import { TeamStanding } from './entities/team-standing.entity';
 import { PoolMatch } from './entities/pool-match.entity';
 import { CupMatch } from './entities/cup-match.entity';
 import { StandingsSyncLog } from './entities/standings-sync-log.entity';
+import { Match } from '../matches/entities/match.entity';
 import { StandingsService } from './standings.service';
 import { StandingsController } from './standings.controller';
 import { SettingsModule } from '../settings/settings.module';
@@ -11,7 +12,7 @@ import { FffSyncModule } from '../fff-sync/fff-sync.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TeamStanding, PoolMatch, CupMatch, StandingsSyncLog]),
+    TypeOrmModule.forFeature([TeamStanding, PoolMatch, CupMatch, StandingsSyncLog, Match]),
     SettingsModule,
     FffSyncModule,
   ],

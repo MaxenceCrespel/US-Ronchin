@@ -167,8 +167,16 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     const ours = list.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'P1');
     const theirs = list.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'P2');
     expect(ours).toMatchObject({ isUs: true, played: false });
-    expect(theirs).toMatchObject({ isUs: false, played: true, scoreHome: 2, scoreAway: 1 });
+    expect(theirs).toMatchObject({ isUs: false, played: true, scoreHome: 2, scoreAway: 1, matchId: null });
     expect((await t.http().post('/api/standings/pool-matches/sync').set(bearer(player.token))).status).toBe(403);
+
+    // isUs links straight to our own fiche for that opponent/date — the earlier "scrapes,
+    // resolves the venue lazily..." test already created one against FC Un on 2026-10-04,
+    // the same pairing P1 uses here. A pairing between two other clubs (P2) never gets one,
+    // even though it shares the same date.
+    const ownMatch = await t.repo(Match).findOne({ where: { opponent: 'FC Un', date: '2026-10-04' } });
+    expect(ownMatch).not.toBeNull();
+    expect(ours.matchId).toBe(ownMatch!.id);
 
     const imp = await t
       .http()
@@ -204,9 +212,21 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     expect(list.body).toHaveLength(2);
     const ours = list.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'C1');
     const theirs = list.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'C2');
-    expect(ours).toMatchObject({ isUs: true, played: false, round: '1er tour' });
-    expect(theirs).toMatchObject({ isUs: false, played: true, scoreHome: 4, scoreAway: 3 });
+    expect(ours).toMatchObject({ isUs: true, played: false, round: '1er tour', matchId: null });
+    expect(theirs).toMatchObject({ isUs: false, played: true, scoreHome: 4, scoreAway: 3, matchId: null });
     expect((await t.http().post('/api/standings/cup-matches/sync').set(bearer(player.token))).status).toBe(403);
+
+    // Same linking as the pool-matches test above, but starting from no own fiche at all —
+    // nothing matches until one actually exists for that date/opponent.
+    await t
+      .http()
+      .post('/api/fff-sync/import')
+      .set(KEY)
+      .send({ matches: [scraped({ fffMatchId: 'OWN-CUP', opponent: 'LILLE AFS GUINEE', date: '2026-10-18' })] });
+    const relinked = await t.http().get('/api/standings/cup-matches').set(bearer(player.token));
+    const ownMatch = await t.repo(Match).findOne({ where: { opponent: 'LILLE AFS GUINEE', date: '2026-10-18' } });
+    expect(relinked.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'C1').matchId).toBe(ownMatch!.id);
+    expect(relinked.body.find((m: { fffMatchId: string }) => m.fffMatchId === 'C2').matchId).toBeNull();
 
     const imp = await t
       .http()

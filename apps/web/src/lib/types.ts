@@ -548,6 +548,9 @@ export interface PoolMatch {
   homeLogo: string | null
   awayLogo: string | null
   isUs: boolean
+  /** Our own match this corresponds to, when it's one of ours — null for a pool match
+   * between two other clubs, or when no matching fiche was found. */
+  matchId: string | null
   scoreHome: number | null
   scoreAway: number | null
   played: boolean
@@ -563,6 +566,8 @@ export interface CupMatch {
   homeLogo: string | null
   awayLogo: string | null
   isUs: boolean
+  /** Same as PoolMatch.matchId. */
+  matchId: string | null
   scoreHome: number | null
   scoreAway: number | null
   played: boolean

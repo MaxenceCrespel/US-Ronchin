@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Swords, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -11,17 +12,19 @@ function formatDate(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
+/** Links straight to the match's own fiche when it's one of ours — see
+ * StandingsService.findAllPoolMatches's doc comment (CupMatch.matchId is resolved the same
+ * way) for why a cup match between two other clubs never gets one. */
 function CupMatchCard({ match }: { match: CupMatch }) {
   const homeWon = match.played && match.scoreHome !== null && match.scoreAway !== null && match.scoreHome > match.scoreAway
   const awayWon = match.played && match.scoreHome !== null && match.scoreAway !== null && match.scoreAway > match.scoreHome
-
-  return (
-    <div
-      className={cn(
-        'flex w-48 shrink-0 flex-col gap-1 rounded-lg border p-2 text-xs',
-        match.isUs && 'border-club-blue bg-club-blue/5',
-      )}
-    >
+  const cardClassName = cn(
+    'flex w-48 shrink-0 flex-col gap-1 rounded-lg border p-2 text-xs',
+    match.isUs && 'border-club-blue bg-club-blue/5',
+    match.matchId && 'hover:bg-club-blue/10',
+  )
+  const content = (
+    <>
       <p className="text-muted-foreground">{formatDate(match.date)}</p>
       <div className={cn('flex items-center justify-between gap-2', homeWon && 'font-semibold')}>
         <span className="flex min-w-0 items-center gap-1.5 truncate">
@@ -38,8 +41,16 @@ function CupMatchCard({ match }: { match: CupMatch }) {
         <span className="shrink-0 tabular-nums">{match.played ? match.scoreAway : ''}</span>
       </div>
       {!match.played && <p className="text-muted-foreground">À venir</p>}
-    </div>
+    </>
   )
+  if (match.matchId) {
+    return (
+      <Link to={`/matches/${match.matchId}`} className={cardClassName}>
+        {content}
+      </Link>
+    )
+  }
+  return <div className={cardClassName}>{content}</div>
 }
 
 function PlaceholderCard() {

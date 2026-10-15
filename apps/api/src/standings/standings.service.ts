@@ -6,9 +6,10 @@ import { TeamStanding } from './entities/team-standing.entity';
 import { PoolMatch } from './entities/pool-match.entity';
 import { CupMatch } from './entities/cup-match.entity';
 import { StandingsSyncLog, StandingsSyncStatus } from './entities/standings-sync-log.entity';
+import { Match } from '../matches/entities/match.entity';
 import { SettingsService } from '../settings/settings.service';
 import { FffScraperService } from '../fff-sync/fff-scraper.service';
-import { normalize } from '../pdf-import/player-matching';
+import { normalize, teamNameMatches } from '../pdf-import/player-matching';
 import type { ScrapedStanding } from '../fff-sync/scraped-standing';
 import type { ScrapedPoolMatch } from '../fff-sync/scraped-pool-match';
 import type { ScrapedCupMatch } from '../fff-sync/scraped-cup-match';
@@ -26,6 +27,8 @@ export class StandingsService {
     private readonly cupMatchesRepository: Repository<CupMatch>,
     @InjectRepository(StandingsSyncLog)
     private readonly logsRepository: Repository<StandingsSyncLog>,
+    @InjectRepository(Match)
+    private readonly matchesRepository: Repository<Match>,
     private readonly settingsService: SettingsService,
     private readonly scraperService: FffScraperService,
     private readonly configService: ConfigService,
@@ -56,8 +59,34 @@ export class StandingsService {
     return map;
   }
 
-  findAllPoolMatches(): Promise<PoolMatch[]> {
-    return this.poolMatchesRepository.find({ order: { date: 'ASC' } });
+  /** Lets the frontend link a pool-match row straight to its own match-detail page — only
+   * meaningful for our own matches (isUs), since a pool match between two other clubs has no
+   * fiche of ours to point to. PoolMatch and Match come from two different scrapes
+   * (district site vs epreuves.fff.fr) with unrelated fffMatchId schemes, so there's nothing
+   * to join on directly; matched instead by date + opponent name, the same fuzzy
+   * teamNameMatches() already used for guest/player matching (a pool match's team name
+   * sometimes carries a trailing squad number our own `opponent` field doesn't, or vice
+   * versa — an exact string match would miss those). */
+  async findAllPoolMatches(): Promise<(PoolMatch & { matchId: string | null })[]> {
+    const matches = await this.poolMatchesRepository.find({ order: { date: 'ASC' } });
+    return this.enrichWithMatchId(matches);
+  }
+
+  private async enrichWithMatchId<T extends { date: string; homeTeam: string; awayTeam: string; isUs: boolean }>(
+    rows: T[],
+  ): Promise<(T & { matchId: string | null })[]> {
+    if (!rows.some((r) => r.isUs)) return rows.map((r) => ({ ...r, matchId: null }));
+
+    const clubName = this.configService.get<string>('CLUB_NAME', 'Ronchin');
+    const normalizedClub = normalize(clubName);
+    const ourMatches = await this.matchesRepository.find({ select: { id: true, date: true, opponent: true } });
+
+    return rows.map((r) => {
+      if (!r.isUs) return { ...r, matchId: null };
+      const opponentName = normalize(r.homeTeam).includes(normalizedClub) ? r.awayTeam : r.homeTeam;
+      const match = ourMatches.find((m) => m.date === r.date && teamNameMatches(m.opponent, opponentName));
+      return { ...r, matchId: match?.id ?? null };
+    });
   }
 
   /** Scrapes epreuves.fff.fr itself and applies the result — see FffSyncService.sync's own
@@ -166,8 +195,10 @@ export class StandingsService {
     return { importedCount: scraped.length };
   }
 
-  findAllCupMatches(): Promise<CupMatch[]> {
-    return this.cupMatchesRepository.find({ order: { date: 'ASC' } });
+  /** Same linking as findAllPoolMatches — see its own doc comment. */
+  async findAllCupMatches(): Promise<(CupMatch & { matchId: string | null })[]> {
+    const matches = await this.cupMatchesRepository.find({ order: { date: 'ASC' } });
+    return this.enrichWithMatchId(matches);
   }
 
   /** Scrapes the cup draw round by round (see FffScraperService.scrapeCupResults's own doc

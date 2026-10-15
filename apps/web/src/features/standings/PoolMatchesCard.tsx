@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -56,14 +57,17 @@ function addDays(date: string, days: number): string {
 
 /** `journeeLabel` only shows up in the "all matches of one team" view — grouped by journée
  * already, the label would just repeat the heading above each row. */
+/** A match of ours links straight to its own fiche — a pool match between two other clubs has
+ * no fiche of ours to point to, so it stays a plain row (see StandingsService.findAllPoolMatches
+ * for how matchId gets resolved). */
 function MatchRow({ match, journeeLabel }: { match: PoolMatch; journeeLabel?: string }) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-        match.isUs && 'bg-club-blue/5 font-semibold',
-      )}
-    >
+  const rowClassName = cn(
+    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+    match.isUs && 'bg-club-blue/5 font-semibold',
+    match.matchId && 'hover:bg-club-blue/10',
+  )
+  const content = (
+    <>
       <span className="text-muted-foreground flex w-16 shrink-0 flex-col text-xs">
         <span className="tabular-nums">{formatDate(match.date)}</span>
         {journeeLabel && <span className="truncate">{journeeLabel}</span>}
@@ -79,8 +83,16 @@ function MatchRow({ match, journeeLabel }: { match: PoolMatch; journeeLabel?: st
         <TeamLogo src={match.awayLogo} />
         <span className="min-w-0 truncate">{match.awayTeam}</span>
       </span>
-    </div>
+    </>
   )
+  if (match.matchId) {
+    return (
+      <Link to={`/matches/${match.matchId}`} className={rowClassName}>
+        {content}
+      </Link>
+    )
+  }
+  return <div className={rowClassName}>{content}</div>
 }
 
 /** Every match of the poule, ours included but not singled out to its own list — the whole
