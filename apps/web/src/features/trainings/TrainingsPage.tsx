@@ -573,11 +573,21 @@ function attendanceHistoryDayLabel(date: Date): string {
  * without one, when it's actually the next morning. */
 function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(false)
+  const listRef = useRef<HTMLUListElement>(null)
   const historyQuery = useQuery({
     queryKey: ['attendance-history', sessionId],
     queryFn: () => fetchAttendanceHistory(sessionId),
     enabled: open,
   })
+
+  // The list reads oldest-first (so the day headers below make sense), which means the
+  // current state — what everyone actually wants first when checking "who's in right now" —
+  // sits at the bottom. Jump straight there once the list has something to scroll to.
+  useEffect(() => {
+    if (open && historyQuery.data && historyQuery.data.length > 0) {
+      listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
+    }
+  }, [open, historyQuery.data])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -587,7 +597,7 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
           Historique
         </Button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[80vh] flex-col overflow-y-auto">
+      <DialogContent className="flex max-h-[80vh] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Historique des réponses</DialogTitle>
         </DialogHeader>
@@ -596,7 +606,7 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
         ) : !historyQuery.data || historyQuery.data.length === 0 ? (
           <p className="text-muted-foreground text-sm">Aucun changement enregistré.</p>
         ) : (
-          <ul className="flex flex-col gap-2.5 text-sm">
+          <ul ref={listRef} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto text-sm">
             {historyQuery.data.map((entry, index) => {
               const entryDate = new Date(entry.createdAt)
               const previousDate = index > 0 ? new Date(historyQuery.data[index - 1].createdAt) : null

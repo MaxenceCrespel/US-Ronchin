@@ -27,7 +27,7 @@ describe('describeAttendanceChange', () => {
     const text = describeAttendanceChange(
       entry({ changedBy: 'u2', changer: person('Raphael', 'Dupont'), previousConfirmed: true, newConfirmed: false }),
     )
-    expect(text).toBe("Place prise par Raphael D. — mis en liste d'attente")
+    expect(text).toBe("a perdu sa place (liste d'attente) — remplacé·e par Raphael D.")
   })
 
   it('names who took a guest place', () => {
@@ -39,12 +39,12 @@ describe('describeAttendanceChange', () => {
         newConfirmedGuestCount: 0,
       }),
     )
-    expect(text).toBe('Place prise par Raphael D. — 1 invité repassé en attente')
+    expect(text).toBe('1 invité repassé en attente — remplacé·e par Raphael D.')
   })
 
   it("describes a waitlist promotion as the player's own change", () => {
     const text = describeAttendanceChange(entry({ previousConfirmed: false, newConfirmed: true }))
-    expect(text).toBe("Présent → Présent — passé de liste d'attente à confirmé")
+    expect(text).toBe("promu·e de la liste d'attente : confirmé·e")
   })
 
   it('keeps the coach mention when a coach changes the status', () => {
