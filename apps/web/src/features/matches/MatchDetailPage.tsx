@@ -6,8 +6,10 @@ import { isAxiosError } from 'axios'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
+  ArrowLeftRight,
   CalendarCheck,
   Crown,
+  Eye,
   Link2,
   ListChecks,
   Pencil,
@@ -48,6 +50,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
 import { useWizardBusyStore } from '@/lib/wizard-busy-store'
+import { ratingColor, ratingLabel as formatRatingAverage } from './rating-color'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import { AttendanceMark } from '@/components/AttendanceMark'
@@ -70,6 +73,8 @@ import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
 import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
+import { PostMatchPitchView } from './PostMatchPitchView'
+import { PlayerSpotlightCard, PlayerSpotlightCarousel } from './PlayerSpotlightCard'
 import { DEFAULT_FORMATION, FORMATIONS, guessFormation } from './formations'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -281,13 +286,6 @@ function LinkGuestButton({ matchId, compositionId }: { matchId: string; composit
   )
 }
 
-/** Red at 0, green at 10 — the same hue ramp drives both the slider's track/thumb (via
- * accent-color, which every evergreen browser applies to a native range input) and the
- * numeric label next to it. */
-function ratingColor(value: number): string {
-  const hue = (value / 10) * 120
-  return `hsl(${hue}deg 75% 42%)`
-}
 
 /** One reference per whole point, so a 6 means the same thing to everyone. A half point sits
  * between its two neighbours (see ratingLabel). Kept short: the legend is a two-line strip on a phone. */
@@ -1115,19 +1113,23 @@ export function MatchDetailPage() {
   // Per-player goals/assists/cards for this match — no such aggregation exists server-side
   // for a single match, so it's derived client-side from the raw event list.
   const eventStatsByUser = useMemo(() => {
-    const map: Record<string, { goals: number; assists: number; yellow: number; red: number }> = {}
-    const bump = (id: string, key: 'goals' | 'assists' | 'yellow' | 'red') => {
-      map[id] ??= { goals: 0, assists: 0, yellow: 0, red: 0 }
+    const map: Record<
+      string,
+      { goals: number; ownGoals: number; assists: number; yellow: number; red: number }
+    > = {}
+    const bump = (id: string, key: 'goals' | 'ownGoals' | 'assists' | 'yellow' | 'red') => {
+      map[id] ??= { goals: 0, ownGoals: 0, assists: 0, yellow: 0, red: 0 }
       map[id][key] += 1
     }
     // A guest scorer has no userId — keyed by their name instead so their goals still show
     // up against their composition row (see guestStatsKey below).
     for (const event of eventsQuery.data ?? []) {
       const scorerKey = event.userId ?? (event.scorerName ? `name:${event.scorerName}` : null)
-      // A CSC is not a positive contribution — it must never inflate the scorer's goal tally.
-      if (event.type === 'GOAL' && event.goalType !== 'OWN_GOAL') {
-        if (scorerKey) bump(scorerKey, 'goals')
-        if (event.assistUserId) bump(event.assistUserId, 'assists')
+      if (event.type === 'GOAL') {
+        // A CSC is not a positive contribution — kept separate so it never inflates the
+        // scorer's goal tally, but still tracked (the pitch view marks it distinctly).
+        if (scorerKey) bump(scorerKey, event.goalType === 'OWN_GOAL' ? 'ownGoals' : 'goals')
+        if (event.goalType !== 'OWN_GOAL' && event.assistUserId) bump(event.assistUserId, 'assists')
       } else if (event.type === 'YELLOW_CARD') {
         if (scorerKey) bump(scorerKey, 'yellow')
       } else if (event.type === 'RED_CARD') {
@@ -1727,105 +1729,228 @@ export function MatchDetailPage() {
         </CardHeader>
         <CardContent>
           {(compositionQuery.data ?? []).some((e) => e.isStarter && e.formationX != null) ? (
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-center">
-              <PitchFormationEditor
-                readOnly
-                players={(compositionQuery.data ?? [])
-                  .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
-                  .map((e) => ({
-                    userId: e.userId ?? e.id,
-                    firstName: e.user?.firstName ?? e.guestFirstName ?? '',
-                    lastName: e.user?.lastName ?? e.guestLastName ?? '',
-                    shirtNumber: e.user?.jerseyNumber ?? null,
-                    x: e.formationX!,
-                    y: e.formationY!,
-                  }))}
-                onSwap={() => {}}
-              />
+            <div className="flex w-full flex-col gap-5">
+              <div className="w-full">
+                {resultConfirmed ? (
+                  // Once the whole post-match setup is done (events + ratings open), the plain
+                  // colored-dot formation gives way to the real recap: who scored, assisted,
+                  // got carded, and their live rating average — PitchFormationEditor stays the
+                  // picking/editing tool for before that point (and for the coach's own wizard).
+                  // The gradient frame lifts the pitch off the plain card background, like a
+                  // trophy case for the recap rather than a plain embedded widget.
+                  <div className="from-club-blue/15 via-club-gold/10 to-club-blue/15 rounded-[26px] bg-gradient-to-br p-1.5 shadow-md">
+                    <PostMatchPitchView
+                      players={(compositionQuery.data ?? [])
+                        .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
+                        .map((e) => {
+                          const guestStatsKey = e.guestFirstName
+                            ? `name:${e.guestFirstName} ${e.guestLastName}`
+                            : null
+                          const statsKey = e.userId ?? guestStatsKey
+                          const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
+                            goals: 0,
+                            ownGoals: 0,
+                            assists: 0,
+                            yellow: 0,
+                            red: 0,
+                          }
+                          const summary = ratingsSummaryQuery.data?.find(
+                            (s) => s.compositionId === e.id,
+                          )
+                          return {
+                            compositionId: e.id,
+                            firstName: e.user?.firstName ?? e.guestFirstName ?? '',
+                            lastName: e.user?.lastName ?? e.guestLastName ?? '',
+                            x: e.formationX!,
+                            y: e.formationY!,
+                            rating: summary?.average ?? null,
+                            goals: stats.goals,
+                            ownGoals: stats.ownGoals,
+                            assists: stats.assists,
+                            yellow: stats.yellow,
+                            red: stats.red,
+                          }
+                        })}
+                    />
+                  </div>
+                ) : (
+                  <PitchFormationEditor
+                    readOnly
+                    players={(compositionQuery.data ?? [])
+                      .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
+                      .map((e) => ({
+                        userId: e.userId ?? e.id,
+                        firstName: e.user?.firstName ?? e.guestFirstName ?? '',
+                        lastName: e.user?.lastName ?? e.guestLastName ?? '',
+                        shirtNumber: e.user?.jerseyNumber ?? null,
+                        x: e.formationX!,
+                        y: e.formationY!,
+                      }))}
+                    onSwap={() => {}}
+                  />
+                )}
+              </div>
               {(compositionQuery.data ?? []).some((e) => e.isStarter && !e.user) && isCoach && (
-                <div className="flex w-full flex-col gap-1.5 sm:w-40 sm:pt-2">
+                <div className="flex w-full flex-col gap-1.5">
                   <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
                     Titulaires à lier
                   </p>
                   {/* PitchFormationEditor draws starters on the pitch itself with no per-slot
                       link-account affordance — a guest starter (unlike a guest sub, listed
                       below) had no way to be linked once a formation was saved. */}
-                  {(compositionQuery.data ?? [])
-                    .filter((entry) => entry.isStarter && !entry.user)
-                    .map((entry) => (
-                      <div key={entry.id} className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2 text-sm">
-                          <PlayerAvatar
-                            avatarUrl={undefined}
-                            firstName={entry.guestFirstName ?? ''}
-                            lastName={entry.guestLastName ?? ''}
-                            shirtNumber={entry.shirtNumber}
-                            size="sm"
-                          />
-                          {entry.guestFirstName} {entry.guestLastName}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {(compositionQuery.data ?? [])
+                      .filter((entry) => entry.isStarter && !entry.user)
+                      .map((entry) => (
+                        <div key={entry.id} className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2 text-sm">
+                            <PlayerAvatar
+                              avatarUrl={undefined}
+                              firstName={entry.guestFirstName ?? ''}
+                              lastName={entry.guestLastName ?? ''}
+                              shirtNumber={entry.shirtNumber}
+                              size="sm"
+                            />
+                            {entry.guestFirstName} {entry.guestLastName}
+                          </div>
+                          <LinkGuestButton matchId={matchId} compositionId={entry.id} />
                         </div>
-                        <LinkGuestButton matchId={matchId} compositionId={entry.id} />
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
               )}
+              {/* Substitutes and spectators lay out as a wrapping grid, not a single stacked
+                  column — a bench of a dozen names in one narrow file read like a pile of
+                  plates, not a roster. */}
               {(compositionQuery.data ?? []).some((e) => !e.isStarter && !e.isSpectator) && (
-                <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
-                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                    Remplaçants
-                  </p>
-                  {(compositionQuery.data ?? [])
-                    .filter((entry) => !entry.isStarter && !entry.isSpectator)
-                    .map((entry) => (
-                      <div key={entry.id} className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2 text-sm">
-                          <PlayerAvatar
-                            avatarUrl={entry.user?.avatarUrl}
-                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
-                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
-                            size="sm"
-                          />
-                          {entry.user
-                            ? `${entry.user.firstName} ${entry.user.lastName}`
-                            : `${entry.guestFirstName} ${entry.guestLastName}`}
-                        </div>
-                        {!entry.user && isCoach && (
-                          <LinkGuestButton matchId={matchId} compositionId={entry.id} />
-                        )}
-                      </div>
-                    ))}
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="from-club-blue to-club-blue-dark flex size-6 items-center justify-center rounded-full bg-gradient-to-br text-white shadow-sm">
+                        <ArrowLeftRight className="size-3.5" />
+                      </span>
+                      <p className="text-foreground text-sm font-bold tracking-wide">Remplaçants</p>
+                    </div>
+                    <span className="bg-club-blue/10 text-club-blue rounded-full px-2 py-0.5 text-xs font-bold tabular-nums">
+                      {
+                        (compositionQuery.data ?? []).filter((e) => !e.isStarter && !e.isSpectator)
+                          .length
+                      }
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {(compositionQuery.data ?? [])
+                      .filter((entry) => !entry.isStarter && !entry.isSpectator)
+                      .map((entry) => {
+                        const summary = resultConfirmed
+                          ? ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
+                          : undefined
+                        return (
+                          <div key={entry.id} className="flex flex-col gap-0.5">
+                            <div
+                              className={cn(
+                                'flex items-center gap-2.5 text-sm',
+                                resultConfirmed &&
+                                  'border-club-blue/15 from-card to-club-blue/[0.04] justify-between rounded-2xl border bg-gradient-to-br px-3 py-2.5 shadow-sm',
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <PlayerAvatar
+                                  avatarUrl={entry.user?.avatarUrl}
+                                  firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                                  lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                                  shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
+                                  size="sm"
+                                  className="ring-club-blue/20 ring-offset-card border-0 ring-2 ring-offset-2"
+                                />
+                                <span className="truncate font-semibold">
+                                  {entry.user
+                                    ? `${entry.user.firstName} ${entry.user.lastName}`
+                                    : `${entry.guestFirstName} ${entry.guestLastName}`}
+                                </span>
+                              </div>
+                              {resultConfirmed && (
+                                <span
+                                  className="flex h-6 min-w-[30px] shrink-0 items-center justify-center rounded-full px-1.5 text-[13px] font-extrabold text-white shadow-[0_1px_3px_rgba(0,0,0,0.35),0_0_0_2px_var(--card)] tabular-nums"
+                                  style={{
+                                    background:
+                                      summary?.average == null ? '#94a3b8' : ratingColor(summary.average),
+                                  }}
+                                >
+                                  {formatRatingAverage(summary?.average ?? null)}
+                                </span>
+                              )}
+                            </div>
+                            {!entry.user && isCoach && (
+                              <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                            )}
+                          </div>
+                        )
+                      })}
+                  </div>
                 </div>
               )}
               {/* Present but not playing (injured, between clubs...) — kept out of
                   "Remplaçants" (see MatchComposition.isSpectator's own doc comment: a
-                  spectator never enters the game, unlike a genuine substitute). */}
+                  spectator never enters the game, unlike a genuine substitute). Styled as a
+                  deliberately quieter "on the bench, not on the pitch" card — same shape as a
+                  substitute's but neutral-toned with an eye badge instead of a rating, so the
+                  two read as different categories at a glance, not just "substitute with a
+                  bug". */}
               {(compositionQuery.data ?? []).some((e) => e.isSpectator) && (
-                <div className="flex flex-col gap-2 sm:w-40 sm:pt-2">
-                  <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                    Spectateurs
-                  </p>
-                  {(compositionQuery.data ?? [])
-                    .filter((entry) => entry.isSpectator)
-                    .map((entry) => (
-                      <div key={entry.id} className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2 text-sm">
-                          <PlayerAvatar
-                            avatarUrl={entry.user?.avatarUrl}
-                            firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
-                            lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
-                            size="sm"
-                          />
-                          {entry.user
-                            ? `${entry.user.firstName} ${entry.user.lastName}`
-                            : `${entry.guestFirstName} ${entry.guestLastName}`}
+                <div className="flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="from-muted-foreground/70 to-muted-foreground flex size-6 items-center justify-center rounded-full bg-gradient-to-br text-white shadow-sm">
+                        <Eye className="size-3.5" />
+                      </span>
+                      <p className="text-muted-foreground text-sm font-bold tracking-wide">
+                        Spectateurs
+                      </p>
+                    </div>
+                    <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-bold tabular-nums">
+                      {(compositionQuery.data ?? []).filter((e) => e.isSpectator).length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {(compositionQuery.data ?? [])
+                      .filter((entry) => entry.isSpectator)
+                      .map((entry) => (
+                        <div key={entry.id} className="flex flex-col gap-0.5">
+                          <div
+                            className={cn(
+                              'flex items-center gap-2.5 text-sm',
+                              resultConfirmed &&
+                                'bg-muted/30 justify-between rounded-2xl border border-dashed px-3 py-2.5',
+                            )}
+                          >
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <PlayerAvatar
+                                avatarUrl={entry.user?.avatarUrl}
+                                firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
+                                lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
+                                shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
+                                size="sm"
+                                className="border-0 opacity-80 ring-2 ring-slate-400/20 ring-offset-2 ring-offset-transparent"
+                              />
+                              <span className="text-muted-foreground truncate font-medium">
+                                {entry.user
+                                  ? `${entry.user.firstName} ${entry.user.lastName}`
+                                  : `${entry.guestFirstName} ${entry.guestLastName}`}
+                              </span>
+                            </div>
+                            {resultConfirmed && (
+                              <span className="bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-full">
+                                <Eye className="size-3.5" />
+                              </span>
+                            )}
+                          </div>
+                          {!entry.user && isCoach && (
+                            <LinkGuestButton matchId={matchId} compositionId={entry.id} />
+                          )}
                         </div>
-                        {!entry.user && isCoach && (
-                          <LinkGuestButton matchId={matchId} compositionId={entry.id} />
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -2096,18 +2221,37 @@ export function MatchDetailPage() {
     )
   }
 
+  // Side by side only reads well when each column is a single card — a tie spills the
+  // MOTM carousel into its own scroll right at the column's edge, half-covered by the
+  // "Patron de la défense" card next to it. A tie on either side falls back to full width
+  // so the carousel actually has room to be a carousel.
+  const motmWinnerCount =
+    motmQuery.data?.revealed && motmQuery.data.results && motmQuery.data.results.length > 0
+      ? motmQuery.data.results.filter((r) => r.votes === motmQuery.data!.results![0].votes).length
+      : 1
+  const defenseBossWinnerCount =
+    defenseBossQuery.data?.revealed &&
+    defenseBossQuery.data.results &&
+    defenseBossQuery.data.results.length > 0
+      ? defenseBossQuery.data.results.filter(
+          (r) => r.votes === defenseBossQuery.data!.results![0].votes,
+        ).length
+      : 1
+  const awardsSideBySide = motmWinnerCount <= 1 && defenseBossWinnerCount <= 1
+
   const motmCard = resultConfirmed && hasComposition && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="flex h-full flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <p className="flex items-center gap-2 text-sm font-semibold">
               <Crown className="text-club-gold size-4" />
               Homme du match
-            </CardTitle>
-            <CardDescription>
-              {motmQuery.data?.revealed
-                ? 'Résultat révélé.'
-                : 'Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote.'}
-            </CardDescription>
+            </p>
+            {!motmQuery.data?.revealed && (
+              <p className="text-muted-foreground text-xs">
+                Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après
+                le premier vote.
+              </p>
+            )}
             {!motmQuery.data?.revealed && motmQuery.data && (
               <VoteProgress
                 totalVotes={motmQuery.data.totalVotes}
@@ -2115,28 +2259,34 @@ export function MatchDetailPage() {
                 votingClosesAt={motmQuery.data.votingClosesAt}
               />
             )}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          </div>
+          <div className="flex flex-1 flex-col gap-4">
             {motmQuery.data?.revealed ? (
               motmQuery.data.results && motmQuery.data.results.length > 0 ? (
-                <ul className="flex flex-col gap-2">
-                  {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
-                      tie for 2nd/3rd place doesn't spill the list past 3 names. */}
-                  {motmQuery.data.results.slice(0, 3).map((r, index) => (
-                    <li
-                      key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="flex items-center gap-2">
-                        {r.votes === motmQuery.data!.results![0].votes && (
-                          <Crown className="text-club-gold size-4" />
-                        )}
-                        {r.firstName} {r.lastName}
-                      </span>
-                      <Badge variant="secondary">{r.votes} vote(s)</Badge>
-                    </li>
-                  ))}
-                </ul>
+                <PlayerSpotlightCarousel>
+                  {/* A tie means several joint winners, each gets their own card — no
+                      "shared" card that would have to squeeze two names into one. */}
+                  {motmQuery.data.results
+                    .filter((r) => r.votes === motmQuery.data!.results![0].votes)
+                    .map((r) => {
+                      const entry = compositionQuery.data?.find((e) => e.userId === r.userId)
+                      const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry?.id)
+                      return (
+                        <PlayerSpotlightCard
+                          key={r.userId ?? `${r.firstName}-${r.lastName}`}
+                          role="motm"
+                          player={{
+                            compositionId: entry?.id ?? r.userId ?? `${r.firstName}-${r.lastName}`,
+                            firstName: r.firstName,
+                            lastName: r.lastName,
+                            avatarUrl: entry?.user?.avatarUrl,
+                            rating: summary?.average ?? null,
+                            votes: r.votes,
+                          }}
+                        />
+                      )
+                    })}
+                </PlayerSpotlightCarousel>
               ) : (
                 <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
               )
@@ -2215,8 +2365,8 @@ export function MatchDetailPage() {
                 Seuls les joueurs ayant participé peuvent voter.
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )
 
   // A defender or the goalkeeper, not a spectator — see MatchesService.isDefenseBossEligible's
@@ -2225,17 +2375,18 @@ export function MatchDetailPage() {
     (entry) => entry.position === 'DEFENDER' || entry.position === 'GOALKEEPER',
   )
   const defenseBossCard = resultConfirmed && hasComposition && defenseBossApplies && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <div className="flex h-full flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <p className="flex items-center gap-2 text-sm font-semibold">
               <Shield className="text-club-blue size-4" />
               Patron de la défense
-            </CardTitle>
-            <CardDescription>
-              {defenseBossQuery.data?.revealed
-                ? 'Résultat révélé.'
-                : 'Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après le premier vote.'}
-            </CardDescription>
+            </p>
+            {!defenseBossQuery.data?.revealed && (
+              <p className="text-muted-foreground text-xs">
+                Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après
+                le premier vote.
+              </p>
+            )}
             {!defenseBossQuery.data?.revealed && defenseBossQuery.data && (
               <VoteProgress
                 totalVotes={defenseBossQuery.data.totalVotes}
@@ -2243,29 +2394,35 @@ export function MatchDetailPage() {
                 votingClosesAt={defenseBossQuery.data.votingClosesAt}
               />
             )}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          </div>
+          <div className="flex flex-1 flex-col gap-4">
             {defenseBossQuery.data?.revealed ? (
               <>
                 {defenseBossQuery.data.results && defenseBossQuery.data.results.length > 0 ? (
-                  <ul className="flex flex-col gap-2">
-                    {/* Podium only — top 3 rows regardless of tie boundaries, never more, so a
-                        tie for 2nd/3rd place doesn't spill the list past 3 names. */}
-                    {defenseBossQuery.data.results.slice(0, 3).map((r, index) => (
-                      <li
-                        key={r.userId ?? `${r.firstName}-${r.lastName}-${index}`}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <span className="flex items-center gap-2">
-                          {r.votes === defenseBossQuery.data!.results![0].votes && (
-                            <Shield className="text-club-blue size-4" />
-                          )}
-                          {r.firstName} {r.lastName}
-                        </span>
-                        <Badge variant="secondary">{r.votes} vote(s)</Badge>
-                      </li>
-                    ))}
-                  </ul>
+                  <PlayerSpotlightCarousel>
+                    {defenseBossQuery.data.results
+                      .filter((r) => r.votes === defenseBossQuery.data!.results![0].votes)
+                      .map((r) => {
+                        const entry = compositionQuery.data?.find((e) => e.userId === r.userId)
+                        const summary = ratingsSummaryQuery.data?.find(
+                          (s) => s.compositionId === entry?.id,
+                        )
+                        return (
+                          <PlayerSpotlightCard
+                            key={r.userId ?? `${r.firstName}-${r.lastName}`}
+                            role="defense"
+                            player={{
+                              compositionId: entry?.id ?? r.userId ?? `${r.firstName}-${r.lastName}`,
+                              firstName: r.firstName,
+                              lastName: r.lastName,
+                              avatarUrl: entry?.user?.avatarUrl,
+                              rating: summary?.average ?? null,
+                              votes: r.votes,
+                            }}
+                          />
+                        )
+                      })}
+                  </PlayerSpotlightCarousel>
                 ) : (
                   <p className="text-muted-foreground text-sm">Aucun vote exprimé.</p>
                 )}
@@ -2375,8 +2532,8 @@ export function MatchDetailPage() {
                 Seuls les joueurs ayant participé peuvent voter.
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )
 
   // Guests (no account yet) can be rated like anyone else — they still played — just not
@@ -2538,15 +2695,62 @@ export function MatchDetailPage() {
         </Card>
       )
 
-  // A tie means several joint MOTM winners, not one arbitrarily picked from the array.
-  const motmResults = motmQuery.data?.revealed ? (motmQuery.data.results ?? []) : []
-  const motmWinners =
-    motmResults.length > 0 ? motmResults.filter((r) => r.votes === motmResults[0].votes) : []
+  // Leaderboard by live rating average — same idea as MPG's "Meilleurs joueurs", built from
+  // what this app actually tracks (rating + goals/assists/cards) rather than duels/interceptions
+  // it has no data for. Spectators never played, so they can't have a match rating.
+  const topPlayers = (compositionQuery.data ?? [])
+    .filter((entry) => !entry.isSpectator)
+    .map((entry) => {
+      const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
+      const guestStatsKey = entry.guestFirstName
+        ? `name:${entry.guestFirstName} ${entry.guestLastName}`
+        : null
+      const statsKey = entry.userId ?? guestStatsKey
+      const stats = statsKey ? eventStatsByUser[statsKey] : undefined
+      return { entry, rating: summary?.average ?? null, stats }
+    })
+    .filter((p): p is typeof p & { rating: number } => p.rating != null)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, 5)
+
+  const topPlayersSection = resultConfirmed && hasComposition && topPlayers.length > 0 && (
+    <div className="flex flex-col gap-2.5 border-t pt-4">
+      <p className="flex items-center gap-2 text-sm font-semibold">
+        <Star className="size-4 text-slate-500" />
+        Meilleurs joueurs
+      </p>
+      <PlayerSpotlightCarousel>
+        {topPlayers.map(({ entry, rating, stats }) => {
+          const statChips = [
+            stats && stats.goals > 0 && { icon: '⚽', label: `${stats.goals} but${stats.goals > 1 ? 's' : ''}` },
+            stats && stats.assists > 0 && { icon: '🎯', label: `${stats.assists} passe${stats.assists > 1 ? 's' : ''}` },
+            stats && stats.yellow > 0 && { icon: '🟨', label: `${stats.yellow}` },
+            stats && stats.red > 0 && { icon: '🟥', label: `${stats.red}` },
+          ].filter((s): s is { icon: string; label: string } => Boolean(s))
+          return (
+            <PlayerSpotlightCard
+              key={entry.id}
+              role="top"
+              player={{
+                compositionId: entry.id,
+                firstName: entry.user?.firstName ?? entry.guestFirstName ?? '',
+                lastName: entry.user?.lastName ?? entry.guestLastName ?? '',
+                avatarUrl: entry.user?.avatarUrl,
+                rating,
+                votes: 0,
+                stats: statChips.length > 0 ? statChips : undefined,
+              }}
+            />
+          )
+        })}
+      </PlayerSpotlightCarousel>
+    </div>
+  )
 
   const recapHeader = (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+    <Card className="gap-2 py-3">
+      <CardHeader className="gap-1 px-4">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm">
           <span>vs {match.opponent}</span>
           <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
             {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
@@ -2554,86 +2758,39 @@ export function MatchDetailPage() {
         </CardTitle>
         <MatchMetaLines match={match} />
       </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+      <CardContent className="px-4">
         <FinalScore match={match} />
+      </CardContent>
+    </Card>
+  )
 
-        {motmWinners.length > 0 ? (
-          <div className="flex flex-col gap-2.5">
-            {motmWinners.map((winner) => {
-              const entry = compositionQuery.data?.find((e) => e.userId === winner.userId)
-              return (
-                <div key={winner.userId} className="flex items-center gap-2.5">
-                  <PlayerAvatar
-                    avatarUrl={entry?.user?.avatarUrl}
-                    firstName={winner.firstName}
-                    lastName={winner.lastName}
-                    shirtNumber={entry?.shirtNumber ?? entry?.user?.jerseyNumber ?? null}
-                    size="sm"
-                    className="border-club-gold ring-club-gold/40 border-2 ring-2"
-                  />
-                  <span className="flex items-center gap-1.5 text-sm font-medium">
-                    <Crown className="text-club-gold size-4" />
-                    {winner.firstName} {winner.lastName}
-                  </span>
-                </div>
-              )
-            })}
-            {motmWinners.length > 1 && (
-              <span className="text-muted-foreground text-xs">
-                Égalité — homme du match partagé.
+  const eventsList = (eventsQuery.data?.length ?? 0) > 0 && (
+    <div className="flex flex-col gap-1.5">
+      {[...(eventsQuery.data ?? [])]
+        .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
+        .map((event) => (
+          <div key={event.id} className="flex items-center gap-2 text-sm">
+            {event.minute != null && (
+              <span className="text-muted-foreground w-8 shrink-0 text-xs">{event.minute}'</span>
+            )}
+            {event.type === 'GOAL' && event.goalType === 'OWN_GOAL' && <OwnGoalIcon size="sm" />}
+            {event.type === 'GOAL' && event.goalType !== 'OWN_GOAL' && <span>⚽</span>}
+            {event.type === 'YELLOW_CARD' && <span>🟨</span>}
+            {event.type === 'RED_CARD' && <span>🟥</span>}
+            <span>
+              {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
+              {event.goalType === 'OWN_GOAL' && (
+                <span className="text-muted-foreground text-xs"> (CSC)</span>
+              )}
+            </span>
+            {event.assistUser && (
+              <span className="text-muted-foreground flex items-center gap-1">
+                🎯 {event.assistUser.firstName} {event.assistUser.lastName}
               </span>
             )}
           </div>
-        ) : hasComposition ? (
-          <div className="flex flex-col items-center gap-3 py-1">
-            <div className="border-club-gold/40 bg-club-gold/10 animate-legendary-pulse flex size-11 items-center justify-center rounded-full border">
-              <Crown className="text-club-gold size-5" />
-            </div>
-            <span className="text-muted-foreground text-xs">Homme du match : vote en cours…</span>
-            {motmQuery.data && (
-              <div className="w-full max-w-xs">
-                <VoteProgress
-                  totalVotes={motmQuery.data.totalVotes}
-                  totalPlayers={motmQuery.data.totalPlayers}
-                  votingClosesAt={motmQuery.data.votingClosesAt}
-                />
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {(eventsQuery.data?.length ?? 0) > 0 && (
-          <div className="flex flex-col gap-1.5 border-t pt-4">
-            {[...(eventsQuery.data ?? [])]
-              .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0))
-              .map((event) => (
-                <div key={event.id} className="flex items-center gap-2 text-sm">
-                  {event.minute != null && (
-                    <span className="text-muted-foreground w-8 shrink-0 text-xs">
-                      {event.minute}'
-                    </span>
-                  )}
-                  {event.type === 'GOAL' && event.goalType === 'OWN_GOAL' && <OwnGoalIcon size="sm" />}
-                  {event.type === 'GOAL' && event.goalType !== 'OWN_GOAL' && <span>⚽</span>}
-                  {event.type === 'YELLOW_CARD' && <span>🟨</span>}
-                  {event.type === 'RED_CARD' && <span>🟥</span>}
-                  <span>
-                    {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
-                    {event.goalType === 'OWN_GOAL' && (
-                      <span className="text-muted-foreground text-xs"> (CSC)</span>
-                    )}
-                  </span>
-                  {event.assistUser && (
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      🎯 {event.assistUser.firstName} {event.assistUser.lastName}
-                    </span>
-                  )}
-                </div>
-              ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        ))}
+    </div>
   )
 
   const statsRows = compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
@@ -2651,6 +2808,7 @@ export function MatchDetailPage() {
     const statsKey = entry.userId ?? guestStatsKey
     const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
       goals: 0,
+      ownGoals: 0,
       assists: 0,
       yellow: 0,
       red: 0,
@@ -2911,19 +3069,39 @@ export function MatchDetailPage() {
         </div>
       ) : votesTabApplies ? (
         <div className="flex flex-col gap-8">
-          {recapHeader}
-          <Tabs defaultValue="resume">
-            <TabsList className="mx-auto">
-              <TabsTrigger value="resume">Résumé</TabsTrigger>
-              <TabsTrigger value="stats">Stats</TabsTrigger>
-            </TabsList>
-            <TabsContent value="resume" className="flex flex-col gap-8">
-              {/* Persistent even after voting or for someone not eligible to vote (coach,
-                  didn't play) — the forced-vote modal above only shows these cards to
-                  people who still need to vote, so without this everyone else never sees
-                  where the vote stands. */}
-              {motmCard}
-              {defenseBossCard}
+          <Tabs defaultValue="resume" className="flex flex-col gap-8">
+            {/* Pinned together so the score and the tab bar stay put while only the tab's
+                own content scrolls underneath — the score is what you keep checking back
+                against, not something to scroll past. */}
+            <div className="bg-background sticky top-0 z-20 flex flex-col gap-4 pb-1">
+              {recapHeader}
+              <TabsList className="mx-auto">
+                <TabsTrigger value="resume">Résumé</TabsTrigger>
+                <TabsTrigger value="composition">Composition</TabsTrigger>
+                <TabsTrigger value="stats">Stats</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="resume" className="flex flex-col gap-5">
+              {eventsList || (
+                <div className="flex flex-col items-center gap-2 py-8 text-center">
+                  <span className="text-3xl">🧤</span>
+                  <p className="text-muted-foreground text-sm">
+                    Aucun but, carton ou passe décisive — un match propre, sans fioritures.
+                  </p>
+                </div>
+              )}
+              <div
+                className={cn(
+                  awardsSideBySide ? 'grid grid-cols-2 gap-3' : 'flex flex-col gap-5',
+                  (motmCard || defenseBossCard) && 'border-t pt-4',
+                )}
+              >
+                {motmCard}
+                {defenseBossCard}
+              </div>
+              {topPlayersSection}
+            </TabsContent>
+            <TabsContent value="composition" className="flex flex-col gap-8">
               {compositionSummaryView}
             </TabsContent>
             <TabsContent value="stats" className="flex flex-col gap-8">

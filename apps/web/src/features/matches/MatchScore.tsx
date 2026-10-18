@@ -199,22 +199,22 @@ export function FinalScore({
   const goals = (s: typeof left) =>
     (match.homeAway === 'HOME') === s.isUs ? match.scoreHome : match.scoreAway
   const result = getMatchResult(match)
-  const team = (s: typeof left) => (
-    <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
-      <Crest name={s.name} isUs={s.isUs} logo={s.logo} />
-      <span className="text-center text-xs leading-tight font-bold [overflow-wrap:anywhere]">
-        {s.name}
-      </span>
-    </div>
-  )
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-center gap-3">
-        {team(left)}
-        <span className="text-4xl font-extrabold tabular-nums">{goals(left) ?? '-'}</span>
-        <span className="text-muted-foreground text-xl font-bold">–</span>
-        <span className="text-4xl font-extrabold tabular-nums">{goals(right) ?? '-'}</span>
-        {team(right)}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Crest name={left.name} isUs={left.isUs} logo={left.logo} />
+          <span className="truncate text-xs font-bold">{left.name}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-2xl font-extrabold tabular-nums">{goals(left) ?? '-'}</span>
+          <span className="text-muted-foreground text-sm font-bold">–</span>
+          <span className="text-2xl font-extrabold tabular-nums">{goals(right) ?? '-'}</span>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+          <span className="truncate text-right text-xs font-bold">{right.name}</span>
+          <Crest name={right.name} isUs={right.isUs} logo={right.logo} />
+        </div>
       </div>
       {result && (
         <div className="flex items-center justify-center gap-2 text-xs">

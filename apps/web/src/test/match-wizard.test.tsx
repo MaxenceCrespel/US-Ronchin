@@ -200,6 +200,7 @@ describe('linking a guest to an account (coach, played match)', () => {
     renderApp(`/matches/${meta.matchIds[0]}`, 'coach')
     fakeApi.on('GET', /^\/users$/, [...users, newcomer])
     await settle(900)
+    await user.click(screen.getByRole('tab', { name: 'Composition' }))
     await user.click(screen.getAllByText('Lier à un compte')[0])
     const combo = screen.getAllByRole('combobox').at(-1)!
     combo.focus()
