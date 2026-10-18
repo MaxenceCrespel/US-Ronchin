@@ -75,6 +75,7 @@ import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import { PostMatchPitchView } from './PostMatchPitchView'
 import { PlayerSpotlightCard, PlayerSpotlightCarousel } from './PlayerSpotlightCard'
+import { guestFullName } from './name-format'
 import { DEFAULT_FORMATION, FORMATIONS, guessFormation } from './formations'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -1744,7 +1745,7 @@ export function MatchDetailPage() {
                         .filter((e) => e.isStarter && e.formationX != null && e.formationY != null)
                         .map((e) => {
                           const guestStatsKey = e.guestFirstName
-                            ? `name:${e.guestFirstName} ${e.guestLastName}`
+                            ? `name:${guestFullName(e.guestFirstName, e.guestLastName)}`
                             : null
                           const statsKey = e.userId ?? guestStatsKey
                           const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
@@ -1811,7 +1812,7 @@ export function MatchDetailPage() {
                               shirtNumber={entry.shirtNumber}
                               size="sm"
                             />
-                            {entry.guestFirstName} {entry.guestLastName}
+                            {guestFullName(entry.guestFirstName, entry.guestLastName)}
                           </div>
                           <LinkGuestButton matchId={matchId} compositionId={entry.id} />
                         </div>
@@ -1866,7 +1867,7 @@ export function MatchDetailPage() {
                                 <span className="truncate font-semibold">
                                   {entry.user
                                     ? `${entry.user.firstName} ${entry.user.lastName}`
-                                    : `${entry.guestFirstName} ${entry.guestLastName}`}
+                                    : guestFullName(entry.guestFirstName, entry.guestLastName)}
                                 </span>
                               </div>
                               {resultConfirmed && (
@@ -1936,7 +1937,7 @@ export function MatchDetailPage() {
                               <span className="text-muted-foreground truncate font-medium">
                                 {entry.user
                                   ? `${entry.user.firstName} ${entry.user.lastName}`
-                                  : `${entry.guestFirstName} ${entry.guestLastName}`}
+                                  : guestFullName(entry.guestFirstName, entry.guestLastName)}
                               </span>
                             </div>
                             {resultConfirmed && (
@@ -1961,7 +1962,7 @@ export function MatchDetailPage() {
                   <Badge variant={entry.isStarter ? 'default' : entry.isSpectator ? 'outline' : 'secondary'}>
                     {entry.user
                       ? `${entry.user.firstName} ${entry.user.lastName}`
-                      : `${entry.guestFirstName} ${entry.guestLastName}`}
+                      : guestFullName(entry.guestFirstName, entry.guestLastName)}
                     {entry.isSpectator && ' · Spectateur'}
                   </Badge>
                   {!entry.user && isCoach && (
@@ -2606,7 +2607,7 @@ export function MatchDetailPage() {
                       <span className="truncate">
                         {entry.user
                           ? `${entry.user.firstName} ${entry.user.lastName}`
-                          : `${entry.guestFirstName} ${entry.guestLastName}`}
+                          : guestFullName(entry.guestFirstName, entry.guestLastName)}
                       </span>
                     </span>
 
@@ -2703,7 +2704,7 @@ export function MatchDetailPage() {
     .map((entry) => {
       const summary = ratingsSummaryQuery.data?.find((s) => s.compositionId === entry.id)
       const guestStatsKey = entry.guestFirstName
-        ? `name:${entry.guestFirstName} ${entry.guestLastName}`
+        ? `name:${guestFullName(entry.guestFirstName, entry.guestLastName)}`
         : null
       const statsKey = entry.userId ?? guestStatsKey
       const stats = statsKey ? eventStatsByUser[statsKey] : undefined
@@ -2803,7 +2804,7 @@ export function MatchDetailPage() {
       (r) => (entry.userId && r.ratedUserId === entry.userId) || r.ratedGuestId === entry.id,
     )
     const guestStatsKey = entry.guestFirstName
-      ? `name:${entry.guestFirstName} ${entry.guestLastName}`
+      ? `name:${guestFullName(entry.guestFirstName, entry.guestLastName)}`
       : null
     const statsKey = entry.userId ?? guestStatsKey
     const stats = (statsKey ? eventStatsByUser[statsKey] : undefined) ?? {
@@ -2914,12 +2915,12 @@ export function MatchDetailPage() {
                           title={
                             entry.user
                               ? `${entry.user.firstName} ${entry.user.lastName}`
-                              : `${entry.guestFirstName} ${entry.guestLastName}`
+                              : guestFullName(entry.guestFirstName, entry.guestLastName)
                           }
                         >
                           {entry.user
                             ? `${entry.user.firstName} ${entry.user.lastName}`
-                            : `${entry.guestFirstName} ${entry.guestLastName}`}
+                            : guestFullName(entry.guestFirstName, entry.guestLastName)}
                         </span>
                       </span>
                     </TableCell>

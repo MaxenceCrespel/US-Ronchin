@@ -39,6 +39,9 @@ export function PostMatchPitchView({ players }: { players: PitchPlayer[] }) {
   const lastNameCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const p of players) {
+      // A guest entered with a first name only has no last name to disambiguate by —
+      // counting it would risk falsely "tying" two different first-name-only guests.
+      if (!p.lastName) continue
       const lastName = toDisplayCase(p.lastName)
       counts[lastName] = (counts[lastName] ?? 0) + 1
     }
@@ -106,8 +109,12 @@ export function PostMatchPitchView({ players }: { players: PitchPlayer[] }) {
         </div>
 
         {players.map((p) => {
-          const lastName = toDisplayCase(p.lastName)
-          const displayName = lastNameCounts[lastName] > 1 ? `${p.firstName[0]}. ${lastName}` : lastName
+          const lastName = p.lastName ? toDisplayCase(p.lastName) : ''
+          const displayName = !lastName
+            ? toDisplayCase(p.firstName)
+            : lastNameCounts[lastName] > 1
+              ? `${p.firstName[0]}. ${lastName}`
+              : lastName
           const goalBalls = Math.min(p.goals, 3)
           // The coach can place a formation dot anywhere from 0–100, including right on the
           // goal line — but the card below each jersey (rating pill + name) needs room to
