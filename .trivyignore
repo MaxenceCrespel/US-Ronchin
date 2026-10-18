@@ -313,3 +313,19 @@ CVE-2026-102276
 CVE-2026-102278
 CVE-2026-19534
 CVE-2026-93748
+
+# libcups2 (Debian 12 bookworm-slim base image, apps/api/Dockerfile) —
+# CVE-2026-55453: arbitrary code execution via newline injection in printer
+# status messages. Not our code or a direct dependency: libcups2 is only
+# installed as one of Google Chrome's standard headless runtime libraries
+# (alongside libnss3, libatk1.0-0, etc., for Playwright's `channel: 'chrome'`
+# — see the Dockerfile's own comment above that apt-get install block), never
+# for actual printing. No CUPS daemon runs in this container, no printer is
+# attached, and this API never processes a print job or printer status
+# message of any kind — the exploit path doesn't exist here. Verified
+# 2026-10-18: Debian's own candidate version for bookworm is still
+# 2.4.2-3+deb12u9, identical to what's installed — no security update
+# published yet (Trivy's own "Fixed Version" column is empty too). Revisit
+# by checking `apt-cache policy libcups2` against debian:bookworm-slim, or
+# just rebuilding the image, once Debian ships a patched version.
+CVE-2026-55453
