@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuthStore } from '@/lib/auth-store'
+import { useWizardBusyStore } from '@/lib/wizard-busy-store'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS } from '@/lib/labels'
 import { AttendanceMark } from '@/components/AttendanceMark'
@@ -518,6 +519,7 @@ export function MatchDetailPage() {
   const [configOpen, setConfigOpen] = useState(false)
   const autoOpenedConfigRef = useRef(false)
   const [configStep, setConfigStep] = useState<'presence' | 'formation' | 'events'>('presence')
+  const setWizardBusy = useWizardBusyStore((s) => s.setBusy)
 
   const [statsSortKey, setStatsSortKey] = useState<MatchStatSortKey>('name')
   const [statsSortDir, setStatsSortDir] = useState<'asc' | 'desc'>('asc')
@@ -1136,13 +1138,6 @@ export function MatchDetailPage() {
   }, [eventsQuery.data])
 
   const match = matchQuery.data
-  if (!match) return null
-
-  // The coach can only configure a match (score, composition, events) once it has
-  // actually kicked off — no pre-announcing the lineup, everything is entered after
-  // the fact. Falls back to midnight on the match date when no kick-off time is set.
-  const matchTimeHasPassed =
-    parisWallTimeToDate(match.date, match.kickOffTime).getTime() <= Date.now()
 
   const iPlayed = compositionQuery.data?.some((entry) => entry.userId === user?.id) ?? false
   // Guests (no account yet) CAN be voted for MOTM/patron de la défense — the vote resolves
@@ -1155,7 +1150,11 @@ export function MatchDetailPage() {
   // Requires resultConfirmedAt, not just status PLAYED — status flips as early as the
   // score-entry step, well before the coach has been through composition AND events. Voting
   // used to unlock the moment composition alone was saved, before scorers/cards even existed.
-  const resultConfirmed = match.resultConfirmedAt !== null
+  // Read off matchQuery.data directly (not the possibly-undefined `match` below) so this
+  // whole gate block — and the badge-busy effect that follows it — can run unconditionally,
+  // above the `if (!match) return null` guard; React requires every hook to run on every
+  // render regardless of that guard.
+  const resultConfirmed = matchQuery.data?.resultConfirmedAt != null
   // Voting/rating is mandatory for anyone who played, coach included — no role exception.
   const votingApplies = resultConfirmed && iPlayed && hasComposition
   const hasVotedMotm = motmQuery.data?.myVoteCompositionId != null
@@ -1192,6 +1191,24 @@ export function MatchDetailPage() {
   const showVoteModal =
     votingApplies && votingDataReady && (needsMotmVote || needsDefenseBossVote || needsRatings)
   const votesTabApplies = resultConfirmed && hasComposition
+
+  // A badge can become earnable mid-fill — the coach mid-wizard (configOpen) or any player
+  // mid mandatory-vote/notes (showVoteModal, e.g. a win-streak badge only knowable once the
+  // score they just voted around is saved) — hold off the full-screen reveal until they're
+  // done with whichever one is open, same as it already waits out the onboarding tour. See
+  // wizard-busy-store's own doc comment.
+  useEffect(() => {
+    setWizardBusy(configOpen || showVoteModal)
+    return () => setWizardBusy(false)
+  }, [configOpen, showVoteModal, setWizardBusy])
+
+  if (!match) return null
+
+  // The coach can only configure a match (score, composition, events) once it has
+  // actually kicked off — no pre-announcing the lineup, everything is entered after
+  // the fact. Falls back to midnight on the match date when no kick-off time is set.
+  const matchTimeHasPassed =
+    parisWallTimeToDate(match.date, match.kickOffTime).getTime() <= Date.now()
 
   const scoreCard = (
     <Card>

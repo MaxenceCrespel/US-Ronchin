@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/lib/auth-store'
 import { useOnboardingUiStore } from '@/lib/onboarding-store'
+import { useWizardBusyStore } from '@/lib/wizard-busy-store'
 import { hasNeverSeenBadges, loadSeenBadges, saveSeenBadges } from '@/lib/badge-seen'
 import { BadgePackReveal } from '@/components/BadgePackReveal'
 import type { BadgeStatus } from '@/lib/types'
@@ -14,6 +15,7 @@ const POLL_INTERVAL_MS = 60_000
 export function BadgeUnlockWatcher() {
   const user = useAuthStore((s) => s.user)
   const tourActive = useOnboardingUiStore((s) => s.active)
+  const wizardBusy = useWizardBusyStore((s) => s.busy)
   const [queue, setQueue] = useState<BadgeStatus[]>([])
   const queuedRef = useRef<Record<string, number>>({})
 
@@ -54,7 +56,9 @@ export function BadgeUnlockWatcher() {
     }
   }, [badgesQuery.data, user, tourActive])
 
-  if (queue.length === 0) return null
+  // Still detect and queue while the coach is mid-wizard (configuring a match) — just don't
+  // take over the screen until they're done with it. See wizard-busy-store's own doc comment.
+  if (queue.length === 0 || wizardBusy) return null
 
   const handleDone = () => {
     if (user) {
