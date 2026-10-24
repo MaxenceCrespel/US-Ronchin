@@ -115,7 +115,7 @@ export function PostMatchPitchView({ players }: { players: PitchPlayer[] }) {
             : lastNameCounts[lastName] > 1
               ? `${p.firstName[0]}. ${lastName}`
               : lastName
-          const goalBalls = Math.min(p.goals, 3)
+          const goalBalls = Math.min(p.goals, 5)
           // The coach can place a formation dot anywhere from 0–100, including right on the
           // goal line — but the card below each jersey (rating pill + name) needs room to
           // breathe under it, and the cards/events cluster needs room above it. Clamping
@@ -187,12 +187,25 @@ export function PostMatchPitchView({ players }: { players: PitchPlayer[] }) {
                 {(goalBalls > 0 || p.ownGoals > 0 || p.assists > 0) && (
                   <div className="absolute top-[-7px] left-[32px] z-[2] flex flex-col gap-0.5">
                     {goalBalls > 0 && (
-                      <div className="relative h-[18px]" style={{ width: 11 * (goalBalls - 1) + 18 }}>
+                      <div
+                        className="relative h-[18px]"
+                        style={{ width: 11 * (goalBalls - 1) + 18 + (p.goals > goalBalls ? 16 : 0) }}
+                      >
                         {Array.from({ length: goalBalls }).map((_, i) => (
                           <div key={i} className="absolute top-0" style={{ left: i * 11, zIndex: goalBalls - i }}>
                             <BallIcon size={18} />
                           </div>
                         ))}
+                        {/* Beyond the stacking cap, a count badge rather than an ever-longer
+                            row of balls that would run into the next player's card. */}
+                        {p.goals > goalBalls && (
+                          <span
+                            className="absolute top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-[#1E293B] px-1 text-[9px] font-extrabold text-white"
+                            style={{ left: 11 * (goalBalls - 1) + 20 }}
+                          >
+                            +{p.goals - goalBalls}
+                          </span>
+                        )}
                       </div>
                     )}
                     {p.ownGoals > 0 && <BallIcon size={17} fill="#EF4444" />}
