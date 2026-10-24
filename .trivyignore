@@ -329,3 +329,20 @@ CVE-2026-93748
 # by checking `apt-cache policy libcups2` against debian:bookworm-slim, or
 # just rebuilding the image, once Debian ships a patched version.
 CVE-2026-55453
+
+# undici@6.29.0 (CVE-2026-109869: Denial of Service via an unhandled stream
+# error on excessive content, HIGH) — vendored INSIDE the globally-installed
+# npm binary (the Dockerfile's `npm install -g npm@latest`), same
+# unfixable-by-us situation as the earlier undici@6.28.0 round above, not our
+# dependency tree: `npm ls undici --omit=dev --workspace=api` is empty and
+# nothing in apps/api references undici. The container runs
+# `node dist/main.js`, never npm, so the vendored copy isn't loaded by the API
+# process. Verified 2026-10-24: the very latest npm release (12.2.1) still
+# vendors undici 6.29.0 — the fix (6.29.1 / 7.30.1 / 8.12.2) isn't shipped by
+# any npm release yet, so upgrading npm can't clear it. Revisit by re-packing
+# the newest npm (`npm pack npm@latest` and reading
+# node_modules/undici/package.json) and dropping this entry once it vendors
+# 6.29.1+. The same scan's body-parser and multer findings were NOT ignored —
+# those are in our tree and were fixed by bumping them (body-parser 2.4.0,
+# multer 2.5.0 via the root package.json override).
+CVE-2026-109869
