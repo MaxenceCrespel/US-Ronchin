@@ -459,11 +459,11 @@ export function AdminKpisPage() {
         </div>
 
         <TabsContent value="overview" className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <Card>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <Card className="bg-club-blue-dark border-0 text-white [&_[data-slot=card-description]]:text-club-gold">
               <CardHeader>
                 <CardDescription>Actifs cette semaine</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className="text-4xl leading-none font-extrabold">
                   {data ? `${data.activeLast7Days}/${data.totalUsers}` : '—'}
                 </CardTitle>
               </CardHeader>
@@ -471,7 +471,7 @@ export function AdminKpisPage() {
             <Card>
               <CardHeader>
                 <CardDescription>Actifs ce mois</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className="text-4xl leading-none font-extrabold">
                   {data ? `${data.activeLast30Days}/${data.totalUsers}` : '—'}
                 </CardTitle>
               </CardHeader>
@@ -479,13 +479,13 @@ export function AdminKpisPage() {
             <Card>
               <CardHeader>
                 <CardDescription>Comptes au total</CardDescription>
-                <CardTitle className="text-2xl">{data?.totalUsers ?? '—'}</CardTitle>
+                <CardTitle className="text-4xl leading-none font-extrabold">{data?.totalUsers ?? '—'}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader>
                 <CardDescription>Appli installée</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className="text-4xl leading-none font-extrabold">
                   {data ? `${data.players.filter((p) => p.pwaInstalled).length}/${data.totalUsers}` : '—'}
                 </CardTitle>
               </CardHeader>
@@ -493,7 +493,7 @@ export function AdminKpisPage() {
             <Card>
               <CardHeader>
                 <CardDescription>Notifications activées</CardDescription>
-                <CardTitle className="text-2xl">
+                <CardTitle className="text-4xl leading-none font-extrabold">
                   {data
                     ? `${data.players.filter((p) => p.notificationsEnabled).length}/${data.totalUsers}`
                     : '—'}
@@ -506,12 +506,97 @@ export function AdminKpisPage() {
             <CardHeader>
               <CardTitle>Activité par joueur</CardTitle>
               <CardDescription>
-                {sortKey
-                  ? "Clique une colonne pour changer le tri, ou une seconde fois pour l'inverser."
-                  : 'Par défaut, triés par dernière connexion — les moins actifs en premier. Clique une colonne pour trier autrement.'}
+                <span className="md:hidden">Touche un joueur pour voir sa fiche ; le menu change l'ordre.</span>
+                <span className="hidden md:inline">
+                  {sortKey
+                    ? "Clique une colonne pour changer le tri, ou une seconde fois pour l'inverser."
+                    : 'Par défaut, triés par dernière connexion — les moins actifs en premier. Clique une colonne pour trier autrement.'}
+                </span>
               </CardDescription>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent className="flex flex-col gap-3">
+              {/* On a phone the nine-column table doesn't fit; each player becomes a card with
+                  the same facts, sorted by the same keys (picked from a menu instead of headers). */}
+              <label className="flex items-center gap-2 text-sm md:hidden">
+                <span className="text-muted-foreground shrink-0">Trier par</span>
+                <select
+                  className="border-input bg-background h-10 min-w-0 flex-1 rounded-xl border px-3 text-sm"
+                  value={sortKey ?? ''}
+                  onChange={(e) => {
+                    const key = e.target.value as KpiSortKey | ''
+                    if (!key) {
+                      setSortKey(null)
+                      return
+                    }
+                    setSortKey(key)
+                    setSortDir(key === 'name' ? 'asc' : 'desc')
+                  }}
+                >
+                  <option value="">Les moins actifs d'abord</option>
+                  <option value="name">Nom</option>
+                  <option value="lastSeen">Dernière connexion</option>
+                  <option value="active7">Jours actifs / 7</option>
+                  <option value="active30">Jours actifs / 30</option>
+                  <option value="level">Niveau équipes</option>
+                  <option value="pwa">Appli installée</option>
+                  <option value="notifs">Notifications</option>
+                </select>
+              </label>
+              <ul className="flex flex-col gap-2 md:hidden">
+                {sortedPlayers.map((p) => (
+                  <li key={p.userId}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlayer(p)}
+                      className="bg-card hover:bg-accent flex w-full flex-col gap-2 rounded-xl border p-3 text-left transition-colors"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <PlayerAvatar firstName={p.firstName} lastName={p.lastName} avatarUrl={null} size="sm" />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate font-semibold">
+                            {p.firstName} {p.lastName}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {ROLE_LABELS[p.role]} ·{' '}
+                            {p.lastSeenAt
+                              ? formatDistanceToNow(new Date(p.lastSeenAt), { locale: fr, addSuffix: true })
+                              : 'Jamais connecté'}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <Smartphone
+                            className={cn(
+                              'size-4',
+                              !p.pwaInstalled
+                                ? 'text-muted-foreground opacity-40'
+                                : isStale(p.pwaLastOpenedAt)
+                                  ? 'text-amber-600'
+                                  : 'text-emerald-600',
+                            )}
+                            aria-label={p.pwaInstalled ? 'Appli installée' : 'Appli non installée'}
+                          />
+                          {p.notificationsEnabled ? (
+                            <Bell className="size-4 text-emerald-600" aria-label="Notifications activées" />
+                          ) : (
+                            <BellOff className="text-muted-foreground size-4" aria-label="Notifications désactivées" />
+                          )}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <MiniHeatmap days={p.last7Days} />
+                        <span>
+                          <b className="font-display text-base">{p.activeDaysLast7}</b>/7 j
+                        </span>
+                        <span>
+                          <b className="font-display text-base">{p.activeDaysLast30}</b>/30 j
+                        </span>
+                        <span className="text-muted-foreground">Niveau {levelByUserId.get(p.userId) ?? '—'}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -628,6 +713,7 @@ export function AdminKpisPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
