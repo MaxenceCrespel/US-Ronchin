@@ -437,7 +437,7 @@ export function AdminKpisPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold">Tableau de bord</h1>
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Tableau de bord</h1>
         <p className="text-muted-foreground text-sm">
           Utilisation de l'application par les membres de l'effectif.
         </p>

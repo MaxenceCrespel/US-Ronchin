@@ -217,7 +217,7 @@ export function ImportMatchPdfPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Importer une feuille de match FFF</h1>
+      <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Importer une feuille de match FFF</h1>
 
       {!preview && (
         <Card>

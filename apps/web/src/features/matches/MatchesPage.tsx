@@ -209,7 +209,7 @@ export function MatchesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Matchs</h1>
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Matchs</h1>
         {isCoach && (
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" asChild data-tour="matches-import">

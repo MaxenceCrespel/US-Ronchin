@@ -144,7 +144,7 @@ export function AttendanceToggle({
   disabled?: boolean
 }) {
   return (
-    <div className="bg-muted/60 inline-flex items-center gap-0.5 rounded-full p-1">
+    <div className="bg-muted/70 grid w-full max-w-sm grid-cols-3 items-center gap-0.5 rounded-full p-1">
       {(['PRESENT', 'MAYBE', 'ABSENT'] as AttendanceStatus[]).map((status) => (
         <button
           key={status}
@@ -2326,7 +2326,7 @@ export function TrainingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Entraînements &amp; matchs</h1>
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Entraînements &amp; matchs</h1>
         {isCoach && <ManageTrainingsDialog />}
       </div>
 
@@ -2335,7 +2335,7 @@ export function TrainingsPage() {
       <Card className="min-w-0 rounded-2xl py-5 shadow-sm" data-tour="trainings-calendar">
         <CardContent className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-base font-semibold capitalize">
+            <p className="font-display text-xl font-bold uppercase">
               {format(weekStart, 'd MMM', { locale: fr })} – {format(weekEnd, 'd MMM yyyy', { locale: fr })}
             </p>
             <div className="flex items-center gap-1">
@@ -2413,7 +2413,7 @@ export function TrainingsPage() {
                   </span>
                   <span
                     className={cn(
-                      'mx-auto flex size-7 items-center justify-center rounded-full text-sm font-semibold',
+                      'font-display mx-auto flex size-8 items-center justify-center rounded-full text-lg font-bold',
                       selected
                         ? 'bg-white text-club-blue-dark'
                         : today

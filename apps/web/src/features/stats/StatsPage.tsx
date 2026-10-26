@@ -717,7 +717,7 @@ export function StatsPage() {
   return (
     <div className="flex flex-col gap-6" data-tour="stats-page">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Statistiques</h1>
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Statistiques</h1>
         {seasonsQuery.data && (
           <Select value={activeSeason} onValueChange={setSeason}>
             <SelectTrigger aria-label="Saison" size="sm">

@@ -9,7 +9,7 @@ import { PoolMatchesCard } from './PoolMatchesCard'
 export function ChampionshipPage() {
   return (
     <div className="flex flex-col gap-6" data-tour="championship-page">
-      <h1 className="flex items-center gap-2 text-xl font-semibold">
+      <h1 className="flex items-center gap-2 font-display text-3xl leading-tight font-extrabold uppercase">
         <Trophy className="text-club-gold size-5" />
         Championnat
       </h1>
