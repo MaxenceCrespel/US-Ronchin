@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
 import { Label } from '@/components/ui/label'
+import { AuthBackdrop } from '@/components/AuthBackdrop'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 import { FootballSpinner } from '@/components/FootballSpinner'
@@ -30,11 +31,9 @@ export function LoginPage() {
   })
 
   return (
-    <div className="from-club-blue to-club-blue-dark relative flex min-h-svh items-center justify-center overflow-hidden bg-gradient-to-br p-4">
-      <div className="pointer-events-none absolute -top-24 -left-24 size-96 rounded-full bg-white/10 blur-3xl" />
-      <div className="bg-club-gold/20 pointer-events-none absolute -right-24 -bottom-24 size-96 rounded-full blur-3xl" />
+    <AuthBackdrop>
 
-      <Card className="animate-football-roll-in relative w-full max-w-sm border-white/20 shadow-2xl">
+      <Card className="animate-football-roll-in relative w-full max-w-sm border-0 shadow-2xl">
         <CardHeader className="items-center text-center">
           <div className="relative mb-2">
             <img src="/club-logo.png" alt="US Ronchin" className="h-20 w-20 drop-shadow" />
@@ -95,6 +94,6 @@ export function LoginPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthBackdrop>
   )
 }

@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AuthBackdrop } from '@/components/AuthBackdrop'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 import { FOOT_LABELS } from '@/lib/labels'
@@ -46,8 +47,8 @@ export function CompleteProfilePage() {
   const canSubmit = positions.length > 0 && !!preferredFoot && !!birthDate
 
   return (
-    <div className="flex min-h-svh items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-xl">
+    <AuthBackdrop>
+      <Card className="w-full max-w-xl border-0 shadow-2xl">
         <CardHeader>
           <CardTitle>Complète ton profil</CardTitle>
           <CardDescription>
@@ -118,6 +119,6 @@ export function CompleteProfilePage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthBackdrop>
   )
 }

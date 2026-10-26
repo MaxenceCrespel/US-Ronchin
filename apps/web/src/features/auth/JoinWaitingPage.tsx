@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AuthBackdrop } from '@/components/AuthBackdrop'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { FootballSpinner } from '@/components/FootballSpinner'
 import { fetchJoinStatus } from './api'
@@ -33,11 +34,9 @@ export function JoinWaitingPage() {
   }, [status])
 
   return (
-    <div className="from-club-blue to-club-blue-dark relative flex min-h-svh items-center justify-center overflow-hidden bg-gradient-to-br p-4">
-      <div className="pointer-events-none absolute -top-24 -left-24 size-96 rounded-full bg-white/10 blur-3xl" />
-      <div className="bg-club-gold/20 pointer-events-none absolute -right-24 -bottom-24 size-96 rounded-full blur-3xl" />
+    <AuthBackdrop>
 
-      <Card className="animate-football-roll-in relative w-full max-w-sm border-white/20 shadow-2xl">
+      <Card className="animate-football-roll-in relative w-full max-w-sm border-0 shadow-2xl">
         <CardHeader className="items-center text-center">
           <img src="/club-logo.png" alt="US Ronchin" className="mb-2 h-20 w-20 drop-shadow" />
           <CardTitle>Rejoindre US Ronchin</CardTitle>
@@ -85,6 +84,6 @@ export function JoinWaitingPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </AuthBackdrop>
   )
 }

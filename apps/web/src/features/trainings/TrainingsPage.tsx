@@ -828,7 +828,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                       title="Marquer présent et ajouter à l'équipe"
                       aria-label="Marquer présent et ajouter à l'équipe"
                       disabled={addPresentMutation.isPending}
-                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-40"
+                      className="flex size-10 items-center justify-center rounded-xl border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-result-win hover:text-result-win disabled:opacity-40"
                       onClick={() => addPresentMutation.mutate(player.id)}
                     >
                       <Check className="size-4" />
@@ -838,7 +838,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                       title="Marquer absent"
                       aria-label="Marquer absent"
                       disabled={forceAbsentMutation.isPending}
-                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                      className="flex size-10 items-center justify-center rounded-xl border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-result-loss hover:text-result-loss disabled:opacity-40"
                       onClick={() => forceAbsentMutation.mutate(player.id)}
                     >
                       <X className="size-4" />
@@ -1174,24 +1174,24 @@ function ManageSessionDialog({
                         disabled={validateMutation.isPending || bulkPresentMutation.isPending}
                         onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
                         className={cn(
-                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          'flex size-11 items-center justify-center rounded-xl border transition-colors',
                           actual === 'PRESENT'
-                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                            : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
+                            ? 'border-result-win bg-result-win text-white'
+                            : 'border-muted-foreground/30 bg-muted/50 text-muted-foreground hover:border-result-win hover:text-result-win',
                         )}
                         aria-label="Marquer présent"
                       >
-                        <Check className="size-4" />
+                        <Check className="size-5" strokeWidth={2.6} />
                       </button>
                       <button
                         type="button"
                         disabled={validateMutation.isPending || bulkPresentMutation.isPending}
                         onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
                         className={cn(
-                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          'flex size-11 items-center justify-center rounded-xl border transition-colors',
                           actual === 'ABSENT'
-                            ? 'border-destructive bg-destructive text-white'
-                            : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
+                            ? 'border-result-loss bg-result-loss text-white'
+                            : 'border-muted-foreground/30 bg-muted/50 text-muted-foreground hover:border-result-loss hover:text-result-loss',
                         )}
                         aria-label="Marquer absent"
                       >

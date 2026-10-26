@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { AuthBackdrop } from '@/components/AuthBackdrop'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useAuthStore } from '@/lib/auth-store'
 import { PositionPicker } from '@/components/PositionPicker'
@@ -31,8 +32,8 @@ export function FixPositionsPage() {
   if (!user) return null
 
   return (
-    <div className="flex min-h-svh items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-xl">
+    <AuthBackdrop>
+      <Card className="w-full max-w-xl border-0 shadow-2xl">
         <CardHeader>
           <CardTitle>Repasse en revue tes postes</CardTitle>
           <CardDescription>
@@ -68,6 +69,6 @@ export function FixPositionsPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </AuthBackdrop>
   )
 }
