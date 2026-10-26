@@ -25,6 +25,8 @@
   --club-blue: #0071ab;
   --club-blue-dark: #004f78;
   --club-gold: #f4b400;
+  --result-win: #18794a;
+  --result-loss: #c2410c;
 }
 
 
@@ -54,6 +56,10 @@
   --color-club-blue: var(--club-blue);
   --color-club-blue-dark: var(--club-blue-dark);
   --color-club-gold: var(--club-gold);
+  --color-result-win: var(--result-win);
+  --color-result-loss: var(--result-loss);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', ui-sans-serif, sans-serif;
 }
 
 @layer base {

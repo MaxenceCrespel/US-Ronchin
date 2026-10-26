@@ -313,7 +313,7 @@ export function PlayerRatingsPage() {
       </ul>
 
       {/* Save bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/95 px-4 py-2.5 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 border-t bg-white/95 px-4 py-2.5 backdrop-blur md:bottom-0">
         <div className="mx-auto flex max-w-xl items-center gap-3">
           <p className="text-muted-foreground flex-1 text-xs leading-snug" aria-live="polite">
             {!allRated ? (
