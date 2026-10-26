@@ -4,7 +4,7 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake, Gauge, Star } from 'lucide-react'
+import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake, Gauge, Star, Shield } from 'lucide-react'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,10 +12,12 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MatchResultBadge } from '@/components/MatchResultBadge'
+import { TeamLogo } from '@/components/TeamLogo'
+import { getMatchResult, RESULT_COLORS, RESULT_LABELS } from '@/lib/match-result'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
-import { pluralize } from '@/lib/utils'
-import type { Attendance, AttendanceStatus, MatchAttendance, MatchSource } from '@/lib/types'
+import { cn, pluralize } from '@/lib/utils'
+import type { Attendance, AttendanceStatus, Match, MatchAttendance, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import {
@@ -125,7 +127,7 @@ function UpcomingSessionCard({
   const waitlistedTotal = waitlistedPlayerCount + waitlistedGuestTotal
 
   return (
-    <Card className="border-club-blue/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+    <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -133,7 +135,7 @@ function UpcomingSessionCard({
               <Dumbbell className="size-4.5" />
             </span>
             <div>
-              <p className="text-base font-semibold">Entraînement</p>
+              <p className="font-display text-xl leading-tight font-bold uppercase">Entraînement</p>
               <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
                 <span>{formatDate(date)}</span>
                 <span className="inline-flex items-center gap-1">
@@ -324,7 +326,7 @@ function UpcomingMatchCard({
   const guestTotal = attendanceQuery.data?.reduce((sum, a) => sum + a.guestCount, 0) ?? 0
 
   return (
-    <Card className="border-club-gold/70 gap-0 overflow-hidden rounded-2xl border-l-4 py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+    <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -332,7 +334,7 @@ function UpcomingMatchCard({
               <Trophy className="size-4.5" />
             </span>
             <div>
-              <p className="text-base font-semibold">vs {opponent}</p>
+              <p className="font-display text-xl leading-tight font-bold uppercase">vs {opponent}</p>
               <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
                 <span>{formatDate(date)}</span>
                 <span className="inline-flex items-center gap-1">
@@ -454,6 +456,100 @@ function UpcomingMatchCard({
         </Link>
       </CardContent>
     </Card>
+  )
+}
+
+const SECTION_TITLE = 'font-display mb-3 text-xl font-bold tracking-wide uppercase'
+
+/** The one thing a player opens the app for most weeks: when and where the next match is.
+ * Home side on the left, like a scoreboard; the whole card opens the match sheet, where
+ * presence and the convocation live (the "À venir" list below keeps the quick toggle). */
+function NextMatchHero({ match, todayKey }: { match: Match; todayKey: string }) {
+  const weAreHome = match.homeAway === 'HOME'
+  const opponentLogo = weAreHome ? match.awayLogo : match.homeLogo
+  const us = (
+    <div className="flex min-w-0 flex-col items-center gap-2">
+      <img src="/club-logo.png" alt="" className="size-14 object-contain" />
+      <span className="font-display truncate text-lg font-bold uppercase">Ronchin</span>
+    </div>
+  )
+  const them = (
+    <div className="flex min-w-0 flex-col items-center gap-2">
+      {opponentLogo ? (
+        <TeamLogo src={opponentLogo} className="size-14" />
+      ) : (
+        <span className="flex size-14 items-center justify-center rounded-full bg-white/15">
+          <Shield className="size-7" />
+        </span>
+      )}
+      <span className="font-display max-w-full truncate text-lg font-bold uppercase">{match.opponent}</span>
+    </div>
+  )
+  const label = match.competition ?? (match.source === 'FRIENDLY' ? 'Match amical' : 'Match officiel')
+  return (
+    <Link
+      to={`/matches/${match.id}`}
+      className="bg-club-blue flex flex-col gap-4 rounded-2xl p-5 text-white shadow-lg transition-transform hover:-translate-y-0.5"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="truncate rounded-full bg-white/20 px-2.5 py-1 text-xs font-bold tracking-wide uppercase">
+          {label}
+        </span>
+        <span className="shrink-0 text-sm font-semibold capitalize">
+          {new Date(`${match.date}T00:00:00`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+          {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5).replace(':', 'h')}`}
+        </span>
+      </div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+        {weAreHome ? us : them}
+        <span className="font-display text-3xl font-extrabold text-white/80 italic">VS</span>
+        {weAreHome ? them : us}
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-white/25 pt-3 text-sm">
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <MapPin className="size-4 shrink-0" />
+          <span className="truncate">{match.venue ?? (weAreHome ? 'Domicile' : 'Extérieur')}</span>
+        </span>
+        <span className="bg-club-gold text-club-blue-dark shrink-0 rounded-full px-3 py-1 text-xs font-bold">
+          {relativeDayLabel(match.date, todayKey)}
+        </span>
+      </div>
+    </Link>
+  )
+}
+
+/** Last results as a row of V/N/D tiles, oldest on the left so it reads like a form guide. */
+function FormStrip({ matches }: { matches: Match[] }) {
+  const tiles = matches
+    .map((m) => ({ match: m, result: getMatchResult(m) }))
+    .filter((t) => t.result)
+    .reverse()
+  if (tiles.length === 0) return null
+  return (
+    <div>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="font-display text-xl font-bold tracking-wide uppercase">Forme</h2>
+        <Link to="/matches" className="text-club-blue text-sm font-medium hover:underline">
+          Tous les matchs
+        </Link>
+      </div>
+      <div className="flex gap-2">
+        {tiles.map(({ match, result }) => (
+          <Link
+            key={match.id}
+            to={`/matches/${match.id}`}
+            aria-label={`${result === 'W' ? 'Victoire' : result === 'L' ? 'Défaite' : 'Nul'} contre ${match.opponent}, ${match.scoreHome}-${match.scoreAway}`}
+            title={`vs ${match.opponent} · ${match.scoreHome}-${match.scoreAway}`}
+            className={cn(
+              'font-display flex h-11 flex-1 items-center justify-center rounded-xl text-lg font-extrabold transition-transform hover:-translate-y-0.5',
+              RESULT_COLORS[result!],
+            )}
+          >
+            {RESULT_LABELS[result!]}
+          </Link>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -802,7 +898,7 @@ export function HomePage() {
   return (
     <div className="flex flex-col gap-6" data-tour="home-page">
       <div>
-        <h1 className="text-2xl font-semibold">
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">
           {greeting()} {user?.firstName} 👋
         </h1>
         <p className="text-muted-foreground text-sm">
@@ -815,7 +911,7 @@ export function HomePage() {
       {actionItems.length > 0 && (
         <Card className="border-amber-300 py-0">
           <CardHeader className="border-b border-amber-200 bg-amber-50 py-3 [.border-b]:pb-3">
-            <CardTitle className="flex items-center gap-2 text-sm text-amber-900">
+            <CardTitle className="font-display flex items-center gap-2 text-base tracking-wide text-amber-900 uppercase">
               <AlertTriangle className="size-4" />
               À traiter
               <Badge className="ml-auto bg-amber-200 text-amber-900 hover:bg-amber-200">
@@ -840,6 +936,8 @@ export function HomePage() {
           </CardContent>
         </Card>
       )}
+
+      {upcomingMatches[0] && <NextMatchHero match={upcomingMatches[0]} todayKey={todayKey} />}
 
       {upcomingBirthdays.length > 0 && (
         <Card className="border-club-gold/40 py-0">
@@ -876,7 +974,7 @@ export function HomePage() {
       )}
 
       <div>
-        <h2 className="mb-3 text-lg font-medium">📅 À venir</h2>
+        <h2 className={SECTION_TITLE}>À venir</h2>
         <Tabs defaultValue="trainings">
           <TabsList className="mb-3">
             <TabsTrigger value="trainings">
@@ -945,44 +1043,41 @@ export function HomePage() {
         </Tabs>
       </div>
 
+      <FormStrip matches={recentPlayedMatches} />
+
       {myStats && <MyStatsCard stats={myStats} />}
 
       <MonthlyChallengesCard />
 
       {(topScorer || mostDecisive) && (
         <div>
-          <h2 className="mb-3 text-lg font-medium">🏆 En vue chez les Ronchinois</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <h2 className={SECTION_TITLE}>En vue chez les Ronchinois</h2>
+          <div className="grid grid-cols-2 gap-3">
             {topScorer && (
-              <Card>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Meilleur buteur</p>
-                    <p className="font-medium">
-                      {topScorer.firstName} {topScorer.lastName}
-                    </p>
-                  </div>
-                  <Badge className="bg-club-gold text-black">
-                    {topScorer.goals} {pluralize('but', topScorer.goals)}
-                  </Badge>
-                </CardContent>
-              </Card>
+              <div className="bg-club-blue-dark flex flex-col gap-1 rounded-2xl p-4 text-white">
+                <p className="text-club-gold text-xs font-bold tracking-wide uppercase">Meilleur buteur</p>
+                <p className="truncate font-semibold">
+                  {topScorer.firstName} {topScorer.lastName}
+                </p>
+                <p className="font-display text-4xl leading-none font-extrabold">
+                  {topScorer.goals}{' '}
+                  <span className="text-base font-semibold text-white/75">{pluralize('but', topScorer.goals)}</span>
+                </p>
+              </div>
             )}
             {mostDecisive && (
-              <Card>
-                <CardContent className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="text-muted-foreground text-xs">Joueur le plus décisif</p>
-                    <p className="font-medium">
-                      {mostDecisive.firstName} {mostDecisive.lastName}
-                    </p>
-                  </div>
-                  <Badge className="bg-club-gold text-black">
-                    {mostDecisive.goals + mostDecisive.assists}{' '}
+              <div className="bg-card flex flex-col gap-1 rounded-2xl border p-4">
+                <p className="text-muted-foreground text-xs font-bold tracking-wide uppercase">Plus décisif</p>
+                <p className="truncate font-semibold">
+                  {mostDecisive.firstName} {mostDecisive.lastName}
+                </p>
+                <p className="font-display text-4xl leading-none font-extrabold">
+                  {mostDecisive.goals + mostDecisive.assists}{' '}
+                  <span className="text-muted-foreground text-base font-semibold">
                     {pluralize('pt', mostDecisive.goals + mostDecisive.assists)}
-                  </Badge>
-                </CardContent>
-              </Card>
+                  </span>
+                </p>
+              </div>
             )}
           </div>
           <Link to="/stats" className="text-club-blue mt-2 inline-block text-sm hover:underline">
@@ -993,17 +1088,17 @@ export function HomePage() {
 
       {recentResults.length > 0 && (
         <div>
-          <h2 className="mb-3 text-lg font-medium">Derniers résultats</h2>
+          <h2 className={SECTION_TITLE}>Derniers résultats</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {recentResults.map((match) => (
               <Link key={match.id} to={`/matches/${match.id}`}>
                 <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                   <CardHeader>
-                    <CardTitle className="text-base">vs {match.opponent}</CardTitle>
+                    <CardTitle className="font-display text-lg uppercase">vs {match.opponent}</CardTitle>
                     <CardDescription className="capitalize">{formatDate(match.date)}</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <p className="flex items-center gap-2 text-2xl font-semibold">
+                    <p className="font-display flex items-center gap-2 text-3xl font-extrabold">
                       {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
                       <MatchResultBadge match={match} />
                     </p>
