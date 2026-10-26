@@ -77,15 +77,21 @@ export function StandingsCard() {
               </TableHeader>
               <TableBody>
                 {standings.map((s) => (
-                  <TableRow key={s.id} className={cn(s.isUs && 'bg-club-blue/5 font-semibold')}>
-                    <TableCell>{s.rank}</TableCell>
+                  <TableRow
+                    key={s.id}
+                    className={cn(
+                      s.isUs &&
+                        'bg-club-blue-dark hover:bg-club-blue-dark font-semibold text-white shadow-[inset_4px_0_0_var(--club-gold)]',
+                    )}
+                  >
+                    <TableCell className="font-display text-base font-extrabold">{s.rank}</TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1.5">
                         <TeamLogo src={s.logo} />
                         {s.teamName}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right">{s.points}</TableCell>
+                    <TableCell className="font-display text-right text-base font-extrabold">{s.points}</TableCell>
                     <TableCell className="text-right">{s.played}</TableCell>
                     <TableCell className="text-right">{s.won}</TableCell>
                     <TableCell className="text-right">{s.drawn}</TableCell>
