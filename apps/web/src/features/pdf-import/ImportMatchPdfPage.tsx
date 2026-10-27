@@ -228,14 +228,24 @@ export function ImportMatchPdfPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            <Input
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) uploadMutation.mutate(file)
-              }}
-            />
+            <label className="border-club-blue/40 bg-accent/50 hover:bg-accent focus-within:ring-ring flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition-colors focus-within:ring-2">
+              <span className="bg-club-blue flex size-12 items-center justify-center rounded-full text-white">
+                <Upload className="size-5" />
+              </span>
+              <span className="font-semibold">Choisir la feuille de match (PDF)</span>
+              <span className="text-muted-foreground text-xs">
+                Composition, buts et cartons sont extraits automatiquement.
+              </span>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) uploadMutation.mutate(file)
+                }}
+              />
+            </label>
             {uploadMutation.isPending && (
               <p className="text-muted-foreground text-sm">Analyse du PDF en cours...</p>
             )}

@@ -2372,7 +2372,7 @@ export function MatchDetailPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {teammates.map((entry) => {
                       const selected = motmSelection === entry.id
                       return (
@@ -2380,7 +2380,11 @@ export function MatchDetailPage() {
                           key={entry.id}
                           type="button"
                           onClick={() => setMotmSelection(entry.id)}
-                          className="flex flex-col items-center gap-1.5"
+                          aria-pressed={selected}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition-colors',
+                            selected ? 'border-club-gold bg-club-gold/10' : 'bg-card hover:bg-accent border-transparent',
+                          )}
                         >
                           <PlayerAvatar
                             avatarUrl={entry.user?.avatarUrl}
@@ -2390,12 +2394,10 @@ export function MatchDetailPage() {
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
-                              selected
-                                ? 'border-club-gold ring-club-gold/40 border-2 ring-4'
-                                : 'opacity-70',
+                              selected ? 'border-club-gold ring-club-gold/40 border-2 ring-4' : 'opacity-80',
                             )}
                           />
-                          <span className="w-16 truncate text-center text-xs font-medium">
+                          <span className="w-full truncate text-center text-xs font-semibold">
                             {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
@@ -2527,7 +2529,7 @@ export function MatchDetailPage() {
                 )
               ) : defenseBossCandidates.length > 0 ? (
                 <>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {defenseBossCandidates.map((entry) => {
                       const selected = defenseBossSelection === entry.id
                       return (
@@ -2535,7 +2537,11 @@ export function MatchDetailPage() {
                           key={entry.id}
                           type="button"
                           onClick={() => setDefenseBossSelection(entry.id)}
-                          className="flex flex-col items-center gap-1.5"
+                          aria-pressed={selected}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition-colors',
+                            selected ? 'border-club-blue bg-club-blue/10' : 'bg-card hover:bg-accent border-transparent',
+                          )}
                         >
                           <PlayerAvatar
                             avatarUrl={entry.user?.avatarUrl}
@@ -2545,12 +2551,10 @@ export function MatchDetailPage() {
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
-                              selected
-                                ? 'border-club-blue ring-club-blue/40 border-2 ring-4'
-                                : 'opacity-70',
+                              selected ? 'border-club-blue ring-club-blue/40 border-2 ring-4' : 'opacity-80',
                             )}
                           />
-                          <span className="w-16 truncate text-center text-xs font-medium">
+                          <span className="w-full truncate text-center text-xs font-semibold">
                             {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
