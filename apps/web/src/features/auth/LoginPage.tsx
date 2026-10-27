@@ -36,10 +36,7 @@ export function LoginPage() {
 
       <div className="animate-football-roll-in flex w-full max-w-sm flex-col gap-7 text-white">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="relative">
-            <img src="/club-logo.png" alt="US Ronchin" className="size-24 drop-shadow" />
-            <span className="animate-football-bounce absolute -top-1 -right-3 text-xl">⚽</span>
-          </div>
+          <img src="/club-logo.png" alt="US Ronchin" className="size-24 drop-shadow" />
           <h1 className="font-display text-5xl leading-none font-extrabold uppercase italic">Espace équipe</h1>
           <p className="text-club-gold text-xs font-bold tracking-widest uppercase">US Ronchin · Depuis 1902</p>
         </div>
