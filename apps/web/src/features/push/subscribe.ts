@@ -1,4 +1,3 @@
-import { isAxiosError } from 'axios'
 import { fetchVapidPublicKey, subscribePush } from './api'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -86,32 +85,7 @@ export async function enablePushNotifications(): Promise<EnablePushResult> {
       return { ok: false, error: "Les notifications ne sont pas configurées côté serveur pour l'instant." }
     }
     return { ok: true }
-  } catch (err) {
-    // Logged so the actual cause is visible in the browser console, not only the summary.
-    console.error("Activation des notifications impossible :", err)
-    return { ok: false, error: describeEnableError(err) }
+  } catch {
+    return { ok: false, error: "Impossible d'activer les notifications." }
   }
-}
-
-/** Turns the usual failures into something the player can act on — the browser's push
- * service refusing (Brave blocks it by default, private windows have none), the server not
- * answering, or a key the browser rejects. */
-export function describeEnableError(err: unknown): string {
-  if (isAxiosError(err)) {
-    return err.response
-      ? `Le serveur a refusé l'abonnement (erreur ${err.response.status}). Réessaie plus tard.`
-      : 'Le serveur ne répond pas — vérifie ta connexion et réessaie.'
-  }
-  if (err instanceof DOMException) {
-    if (err.name === 'AbortError' || err.name === 'NotSupportedError') {
-      return "Ton navigateur bloque le service de notifications (c'est le cas de Brave par défaut, ou d'une fenêtre privée). Essaie avec Chrome, Edge, Firefox ou l'appli installée."
-    }
-    if (err.name === 'NotAllowedError') {
-      return 'Autorisation refusée — active les notifications dans les réglages du navigateur.'
-    }
-    if (err.name === 'InvalidAccessError' || err.name === 'InvalidCharacterError') {
-      return "La clé de notifications du serveur est invalide — préviens l'admin."
-    }
-  }
-  return "Impossible d'activer les notifications."
 }
