@@ -118,7 +118,7 @@ export function ProfilePage() {
           >
             <Pencil className="size-4" />
           </Link>
-          <div className="flex items-center gap-4 pr-11">
+          <div className="flex items-center gap-4 pr-14">
             {levelQuery.data ? (
                 <AccountLevelDialog level={levelQuery.data}>
                   <AccountLevelRing userId={user.id} ringWidth={4}>

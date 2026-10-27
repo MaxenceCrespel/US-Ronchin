@@ -186,7 +186,7 @@ export function Layout() {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* On a phone the header carries the club's identity (the sidebar is tucked behind
             "Plus"), so it takes the club's dark blue; from md up it's the light utility bar. */}
-        <header className="bg-club-blue-dark flex items-center justify-between gap-3 px-4 py-2.5 text-white md:justify-end md:border-b md:bg-transparent md:px-6 md:text-inherit">
+        <header className="max-md:bg-club-blue-dark flex items-center justify-between gap-3 px-4 py-2.5 max-md:text-white md:justify-end md:border-b md:px-6">
           <Link to="/" className="flex items-center gap-2.5 md:hidden">
             <img src="/club-logo.png" alt="" className="size-8 shrink-0" />
             <span className="font-display text-lg font-extrabold tracking-wide uppercase">US Ronchin</span>
@@ -209,7 +209,7 @@ export function Layout() {
                   <p className="text-sm font-medium">
                     {user.firstName} {user.lastName}
                   </p>
-                  <p className="text-xs text-white/75 md:text-muted-foreground">{roleLabel}</p>
+                  <p className="text-muted-foreground text-xs max-md:text-white/75">{roleLabel}</p>
                 </div>
               </Link>
             )}
