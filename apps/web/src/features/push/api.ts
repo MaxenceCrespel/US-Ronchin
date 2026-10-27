@@ -12,3 +12,25 @@ export async function subscribePush(subscription: PushSubscriptionJSON): Promise
 export async function unsubscribePush(endpoint: string): Promise<void> {
   await apiClient.delete('/push/subscribe', { data: { endpoint } })
 }
+
+export type NotificationCategory =
+  | 'ATTENDANCE_REMINDERS'
+  | 'CONVOCATIONS'
+  | 'MATCH_RESULTS'
+  | 'TRAINING_TEAMS'
+  | 'AWARDS'
+  | 'BADGES'
+  | 'BIRTHDAYS'
+  | 'COACH'
+
+export async function fetchMutedCategories(): Promise<NotificationCategory[]> {
+  const { data } = await apiClient.get<{ mutedCategories: NotificationCategory[] }>('/push/preferences')
+  return data.mutedCategories
+}
+
+export async function saveMutedCategories(mutedCategories: NotificationCategory[]): Promise<NotificationCategory[]> {
+  const { data } = await apiClient.put<{ mutedCategories: NotificationCategory[] }>('/push/preferences', {
+    mutedCategories,
+  })
+  return data.mutedCategories
+}

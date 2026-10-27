@@ -13,6 +13,7 @@ import { dealTeams, Line } from './team-deal';
 import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
 import { pointsForResult } from './points-for-result';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 const DEFAULT_TEAM_COUNT = 2;
 
@@ -229,6 +230,7 @@ export class TeamBalancingService {
     // scheduler's auto-generation (1h30 before kickoff) and a coach re-generating by hand.
     await this.pushNotificationsService.sendToUsers(presentUserIds, {
       title: 'Équipes prêtes !',
+      category: NotificationCategory.TRAINING_TEAMS,
       body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
       url: `/trainings?session=${sessionId}`,
     });

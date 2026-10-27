@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { NotificationCategory } from '../../push-notifications/notification-category';
 
 export enum UserRole {
   PLAYER = 'PLAYER',
@@ -163,6 +164,17 @@ export class User {
    * (a new player) don't wait out a stale 7-day window from a much earlier reminder. */
   @Column({ name: 'player_ratings_reminder_sent_at', type: 'timestamp', nullable: true })
   playerRatingsReminderSentAt: Date | null;
+
+  /** Push categories this user turned off on the notifications screen — checked by
+   * PushNotificationsService before sending a categorised push. Empty means everything on. */
+  @Column({
+    name: 'muted_notification_categories',
+    type: 'enum',
+    enum: NotificationCategory,
+    array: true,
+    default: '{}',
+  })
+  mutedNotificationCategories: NotificationCategory[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

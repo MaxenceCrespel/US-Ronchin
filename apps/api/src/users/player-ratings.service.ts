@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CoachPlayerRating } from './entities/coach-player-rating.entity';
 import { User, UserRole, UserStatus } from './entities/user.entity';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 export interface PlayerToRate {
   userId: string;
@@ -104,6 +105,7 @@ export class PlayerRatingsService {
     try {
       await this.pushNotificationsService.sendToUsers(doneCoachIds, {
         title: 'Un nouveau joueur est à noter',
+        category: NotificationCategory.COACH,
         body: `${newPlayer.firstName} ${newPlayer.lastName} a rejoint l'équipe. Donne-lui une note de 1 à 10.`,
         url: '/player-ratings',
       });

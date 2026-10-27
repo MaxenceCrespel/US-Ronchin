@@ -29,6 +29,7 @@ import {
   MOTM_REVEAL_DELAY_MS,
 } from './motm-utils';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 export interface RatingSummaryEntry {
   /** Null when the rated player is still a guest (no account linked yet). */
@@ -180,6 +181,7 @@ export class MatchesService {
         composition.map((c) => c.userId).filter((id): id is string => !!id),
         {
           title: 'Match terminé',
+          category: NotificationCategory.MATCH_RESULTS,
           body: `Le match contre ${saved.opponent} est marqué comme joué : votez pour l'homme du match, le patron de la défense, et notez vos coéquipiers.`,
           url: `/matches/${saved.id}`,
         },
@@ -585,16 +587,19 @@ export class MatchesService {
     const url = `/matches/${matchId}`;
     await this.pushNotificationsService.sendToUsers(added, {
       title: 'Tu es convoqué !',
+      category: NotificationCategory.CONVOCATIONS,
       body: `Tu es convoqué pour le match contre ${match.opponent}. Sois à l'heure !`,
       url,
     });
     await this.pushNotificationsService.sendToUsers(notRetained, {
       title: 'Convocation',
+      category: NotificationCategory.CONVOCATIONS,
       body: `Tu n'es pas retenu pour le match contre ${match.opponent} cette fois.`,
       url,
     });
     await this.pushNotificationsService.sendToUsers(removed, {
       title: 'Convocation annulée',
+      category: NotificationCategory.CONVOCATIONS,
       body: `Le coach a mis à jour la convocation pour le match contre ${match.opponent} : tu n'es plus convoqué.`,
       url,
     });

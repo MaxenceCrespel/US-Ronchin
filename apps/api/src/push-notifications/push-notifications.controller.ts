@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -6,6 +14,7 @@ import type { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { PushNotificationsService } from './push-notifications.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { UnsubscribeDto } from './dto/unsubscribe.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('push')
@@ -39,5 +48,27 @@ export class PushNotificationsController {
       currentUser.id,
       dto.endpoint,
     );
+  }
+
+  @Get('preferences')
+  async getPreferences(@CurrentUser() currentUser: AuthenticatedUser) {
+    return {
+      mutedCategories: await this.pushNotificationsService.getMutedCategories(
+        currentUser.id,
+      ),
+    };
+  }
+
+  @Put('preferences')
+  async updatePreferences(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: UpdatePreferencesDto,
+  ) {
+    return {
+      mutedCategories: await this.pushNotificationsService.setMutedCategories(
+        currentUser.id,
+        dto.mutedCategories,
+      ),
+    };
   }
 }

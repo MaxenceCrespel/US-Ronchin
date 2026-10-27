@@ -10,6 +10,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerRatingsService } from './player-ratings.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 const SALT_ROUNDS = 10;
 
@@ -158,6 +159,7 @@ export class UsersService {
     const saved = await this.usersRepository.save(user);
     await this.pushNotificationsService.sendToCoaches({
       title: 'Nouveau joueur',
+      category: NotificationCategory.COACH,
       body: `${saved.firstName} ${saved.lastName} attend une validation`,
       url: '/players',
     });

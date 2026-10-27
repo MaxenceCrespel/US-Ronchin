@@ -22,6 +22,7 @@ import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitio
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { getCurrentSeasonLabel, getSeasonBounds, isInSeason, previousSeasonLabel } from '../stats/season.util';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 /** What actually happened at training, not what the player declared beforehand. */
 function effectiveStatus(a: Attendance): AttendanceStatus | null {
@@ -879,6 +880,7 @@ export class BadgesService {
         for (const notif of notifications) {
           await this.pushNotificationsService.sendToUser(userId, {
             title: 'Badge débloqué !',
+            category: NotificationCategory.BADGES,
             body: notif.title,
             url: '/profile',
           });
