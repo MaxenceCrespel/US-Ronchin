@@ -45,10 +45,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { approveUser, createInvitation } from '@/features/auth/api'
-import { SENIORITY_TIER_LABELS, SUB_POSITION_ABBR } from '@/lib/labels'
+import { SENIORITY_TIER_LABELS, SUB_POSITION_ABBR, SUB_POSITION_BAND, POSITION_LABELS } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasAdminAccess, hasCoachAccess } from '@/lib/roles'
-import type { SeniorityTier, User, UserRole } from '@/lib/types'
+import type { PlayerPosition, SeniorityTier, User, UserRole } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { adminUpdateUser, deleteUser, fetchPlayers, resetPlayerPassword } from './api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { AccountLevelRing, useAllAccountLevels } from '@/components/AccountLevelRing'
@@ -642,6 +643,7 @@ export function PlayersPage() {
   const [search, setSearch] = useState('')
   const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>('all')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [bandFilter, setBandFilter] = useState<PlayerPosition | 'all'>('all')
 
   const allPlayers = playersQuery.data ?? []
   const licensedCount = allPlayers.filter((p) => p.isLicensed).length
@@ -649,11 +651,14 @@ export function PlayersPage() {
     if (licenseFilter === 'licensed' && !p.isLicensed) return false
     if (licenseFilter === 'unlicensed' && p.isLicensed) return false
     if (roleFilter !== 'all' && p.role !== roleFilter) return false
+    if (bandFilter !== 'all' && !(p.positions ?? []).some((pos) => SUB_POSITION_BAND[pos] === bandFilter)) return false
     const q = search.trim().toLowerCase()
     if (q && !`${p.firstName} ${p.lastName}`.toLowerCase().includes(q)) return false
     return true
   })
-  const filtersActive = search.trim() !== '' || licenseFilter !== 'all' || roleFilter !== 'all'
+  const filtersActive =
+    search.trim() !== '' || licenseFilter !== 'all' || roleFilter !== 'all' || bandFilter !== 'all'
+  const pendingPlayers = allPlayers.filter((p) => p.status === 'PENDING')
 
   return (
     <div className="flex flex-col gap-6">
@@ -671,6 +676,33 @@ export function PlayersPage() {
           {isCoach && <InvitePlayerDialog />}
         </div>
       </div>
+
+      {isCoach && pendingPlayers.length > 0 && (
+        <section className="flex flex-col gap-2" aria-label="Comptes à valider">
+          <h2 className="font-display text-result-loss text-xl font-bold tracking-wide uppercase">
+            À valider · {pendingPlayers.length}
+          </h2>
+          {pendingPlayers.map((player) => (
+            <div
+              key={player.id}
+              className="bg-card border-club-gold flex flex-wrap items-center gap-3 rounded-2xl border-[1.5px] p-3"
+            >
+              <PlayerAvatar avatarUrl={player.avatarUrl} firstName={player.firstName} lastName={player.lastName} />
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-semibold">
+                  {player.firstName} {player.lastName}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {player.positions?.length ? player.positions.map((p) => SUB_POSITION_ABBR[p]).join(', ') : 'Poste non renseigné'}
+                </span>
+              </span>
+              <Button disabled={approveMutation.isPending} onClick={() => approveMutation.mutate(player.id)}>
+                Valider
+              </Button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {isCoach && <ClubJoinQrCard />}
 
@@ -720,6 +752,23 @@ export function PlayersPage() {
             </Select>
           </div>
 
+          <div role="group" aria-label="Filtrer par ligne" className="flex flex-wrap gap-2">
+            {(['all', 'GOALKEEPER', 'DEFENDER', 'MIDFIELDER', 'FORWARD'] as const).map((band) => (
+              <button
+                key={band}
+                type="button"
+                aria-pressed={bandFilter === band}
+                onClick={() => setBandFilter(band)}
+                className={cn(
+                  'min-h-9 rounded-full border px-3.5 text-sm font-semibold transition-colors',
+                  bandFilter === band ? 'bg-club-blue-dark border-club-blue-dark text-white' : 'bg-card hover:bg-accent',
+                )}
+              >
+                {band === 'all' ? 'Tous' : `${POSITION_LABELS[band]}s`}
+              </button>
+            ))}
+          </div>
+
           {players.length === 0 ? (
             <p className="text-muted-foreground py-6 text-center text-sm">
               {filtersActive ? 'Aucun joueur ne correspond à ces filtres.' : 'Aucun joueur.'}
@@ -731,7 +780,7 @@ export function PlayersPage() {
                   the table takes over from sm upward where the width is actually there. */}
               <div className="flex flex-col gap-2.5 sm:hidden">
                 {players.map((player) => (
-                  <div key={player.id} className="flex flex-col gap-2.5 rounded-lg border p-3">
+                  <div key={player.id} className="flex flex-col gap-2.5 rounded-2xl border p-3">
                     <div className="flex items-center gap-2.5">
                       <AccountLevelRing
                         userId={player.id}

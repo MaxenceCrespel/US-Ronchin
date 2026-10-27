@@ -909,32 +909,25 @@ export function HomePage() {
       </div>
 
       {actionItems.length > 0 && (
-        <Card className="border-amber-300 py-0">
-          <CardHeader className="border-b border-amber-200 bg-amber-50 py-3 [.border-b]:pb-3">
-            <CardTitle className="font-display flex items-center gap-2 text-base tracking-wide text-amber-900 uppercase">
-              <AlertTriangle className="size-4" />
-              À traiter
-              <Badge className="ml-auto bg-amber-200 text-amber-900 hover:bg-amber-200">
-                {actionItems.length}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col divide-y p-0">
-            {actionItems.map((item) => (
-              <Link
-                key={item.id}
-                to={item.to}
-                className="hover:bg-amber-50/70 flex items-center gap-3 px-4 py-3 text-sm transition-colors"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                  <item.icon className="size-4" />
-                </span>
-                <span className="flex-1">{item.label}</span>
-                <ChevronRight className="text-muted-foreground size-4 shrink-0" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+        <section className="flex flex-col gap-2" aria-label="À traiter">
+          <h2 className="font-display flex items-center gap-2 text-xl font-bold tracking-wide uppercase">
+            <AlertTriangle className="text-club-gold size-5" />
+            {actionItems.length} {actionItems.length > 1 ? 'choses' : 'chose'} à faire
+          </h2>
+          {actionItems.map((item) => (
+            <Link
+              key={item.id}
+              to={item.to}
+              className="bg-card hover:bg-accent flex min-h-14 items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm transition-colors"
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+                <item.icon className="size-5" />
+              </span>
+              <span className="flex-1 font-medium">{item.label}</span>
+              <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+            </Link>
+          ))}
+        </section>
       )}
 
       {upcomingMatches[0] && <NextMatchHero match={upcomingMatches[0]} todayKey={todayKey} />}

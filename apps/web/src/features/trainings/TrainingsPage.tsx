@@ -110,7 +110,12 @@ interface GuestNameInput {
   position?: PlayerSubPosition
 }
 
-const TEAM_STYLES = ['border-club-blue/30 bg-accent', 'border-red-400/40 bg-red-50']
+// Solid team colours, white text — muted text and icon buttons inside are lifted to white so
+// they stay readable on the fill.
+const TEAM_STYLES = [
+  'border-club-blue bg-club-blue text-white [&_.text-muted-foreground]:text-white/80',
+  'border-result-loss bg-result-loss text-white [&_.text-muted-foreground]:text-white/80',
+]
 const TEAM_LABELS = ['Équipe Bleue', 'Équipe Rouge']
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
 
@@ -527,9 +532,9 @@ function TeamsSection({
         {TEAM_LABELS.map((label, teamIndex) => (
           <div
             key={teamIndex}
-            className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+            className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
           >
-            <p className="mb-1.5 text-sm font-semibold">{label}</p>
+            <p className="font-display mb-1.5 text-lg font-extrabold uppercase">{label}</p>
             <ul className="flex flex-col gap-1">
               {teams
                 .filter((t) => t.teamIndex === teamIndex)
@@ -766,8 +771,8 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-2">
           {TEAM_LABELS.map((label, teamIndex) => (
-            <div key={teamIndex} className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
-              <p className="mb-1.5 text-sm font-semibold">{label}</p>
+            <div key={teamIndex} className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
+              <p className="font-display mb-1.5 text-lg font-extrabold uppercase">{label}</p>
               <ul className="flex flex-col gap-1">
                 {teams
                   .filter((t) => t.teamIndex === teamIndex)
@@ -779,7 +784,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                           type="button"
                           title="Déplacer dans l'autre équipe"
                           aria-label="Déplacer dans l'autre équipe"
-                          className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
                           onClick={() => moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })}
                         >
                           <ArrowRightLeft className="size-3.5" />
@@ -789,7 +794,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                           title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           disabled={removeMutation.isPending}
-                          className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                           onClick={() =>
                             setConfirmingRemove({
                               assignmentId: t.id,
@@ -1236,9 +1241,9 @@ function ManageSessionDialog({
                   {Array.from({ length: teamCount }).map((_, teamIndex) => (
                     <div
                       key={teamIndex}
-                      className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+                      className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
                     >
-                      <p className="mb-1.5 text-sm font-semibold">
+                      <p className="font-display mb-1.5 text-lg font-extrabold uppercase">
                         {TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}
                       </p>
                       <ul className="flex flex-col gap-1">
@@ -1257,7 +1262,7 @@ function ManageSessionDialog({
                                   type="button"
                                   title="Déplacer dans l'autre équipe"
                                   aria-label="Déplacer dans l'autre équipe"
-                                  className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
                                   onClick={() =>
                                     moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })
                                   }
@@ -1269,7 +1274,7 @@ function ManageSessionDialog({
                                   title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   disabled={removeMutation.isPending}
-                                  className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                                   onClick={() =>
                                     setConfirmingRemove({
                                       assignmentId: t.id,
