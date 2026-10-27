@@ -59,6 +59,7 @@ import { cn } from '@/lib/utils'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useAuthStore } from '@/lib/auth-store'
+import { fetchPlayerStats } from '@/features/stats/api'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
 import { describeAttendanceChange } from './attendance-history'
@@ -298,16 +299,33 @@ function ManageTrainingsDialog() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as TrainingType)}>
-                <SelectTrigger aria-label="Type d'entraînement" className="bg-background w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="RECURRING">Récurrent (hebdomadaire)</SelectItem>
-                  <SelectItem value="ONE_OFF">Ponctuel</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label id="training-type-label">Type</Label>
+              <div
+                role="radiogroup"
+                aria-labelledby="training-type-label"
+                className="bg-muted grid grid-cols-2 gap-1 rounded-xl p-1"
+              >
+                {(
+                  [
+                    ['ONE_OFF', 'Ponctuel'],
+                    ['RECURRING', 'Récurrent (hebdo)'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={type === value}
+                    onClick={() => setType(value)}
+                    className={cn(
+                      'min-h-10 rounded-lg text-sm font-semibold transition-colors',
+                      type === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -323,19 +341,28 @@ function ManageTrainingsDialog() {
 
             {type === 'RECURRING' && (
               <div className="flex flex-col gap-1.5">
-                <Label>Jour de la semaine</Label>
-                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger aria-label="Jour de la semaine" className="bg-background w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((day, index) => (
-                      <SelectItem key={day} value={String(index)}>
-                        {day}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label id="training-day-label">Jour de la semaine</Label>
+                <div role="radiogroup" aria-labelledby="training-day-label" className="grid grid-cols-7 gap-1">
+                  {/* Monday first, like the week strip; DAYS itself stays Sunday-indexed (the API's). */}
+                  {[1, 2, 3, 4, 5, 6, 0].map((index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      role="radio"
+                      aria-checked={dayOfWeek === String(index)}
+                      aria-label={DAYS[index]}
+                      onClick={() => setDayOfWeek(String(index))}
+                      className={cn(
+                        'min-h-11 rounded-lg border text-sm font-bold transition-colors',
+                        dayOfWeek === String(index)
+                          ? 'bg-club-blue border-club-blue text-white'
+                          : 'bg-background hover:bg-accent',
+                      )}
+                    >
+                      {DAYS[index].charAt(0)}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -2244,6 +2271,36 @@ function TrainingRankingCard() {
   )
 }
 
+/** "Ton assiduité" — the player's own training attendance this season, as a ring. Same query
+ * key as the home page's stats, so it's usually already cached. Hidden until they've answered
+ * at least once (a 0% ring on day one would only discourage). */
+function MyAttendanceCard({ userId }: { userId: string }) {
+  const statsQuery = useQuery({ queryKey: ['stats', 'players'], queryFn: () => fetchPlayerStats() })
+  const me = statsQuery.data?.find((p) => p.userId === userId)
+  if (!me || me.trainingsResponded === 0) return null
+  const rate = Math.round((me.trainingAttendanceRate ?? 0) * 100)
+  return (
+    <div className="bg-card flex items-center gap-3 rounded-2xl border p-3.5">
+      <div
+        className="flex size-14 shrink-0 items-center justify-center rounded-full"
+        style={{ background: `conic-gradient(var(--club-blue) 0 ${rate}%, var(--muted) ${rate}% 100%)` }}
+        aria-hidden="true"
+      >
+        <span className="bg-card font-display flex size-11 items-center justify-center rounded-full text-base font-extrabold">
+          {rate}%
+        </span>
+      </div>
+      <div className="flex flex-col">
+        <span className="font-semibold">Ton assiduité cette saison</span>
+        <span className="text-muted-foreground text-sm">
+          {me.trainingsPresent} séance{me.trainingsPresent > 1 ? 's' : ''} sur {me.trainingsResponded}
+          {me.presenceStreak > 1 && ` · 🔥 ${me.presenceStreak} d'affilée`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function TrainingsPage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
@@ -2334,6 +2391,8 @@ export function TrainingsPage() {
         <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Entraînements &amp; matchs</h1>
         {isCoach && <ManageTrainingsDialog />}
       </div>
+
+      {!isCoach && user && <MyAttendanceCard userId={user.id} />}
 
       <TrainingRankingCard />
 

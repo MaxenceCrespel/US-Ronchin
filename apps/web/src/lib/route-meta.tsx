@@ -13,7 +13,7 @@ interface RouteMeta {
 }
 
 const ROUTES: RouteMeta[] = [
-  { pattern: /^\/login$/, title: 'Connexion', ownH1: false },
+  { pattern: /^\/login$/, title: 'Connexion', ownH1: true },
   { pattern: /^\/join$/, title: 'Créer mon compte', ownH1: false },
   { pattern: /^\/join\/waiting$/, title: 'Compte en attente de validation', ownH1: false },
   { pattern: /^\/accept-invitation$/, title: 'Activer mon compte', ownH1: false },
