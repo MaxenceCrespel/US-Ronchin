@@ -1617,6 +1617,11 @@ export function SessionCard({
   const cardTeamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
+  // Who answered what — the bar and line under the title, so the turnout reads at a glance.
+  const answered = attendancesQuery.data?.filter((a) => a.status) ?? []
+  const presentAnswers = answered.filter((a) => a.status === 'PRESENT').length
+  const maybeAnswers = answered.filter((a) => a.status === 'MAYBE').length
+  const absentAnswers = answered.filter((a) => a.status === 'ABSENT').length
   const [guests, setGuests] = useState<GuestNameInput[]>([])
   const [newGuestFirstName, setNewGuestFirstName] = useState('')
   const [newGuestLastName, setNewGuestLastName] = useState('')
@@ -1651,15 +1656,30 @@ export function SessionCard({
             >
               <Dumbbell className="size-4.5" />
             </span>
-            <span className={cn('text-base font-semibold', dimmed && 'text-muted-foreground')}>
-              Entraînement
-            </span>
+            <span className={cn('text-xl', dimmed && 'text-muted-foreground')}>Entraînement</span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
             {cancelled ? (
               <Badge variant="destructive">Annulée</Badge>
+            ) : isPast ? (
+              <Badge variant="secondary">Terminé</Badge>
             ) : (
-              isPast && <Badge variant="secondary">Terminé</Badge>
+              attendancesQuery.data && (
+                <span
+                  className={cn(
+                    'rounded-full px-2.5 py-1 font-sans text-xs font-bold tracking-normal normal-case',
+                    myAttendance?.status === 'PRESENT'
+                      ? 'bg-club-blue/10 text-club-blue-dark'
+                      : myAttendance?.status === 'ABSENT'
+                        ? 'bg-result-loss/10 text-result-loss'
+                        : myAttendance?.status === 'MAYBE'
+                          ? 'bg-amber-100 text-amber-900'
+                          : 'bg-club-gold text-club-blue-dark',
+                  )}
+                >
+                  {myAttendance?.status ? ATTENDANCE_STATUS_LABELS[myAttendance.status] : 'À répondre'}
+                </span>
+              )
             )}
             {isCoach && !editing && (
               <>
@@ -1761,6 +1781,19 @@ export function SessionCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {!cancelled && answered.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="bg-muted flex h-2 overflow-hidden rounded-full" aria-hidden="true">
+              <span className="bg-club-blue" style={{ width: `${(presentAnswers / answered.length) * 100}%` }} />
+              <span className="bg-club-gold" style={{ width: `${(maybeAnswers / answered.length) * 100}%` }} />
+              <span className="bg-result-loss" style={{ width: `${(absentAnswers / answered.length) * 100}%` }} />
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {presentAnswers} présent{presentAnswers > 1 ? 's' : ''} · {maybeAnswers} peut-être · {absentAnswers} absent
+              {absentAnswers > 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
         {!cancelled && (
           <div className="flex flex-col gap-2" data-tour="attendance-toggle">
             <AttendanceToggle
@@ -2347,8 +2380,17 @@ export function TrainingsPage() {
     return map
   }, [weekMatches])
 
-  const selectedSessions = sessionsByDate.get(selectedDate) ?? []
-  const selectedMatches = matchesByDate.get(selectedDate) ?? []
+  const selectedDaySessions = sessionsByDate.get(selectedDate) ?? []
+  const selectedDayMatches = matchesByDate.get(selectedDate) ?? []
+  // A day with nothing on it shows what's left of the week instead of an empty box — on a
+  // phone the strip above no longer lists the sessions, so this is where they're found.
+  const showRestOfWeek = selectedDaySessions.length === 0 && selectedDayMatches.length === 0
+  const selectedSessions = showRestOfWeek
+    ? (sessionsQuery.data ?? [])
+        .filter((s) => s.date > selectedDate)
+        .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+    : selectedDaySessions
+  const selectedMatches = showRestOfWeek ? weekMatches.filter((m) => m.date > selectedDate) : selectedDayMatches
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null)
@@ -2435,8 +2477,8 @@ export function TrainingsPage() {
             </div>
           </div>
 
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          <div className="grid min-w-[620px] grid-cols-7 gap-2 sm:min-w-0">
+          <div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {weekDays.map((day) => {
               const key = toDateKey(day)
               const daySessions = sessionsByDate.get(key) ?? []
@@ -2450,7 +2492,7 @@ export function TrainingsPage() {
                   data-tour={daySessions.length > 0 ? 'training-day-with-session' : undefined}
                   onClick={() => setSelectedDate(key)}
                   className={cn(
-                    'flex min-h-32 cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-2 text-left align-top transition-all duration-150',
+                    'flex min-h-20 cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-1 text-left align-top transition-all duration-150 sm:min-h-32 sm:p-2',
                     selected
                       ? 'border-club-blue bg-club-blue shadow-md'
                       : 'border-transparent bg-muted/40 hover:bg-muted/70',
@@ -2488,7 +2530,20 @@ export function TrainingsPage() {
                     {format(day, 'd')}
                   </span>
                   </button>
-                  <div className="flex flex-col gap-1">
+                  {/* On a phone the day is just a tappable date with a dot per event (blue =
+                      training, gold = match); the selected day's cards below carry the detail. */}
+                  <div className="flex justify-center gap-1 sm:hidden" aria-hidden="true">
+                    {daySessions.map((s) => (
+                      <span
+                        key={s.id}
+                        className={cn('size-1.5 rounded-full', s.cancelled ? 'bg-muted-foreground/40' : selected ? 'bg-white' : 'bg-club-blue')}
+                      />
+                    ))}
+                    {dayMatches.map((m) => (
+                      <span key={m.id} className="bg-club-gold size-1.5 rounded-full" />
+                    ))}
+                  </div>
+                  <div className="hidden flex-col gap-1 sm:flex">
                     {daySessions.map((s) => (
                       <button
                         key={s.id}
@@ -2541,6 +2596,9 @@ export function TrainingsPage() {
       <div className="flex flex-col gap-4">
         <h2 className="text-muted-foreground text-sm font-semibold capitalize">
           {format(new Date(`${selectedDate}T00:00:00`), 'EEEE d MMMM yyyy', { locale: fr })}
+          {showRestOfWeek && (selectedSessions.length > 0 || selectedMatches.length > 0) && (
+            <span className="normal-case"> — rien ce jour-là, voici la suite de la semaine</span>
+          )}
         </h2>
         {sessionsQuery.isLoading || matchesQuery.isLoading ? (
           <FootballSpinner />
