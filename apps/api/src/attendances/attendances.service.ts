@@ -301,7 +301,7 @@ export class AttendancesService {
       // guests still needs to be visible here, or the room they'd fit in silently vanishes.
       const rows = await this.attendancesRepository.find({
         where: { trainingSessionId },
-        relations: { user: true },
+        relations: { user: true, guests: true },
       });
       const used = rows.reduce((sum, a) => sum + headcount(a), 0);
       const room = cap - used;
@@ -356,6 +356,55 @@ export class AttendancesService {
           newConfirmed: true,
           previousConfirmedGuestCount,
           newConfirmedGuestCount: next.confirmedGuestCount,
+        }),
+      );
+      await this.syncGuestTeamMembership(trainingSessionId, next);
+    }
+  }
+
+  /** A guest promoted off the waitlist takes the place a withdrawing player left empty, so
+   * once teams exist they need a team slot too — promoting a waitlisted PLAYER already gets
+   * one (syncTeamMembership), but a guest only had its confirmedGuestCount bumped, leaving
+   * the freed place on the team unfilled. Adds every confirmed guest of this row that has no
+   * team slot yet (matched by source guest, or by label when the guest record is gone),
+   * each on whichever team is currently smallest, same as a late-arriving player. No-op when
+   * no teams exist yet. */
+  private async syncGuestTeamMembership(
+    trainingSessionId: string,
+    attendance: Pick<Attendance, 'confirmedGuestCount' | 'guests' | 'user'>,
+  ): Promise<void> {
+    const existingAssignments = await this.assignmentsRepository.find({
+      where: { trainingSessionId },
+    });
+    if (existingAssignments.length === 0) return;
+
+    const teamCount = Math.max(2, Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1);
+    const teamCounts = new Array(teamCount).fill(0);
+    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
+    const placedGuestIds = new Set(existingAssignments.map((a) => a.attendanceGuestId));
+    const placedLabels = new Set(existingAssignments.map((a) => a.guestLabel));
+
+    for (let i = 0; i < attendance.confirmedGuestCount; i++) {
+      const guest = attendance.guests?.[i];
+      // Same label rule as TeamBalancingService.generateTeams.
+      const label = guest
+        ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
+        : `Invité de ${attendance.user.firstName} #${i + 1}`;
+      if ((guest && placedGuestIds.has(guest.id)) || placedLabels.has(label)) continue;
+
+      let minTeam = 0;
+      for (let t = 1; t < teamCount; t++) {
+        if (teamCounts[t] < teamCounts[minTeam]) minTeam = t;
+      }
+      teamCounts[minTeam]++;
+      await this.assignmentsRepository.save(
+        this.assignmentsRepository.create({
+          trainingSessionId,
+          userId: null,
+          guestLabel: label,
+          guestPosition: guest?.position ?? null,
+          attendanceGuestId: guest?.id ?? null,
+          teamIndex: minTeam,
         }),
       );
     }

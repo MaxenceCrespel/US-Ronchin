@@ -199,6 +199,36 @@ describe('AttendancesService.setAttendance', () => {
     expect(assignments.map((x) => x.userId)).toEqual(['b']);
   });
 
+  it("puts a waitlisted guest on a team when a player's withdrawal frees their place", async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-09-22',
+      cap: 3,
+      attendances: [
+        { userId: 'logan' },
+        { userId: 'a' },
+        {
+          userId: 'host',
+          user: { firstName: 'Host', isLicensed: false, seniorityTier: null } as User,
+          guestCount: 1,
+          confirmedGuestCount: 0,
+          guests: [{ id: 'g1', firstName: 'Yacine', lastName: 'Djemai', position: null }],
+        } as Row,
+      ],
+      assignments: [
+        { userId: 'logan', teamIndex: 0 },
+        { userId: 'a', teamIndex: 1 },
+        { userId: 'host', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'logan', AttendanceStatus.ABSENT);
+    expect(assignments.some((x) => x.userId === 'logan')).toBe(false);
+    const yacine = assignments.find(
+      (x) => (x as { guestLabel?: string }).guestLabel === 'Yacine Djemai',
+    );
+    expect(yacine).toBeDefined();
+    expect(yacine!.teamIndex).toBe(0);
+  });
+
   it('does not put a waitlisted player on a team', async () => {
     const { service, assignments } = await build({
       sessionDate: '2026-09-22',
