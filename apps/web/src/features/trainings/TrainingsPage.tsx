@@ -624,7 +624,7 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" className="h-10 gap-2">
           <History className="size-3.5" />
           Historique
         </Button>
@@ -697,7 +697,7 @@ function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+        <Button type="button" variant="outline" size="sm" className="h-10 gap-2">
           <Shuffle className="size-3.5" />
           Générer les équipes
         </Button>
@@ -787,7 +787,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
     <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+        <Button type="button" variant="outline" size="sm" className="h-10 gap-2">
           <ArrowRightLeft className="size-3.5" />
           Modifier les équipes
         </Button>
@@ -1091,7 +1091,7 @@ function ManageSessionDialog({
           type="button"
           variant="outline"
           size="sm"
-          className={cn('h-9 justify-start gap-2 text-xs', fullyDone && 'border-emerald-500/40 text-emerald-700')}
+          className={cn('h-auto min-h-10 justify-start gap-2 rounded-2xl py-1.5', fullyDone && 'border-emerald-500/40 text-emerald-700')}
         >
           <ClipboardCheck className="size-3.5" />
           <span className="flex flex-col items-start leading-tight">
@@ -1639,8 +1639,8 @@ export function SessionCard({
     <>
     <Card
       className={cn(
-        'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-        dimmed ? 'bg-muted border-muted-foreground/30' : 'border-club-blue/70',
+        'gap-4 overflow-hidden rounded-2xl py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+        dimmed && 'bg-muted',
       )}
     >
       <CardHeader>
@@ -1661,32 +1661,15 @@ export function SessionCard({
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
             {cancelled ? (
               <Badge variant="destructive">Annulée</Badge>
-            ) : isPast ? (
-              <Badge variant="secondary">Terminé</Badge>
             ) : (
-              attendancesQuery.data && (
-                <span
-                  className={cn(
-                    'rounded-full px-2.5 py-1 font-sans text-xs font-bold tracking-normal normal-case',
-                    myAttendance?.status === 'PRESENT'
-                      ? 'bg-club-blue/10 text-club-blue-dark'
-                      : myAttendance?.status === 'ABSENT'
-                        ? 'bg-result-loss/10 text-result-loss'
-                        : myAttendance?.status === 'MAYBE'
-                          ? 'bg-amber-100 text-amber-900'
-                          : 'bg-club-gold text-club-blue-dark',
-                  )}
-                >
-                  {myAttendance?.status ? ATTENDANCE_STATUS_LABELS[myAttendance.status] : 'À répondre'}
-                </span>
-              )
+              isPast && <Badge variant="secondary">Terminé</Badge>
             )}
             {isCoach && !editing && (
               <>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-7"
+                  className="size-9"
                   onClick={() => setEditing(true)}
                   aria-label="Modifier"
                 >
@@ -1695,7 +1678,7 @@ export function SessionCard({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-destructive hover:text-destructive size-7"
+                  className="text-destructive hover:text-destructive size-9"
                   disabled={deleteSessionMutation.isPending}
                   onClick={() => setConfirmingDeleteSession(true)}
                   aria-label="Supprimer"
@@ -1768,6 +1751,24 @@ export function SessionCard({
           </form>
         ) : (
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pl-11.5 text-sm capitalize">
+            {!cancelled && !isPast && attendancesQuery.data && (
+              <span className="basis-full sm:basis-auto">
+              <span
+                className={cn(
+                  'inline-block rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap normal-case',
+                  myAttendance?.status === 'PRESENT'
+                    ? 'bg-club-blue/10 text-club-blue-dark'
+                    : myAttendance?.status === 'ABSENT'
+                      ? 'bg-result-loss/10 text-result-loss'
+                      : myAttendance?.status === 'MAYBE'
+                        ? 'bg-amber-100 text-amber-900'
+                        : 'bg-club-gold text-club-blue-dark',
+                )}
+              >
+                {myAttendance?.status ? ATTENDANCE_STATUS_LABELS[myAttendance.status] : 'À répondre'}
+              </span>
+              </span>
+            )}
             <span>{formatDate(date)}</span>
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3.5" />
@@ -1992,7 +1993,7 @@ export function SessionCard({
             <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Espace coach
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 [&>button]:flex-1">
               {hasEnded ? (
                 <ManageSessionDialog
                   sessionId={sessionId}
