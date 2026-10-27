@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BarChart3, CalendarDays, CircleHelp, Ellipsis, Gauge, Home, LogOut, ShieldHalf, Swords, Trophy, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, CircleHelp, Ellipsis, Gauge, Home, ShieldHalf, Swords, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/lib/types'
@@ -55,8 +55,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   )
 
 /** The phone's main navigation — the four screens players open every week, plus "Plus" for the
- * rest (it opens the same side drawer the desktop shows permanently). Hidden from md up, where
- * the sidebar is always on screen. */
+ * rest (the /plus page of tiles). Hidden from md up, where the sidebar is always on screen. */
 const tabItems: { to: string; label: string; icon: typeof Home; end?: boolean }[] = [
   { to: '/', label: 'Accueil', icon: Home, end: true },
   { to: '/trainings', label: 'Entraîn.', icon: CalendarDays },
@@ -70,7 +69,7 @@ const tabClass = (isActive: boolean) =>
     isActive ? 'text-club-blue font-bold' : 'text-muted-foreground font-semibold',
   )
 
-function MobileTabBar({ onMore, moreActive }: { onMore: () => void; moreActive: boolean }) {
+function MobileTabBar({ moreActive }: { moreActive: boolean }) {
   return (
     <nav
       aria-label="Navigation principale"
@@ -86,10 +85,10 @@ function MobileTabBar({ onMore, moreActive }: { onMore: () => void; moreActive: 
           )}
         </NavLink>
       ))}
-      <button type="button" onClick={onMore} className={tabClass(moreActive)} aria-haspopup="dialog">
+      <Link to="/plus" className={tabClass(moreActive)} aria-current={moreActive ? 'page' : undefined}>
         <Ellipsis className="size-[22px]" strokeWidth={moreActive ? 2.4 : 2} />
         Plus
-      </button>
+      </Link>
     </nav>
   )
 }
@@ -182,16 +181,6 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-1 border-t border-white/15 px-2 pt-3 md:hidden">
-          <NavLink to="/profile" className={navLinkClass}>
-            <UserRound className="size-4 shrink-0" />
-            <span>Mon profil</span>
-          </NavLink>
-          <button type="button" onClick={logout} className={navLinkClass({ isActive: false })}>
-            <LogOut className="size-4 shrink-0" />
-            <span>Déconnexion</span>
-          </button>
-        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -275,7 +264,7 @@ export function Layout() {
           </div>
         </main>
       </div>
-      <MobileTabBar onMore={() => setSidebarOpen(true)} moreActive={sidebarOpen || !onTab} />
+      <MobileTabBar moreActive={!onTab} />
     </div>
   )
 }

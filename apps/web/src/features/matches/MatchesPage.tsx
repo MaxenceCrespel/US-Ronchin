@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarX2, ChevronLeft, ChevronRight, FileUp } from 'lucide-react'
-import { addMonths, format, isSameMonth, startOfMonth, subMonths } from 'date-fns'
+import { addMonths, eachDayOfInterval, endOfMonth, format, getISODay, isSameMonth, isToday, startOfMonth, subMonths } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,8 +28,8 @@ import { useAuthStore } from '@/lib/auth-store'
 import { hasCoachAccess } from '@/lib/roles'
 import type { MatchHomeAway } from '@/lib/types'
 import {
+  type MatchCategory,
   getMatchCategory,
-  MATCH_CATEGORY_BORDER,
   MATCH_CATEGORY_FILL,
   MATCH_CATEGORY_LABELS,
 } from '@/lib/match-category'
@@ -97,6 +97,13 @@ export function MatchesPage() {
     upcomingMonthMatches.map((m, i) => [m.id, attendanceQueries[i]?.data]),
   )
 
+  // Filter by competition — only what's shown below; the data (and the vote/attendance
+  // lookups above) stays the whole month.
+  const [category, setCategory] = useState<MatchCategory | 'ALL'>('ALL')
+  const inCategory = (m: (typeof monthMatches)[number]) => category === 'ALL' || getMatchCategory(m) === category
+  const visibleUpcoming = upcomingMonthMatches.filter(inCategory)
+  const visiblePlayed = playedMonthMatches.filter(inCategory)
+
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [kickOffTime, setKickOffTime] = useState('')
@@ -129,20 +136,16 @@ export function MatchesPage() {
   })
 
   function renderMatchCard(match: (typeof monthMatches)[number]) {
-    const category = getMatchCategory(match)
+    const matchCategory = getMatchCategory(match)
     return (
       <Link key={match.id} to={`/matches/${match.id}`}>
-        <Card
-          className={cn(
-            'border-l-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-            MATCH_CATEGORY_BORDER[category],
-          )}
-        >
+        <Card className="relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+          <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1.5', MATCH_CATEGORY_FILL[matchCategory])} />
           <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-2 text-base">
-              <span>⚽ vs {match.opponent}</span>
+            <CardTitle className="flex items-center justify-between gap-2 text-lg">
+              <span className="min-w-0 truncate">vs {match.opponent}</span>
               <div className="flex items-center gap-1.5">
-                <Badge variant="outline">{MATCH_CATEGORY_LABELS[category]}</Badge>
+                <Badge variant="outline">{MATCH_CATEGORY_LABELS[matchCategory]}</Badge>
                 <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
                   {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
                 </Badge>
@@ -156,7 +159,7 @@ export function MatchesPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {match.status === 'PLAYED' ? (
-              <p className="animate-pop-in flex items-center gap-2 text-2xl font-semibold">
+              <p className="animate-pop-in font-display flex items-center gap-2 text-4xl font-extrabold">
                 {match.scoreHome ?? '-'} - {match.scoreAway ?? '-'}
                 <MatchResultBadge match={match} />
               </p>
@@ -195,7 +198,7 @@ export function MatchesPage() {
                   totalVotes={motm.totalVotes}
                   totalPlayers={motm.totalPlayers}
                   votingClosesAt={motm.votingClosesAt}
-                  barClassName={MATCH_CATEGORY_FILL[category]}
+                  barClassName={MATCH_CATEGORY_FILL[matchCategory]}
                   compact
                 />
               )
@@ -304,7 +307,7 @@ export function MatchesPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2" data-tour="matches-month">
-        <h2 className="text-lg font-semibold capitalize">
+        <h2 className="font-display text-2xl font-bold capitalize">
           {format(selectedMonth, 'MMMM yyyy', { locale: fr })}
         </h2>
         <div className="flex items-center gap-1">
@@ -337,6 +340,72 @@ export function MatchesPage() {
         </div>
       </div>
 
+      <div role="group" aria-label="Filtrer par compétition" className="flex flex-wrap gap-2">
+        {(['ALL', 'LEAGUE', 'CUP', 'FRIENDLY'] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={category === c}
+            onClick={() => setCategory(c)}
+            className={cn(
+              'inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors',
+              category === c ? 'bg-club-blue-dark border-club-blue-dark text-white' : 'bg-card hover:bg-accent',
+            )}
+          >
+            {c !== 'ALL' && <span aria-hidden="true" className={cn('size-2.5 rounded-full', MATCH_CATEGORY_FILL[c])} />}
+            {c === 'ALL' ? 'Tous' : MATCH_CATEGORY_LABELS[c]}
+          </button>
+        ))}
+      </div>
+
+      <Card className="py-4">
+        <CardContent className="px-4">
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
+              <span key={i} className="text-muted-foreground pb-1 text-xs font-bold">
+                {d}
+              </span>
+            ))}
+            {Array.from({ length: getISODay(selectedMonth) - 1 }).map((_, i) => (
+              <span key={`pad-${i}`} />
+            ))}
+            {eachDayOfInterval({ start: selectedMonth, end: endOfMonth(selectedMonth) }).map((day) => {
+              const key = format(day, 'yyyy-MM-dd')
+              const dayMatches = monthMatches.filter((m) => m.date === key && inCategory(m))
+              const first = dayMatches[0]
+              const body = (
+                <>
+                  <span>{format(day, 'd')}</span>
+                  <span className="flex h-1.5 gap-0.5">
+                    {dayMatches.map((m) => (
+                      <span key={m.id} className={cn('size-1.5 rounded-full', MATCH_CATEGORY_FILL[getMatchCategory(m)])} />
+                    ))}
+                  </span>
+                </>
+              )
+              const cls = cn(
+                'flex h-11 flex-col items-center justify-center gap-0.5 rounded-lg text-sm',
+                isToday(day) ? 'bg-club-blue-dark font-bold text-white' : first ? 'bg-muted font-bold' : '',
+              )
+              return first ? (
+                <Link
+                  key={key}
+                  to={`/matches/${first.id}`}
+                  className={cn(cls, 'hover:bg-accent')}
+                  aria-label={`${format(day, 'EEEE d MMMM', { locale: fr })} : ${dayMatches.map((m) => `vs ${m.opponent}`).join(', ')}`}
+                >
+                  {body}
+                </Link>
+              ) : (
+                <span key={key} className={cls}>
+                  {body}
+                </span>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {monthMatches.length === 0 ? (
         <div className="text-muted-foreground flex flex-col items-center gap-2 rounded-2xl border border-dashed py-10 text-sm">
           <CalendarX2 className="size-6 opacity-60" />
@@ -344,23 +413,26 @@ export function MatchesPage() {
         </div>
       ) : (
         <>
-          {upcomingMonthMatches.length > 0 && (
+          {visibleUpcoming.length === 0 && visiblePlayed.length === 0 && (
+            <p className="text-muted-foreground py-6 text-center text-sm">Aucun match de ce type ce mois-ci.</p>
+          )}
+          {visibleUpcoming.length > 0 && (
             <div className="flex flex-col gap-3">
-              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+              <h2 className="font-display text-xl font-bold tracking-wide uppercase">
                 À venir
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {upcomingMonthMatches.map((match) => renderMatchCard(match))}
+                {visibleUpcoming.map((match) => renderMatchCard(match))}
               </div>
             </div>
           )}
-          {playedMonthMatches.length > 0 && (
+          {visiblePlayed.length > 0 && (
             <div className="flex flex-col gap-3">
-              <h2 className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+              <h2 className="font-display text-xl font-bold tracking-wide uppercase">
                 Joués
               </h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {playedMonthMatches.map((match) => renderMatchCard(match))}
+                {visiblePlayed.map((match) => renderMatchCard(match))}
               </div>
             </div>
           )}

@@ -73,6 +73,7 @@ const ROUTES: RouteMeta[] = [
     ownH1: true,
     help: 'Après chaque match, donne une note à tes coéquipiers — ça alimente leur moyenne dans les stats.',
   },
+  { pattern: /^\/plus$/, title: 'Plus', ownH1: true },
   { pattern: /^\/profile$/, title: 'Mon profil', ownH1: false, help: 'Tes infos, tes badges, tes trophées, tes notifications et ton mot de passe.' },
   { pattern: /^\/profile\/edit$/, title: 'Modifier mon profil', ownH1: false },
   {
