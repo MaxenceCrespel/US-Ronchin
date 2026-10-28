@@ -13,7 +13,7 @@ export class TeamBalancingScheduler {
     const sessions = await this.teamBalancingService.findUpcomingSessionsNeedingTeams();
     for (const session of sessions) {
       try {
-        await this.teamBalancingService.generateTeams(session.id);
+        await this.teamBalancingService.generateTeams(session.id, undefined, { onlyIfMissing: true });
         this.logger.log(`Équipes générées automatiquement pour la séance ${session.id}`);
       } catch (error) {
         this.logger.warn(

@@ -61,10 +61,14 @@ export class TrainingsService {
 
   async updateTraining(id: string, dto: UpdateTrainingDto): Promise<Training> {
     const training = await this.findTrainingById(id);
+    const previousDayOfWeek = training.dayOfWeek;
     Object.assign(training, dto);
     const saved = await this.trainingsRepository.save(training);
     await this.generateSessions(saved.id);
     await this.syncFutureSessionTimes(saved);
+    if (saved.type === TrainingType.RECURRING && saved.dayOfWeek !== previousDayOfWeek) {
+      await this.retireSessionsOffSchedule(saved);
+    }
     if (dto.maxPresentPlayers !== undefined) {
       await this.syncCapPromotionsForTraining(saved.id);
     }
@@ -81,6 +85,31 @@ export class TrainingsService {
     const sessions = await this.sessionsRepository.find({ where: { trainingId } });
     for (const session of sessions.filter((s) => s.date >= today)) {
       await this.attendancesService.syncCapPromotions(session.id);
+    }
+  }
+
+  /** Moving a recurring training to another weekday only ever ADDED the new weekday's
+   * sessions — the upcoming ones on the old weekday stayed on the calendar, open for answers.
+   * Those still to come (today's is left alone, it may well be happening) are retired: one
+   * with nothing recorded against it is deleted, one a player has already answered (or with
+   * teams or a score) is cancelled instead, so what people declared isn't silently erased
+   * but nobody can answer a session that no longer takes place. */
+  private async retireSessionsOffSchedule(training: Training): Promise<void> {
+    const today = toDateOnly(new Date());
+    const sessions = await this.sessionsRepository.find({ where: { trainingId: training.id } });
+    for (const session of sessions) {
+      if (session.date <= today) continue;
+      if (new Date(`${session.date}T00:00:00Z`).getUTCDay() === training.dayOfWeek) continue;
+
+      const hasData =
+        session.scoreTeam0 != null ||
+        session.scoreTeam1 != null ||
+        (await this.attendancesService.sessionHasActivity(session.id));
+      if (hasData) {
+        if (!session.cancelled) await this.sessionsRepository.update(session.id, { cancelled: true });
+      } else {
+        await this.sessionsRepository.delete(session.id);
+      }
     }
   }
 

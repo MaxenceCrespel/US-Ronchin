@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { TrainingTeamAssignment } from './entities/training-team-assignment.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
 import { guestLabelFor, isEffectivelyPresent, orderedGuests } from '../attendances/attendance-cap';
+import { AttendancesService } from '../attendances/attendances.service';
+import { SessionLockService } from '../trainings/session-lock.service';
+import { separatedPartnersOf, teamsForNewcomer } from './team-placement';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
@@ -38,7 +41,26 @@ export class TeamBalancingService {
     private readonly separationRulesRepository: Repository<PlayerSeparationRule>,
     private readonly statsService: StatsService,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly lock: SessionLockService,
+    private readonly attendancesService: AttendancesService,
   ) {}
+
+  /** This service bound to a transaction (see SessionLockService): every repository goes
+   * through `manager`, so what a coach action writes commits or rolls back as one. Only the
+   * public entry points lock; the private methods below never do. */
+  private within(manager: EntityManager): TeamBalancingService {
+    return new TeamBalancingService(
+      manager.getRepository(TrainingTeamAssignment),
+      manager.getRepository(TrainingSession),
+      manager.getRepository(Attendance),
+      manager.getRepository(AttendanceGuest),
+      manager.getRepository(PlayerSeparationRule),
+      this.statsService,
+      this.pushNotificationsService,
+      this.lock,
+      this.attendancesService,
+    );
+  }
 
   getTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
     return this.assignmentsRepository.find({
@@ -58,7 +80,11 @@ export class TeamBalancingService {
   /** Wipes the composition entirely — back to "not generated yet", distinct from
    * generateTeams which immediately replaces it with a fresh split. Coach-only, same as
    * every other team-editing action here. */
-  async deleteTeams(sessionId: string): Promise<void> {
+  deleteTeams(sessionId: string): Promise<void> {
+    return this.lock.run(sessionId, (manager) => this.within(manager).clearTeams(sessionId));
+  }
+
+  private async clearTeams(sessionId: string): Promise<void> {
     await this.assignmentsRepository.delete({ trainingSessionId: sessionId });
     // Without this the cron sees "no teams" and regenerates them within the minute (and
     // re-notifies everyone), for the whole 1h30-before to 3h-after catch-up window.
@@ -68,10 +94,40 @@ export class TeamBalancingService {
   async generateTeams(
     sessionId: string,
     teamCount: number = DEFAULT_TEAM_COUNT,
+    options: { onlyIfMissing?: boolean } = {},
   ): Promise<TrainingTeamAssignment[]> {
+    const generated = await this.lock.run(sessionId, (manager) =>
+      this.within(manager).buildTeams(sessionId, teamCount, options),
+    );
+    // Only once the teams are committed — a push is slow and must not hold the session lock.
+    if (generated.notifyUserIds.length > 0) {
+      await this.pushNotificationsService.sendToUsers(
+        generated.notifyUserIds,
+        generated.notification!,
+      );
+    }
+    return this.getTeams(sessionId);
+  }
+
+  private async buildTeams(
+    sessionId: string,
+    teamCount: number,
+    options: { onlyIfMissing?: boolean },
+  ): Promise<GeneratedTeams> {
     const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
+    }
+    if (session.cancelled) {
+      throw new BadRequestException('Cet entraînement est annulé');
+    }
+    // The cron checks "no teams yet" before calling in, and two ticks (or a tick and the
+    // coach) can both pass that check — so it's re-checked here, under the lock.
+    if (
+      options.onlyIfMissing &&
+      (session.teamsAutoGenerationDisabled || (await this.hasTeams(sessionId)))
+    ) {
+      return { notifyUserIds: [], notification: null };
     }
 
     // A guest can still show up even if whoever registered them ends up Absent/Incertain
@@ -230,14 +286,15 @@ export class TeamBalancingService {
 
     // Invite everyone present to come see which team they landed on — covers both the
     // scheduler's auto-generation (1h30 before kickoff) and a coach re-generating by hand.
-    await this.pushNotificationsService.sendToUsers(presentUserIds, {
-      title: 'Équipes prêtes !',
-      category: NotificationCategory.TRAINING_TEAMS,
-      body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
-      url: `/trainings?session=${sessionId}`,
-    });
-
-    return this.getTeams(sessionId);
+    return {
+      notifyUserIds: presentUserIds,
+      notification: {
+        title: 'Équipes prêtes !',
+        category: NotificationCategory.TRAINING_TEAMS,
+        body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
+        url: `/trainings?session=${sessionId}`,
+      },
+    };
   }
 
   /** Mutates assignments in place, swapping one member of a violating pair to another team
@@ -332,7 +389,11 @@ export class TeamBalancingService {
    * everyone else's team untouched. Coach calls this from the pointage réel dialog once
    * attendance is confirmed, so the final roster (and the ranking built from it) matches
    * who was really there. */
-  async confirmFinalTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
+  confirmFinalTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
+    return this.lock.run(sessionId, (manager) => this.within(manager).reconcileFinalTeams(sessionId));
+  }
+
+  private async reconcileFinalTeams(sessionId: string): Promise<TrainingTeamAssignment[]> {
     const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
@@ -374,8 +435,6 @@ export class TeamBalancingService {
     }
 
     const remaining = existingAssignments.filter((a) => !noShows.includes(a));
-    const teamCounts = new Array(teamCount).fill(0);
-    for (const a of remaining) teamCounts[a.teamIndex]++;
 
     // Last-minute arrivals: effectively present but not on any team yet — spread across
     // teams by current headcount, same treatment as a guest, since there's no reliable
@@ -383,17 +442,16 @@ export class TeamBalancingService {
     const currentUserIds = new Set(remaining.filter((a) => a.userId).map((a) => a.userId));
     const newcomerIds = [...effectivePresentUserIds].filter((id) => !currentUserIds.has(id));
     if (newcomerIds.length > 0) {
+      const rules = await this.separationRulesRepository.find();
+      const placed = remaining.map((a) => ({ userId: a.userId, teamIndex: a.teamIndex }));
       const newAssignments = newcomerIds.map((userId) => {
-        let minTeam = 0;
-        for (let i = 1; i < teamCount; i++) {
-          if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
-        }
-        teamCounts[minTeam] += 1;
+        const teamIndex = teamsForNewcomer(placed, teamCount, separatedPartnersOf(userId, rules));
+        placed.push({ userId, teamIndex });
         return this.assignmentsRepository.create({
           trainingSessionId: sessionId,
           userId,
           guestLabel: null,
-          teamIndex: minTeam,
+          teamIndex,
         });
       });
       await this.assignmentsRepository.save(newAssignments);
@@ -408,13 +466,23 @@ export class TeamBalancingService {
    * (which are inherently "a real player" / "a named +1 THIS PLAYER brings") — a walk-in
    * belongs to no one in particular, just the session. Placed on whichever team has the
    * fewest people, same treatment as a last-minute real-player arrival in confirmFinalTeams. */
-  async addWalkIn(
+  addWalkIn(
+    sessionId: string,
+    input: { firstName: string; lastName?: string; position?: PlayerSubPosition },
+  ): Promise<TrainingTeamAssignment[]> {
+    return this.lock.run(sessionId, (manager) => this.within(manager).placeWalkIn(sessionId, input));
+  }
+
+  private async placeWalkIn(
     sessionId: string,
     input: { firstName: string; lastName?: string; position?: PlayerSubPosition },
   ): Promise<TrainingTeamAssignment[]> {
     const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
+    }
+    if (session.cancelled) {
+      throw new BadRequestException('Cet entraînement est annulé');
     }
 
     const existingAssignments = await this.assignmentsRepository.find({
@@ -475,6 +543,20 @@ export class TeamBalancingService {
     sessionId: string,
     assignmentId: string,
   ): Promise<TrainingTeamAssignment[]> {
+    await this.lock.run(sessionId, (manager) =>
+      this.within(manager).dropFromTeam(sessionId, assignmentId),
+    );
+    // The place they held is free again (a removed player is marked absent for real, a removed
+    // guest no longer counts): hand it to whoever is waiting — and, since that's a change to
+    // the attendances, only once this removal has committed.
+    await this.attendancesService.syncCapPromotions(sessionId);
+    return this.getTeams(sessionId);
+  }
+
+  private async dropFromTeam(
+    sessionId: string,
+    assignmentId: string,
+  ): Promise<TrainingTeamAssignment[]> {
     const assignment = await this.assignmentsRepository.findOne({
       where: { id: assignmentId, trainingSessionId: sessionId },
     });
@@ -530,10 +612,17 @@ export class TeamBalancingService {
    * themselves) and drops them on whichever team is currently smallest, same placement rule
    * as a last-minute arrival in confirmFinalTeams. Requires teams to already exist: this
    * is a one-off correction to an existing split, not a way to build one from scratch. */
-  async addPlayerToTeam(sessionId: string, userId: string): Promise<TrainingTeamAssignment[]> {
+  addPlayerToTeam(sessionId: string, userId: string): Promise<TrainingTeamAssignment[]> {
+    return this.lock.run(sessionId, (manager) => this.within(manager).placePlayer(sessionId, userId));
+  }
+
+  private async placePlayer(sessionId: string, userId: string): Promise<TrainingTeamAssignment[]> {
     const session = await this.sessionsRepository.findOne({ where: { id: sessionId } });
     if (!session) {
       throw new NotFoundException('Séance introuvable');
+    }
+    if (session.cancelled) {
+      throw new BadRequestException('Cet entraînement est annulé');
     }
 
     const existingAssignments = await this.assignmentsRepository.find({
@@ -574,26 +663,32 @@ export class TeamBalancingService {
       DEFAULT_TEAM_COUNT,
       Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1,
     );
-    const teamCounts = new Array(teamCount).fill(0);
-    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
-    let minTeam = 0;
-    for (let i = 1; i < teamCount; i++) {
-      if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
-    }
+    const partners = separatedPartnersOf(userId, await this.separationRulesRepository.find());
+    const teamIndex = teamsForNewcomer(existingAssignments, teamCount, partners);
 
     await this.assignmentsRepository.save(
       this.assignmentsRepository.create({
         trainingSessionId: sessionId,
         userId,
         guestLabel: null,
-        teamIndex: minTeam,
+        teamIndex,
       }),
     );
 
     return this.getTeams(sessionId);
   }
 
-  async moveAssignment(
+  moveAssignment(
+    sessionId: string,
+    assignmentId: string,
+    teamIndex: number,
+  ): Promise<TrainingTeamAssignment[]> {
+    return this.lock.run(sessionId, (manager) =>
+      this.within(manager).reassign(sessionId, assignmentId, teamIndex),
+    );
+  }
+
+  private async reassign(
     sessionId: string,
     assignmentId: string,
     teamIndex: number,
@@ -727,6 +822,16 @@ export class TeamBalancingService {
     }
     return entries;
   }
+}
+
+interface GeneratedTeams {
+  notifyUserIds: string[];
+  notification: {
+    title: string;
+    category: NotificationCategory;
+    body: string;
+    url: string;
+  } | null;
 }
 
 export interface TrainingRankingEntry {

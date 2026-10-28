@@ -12,6 +12,8 @@ import {
 import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { sessionLockProvider } from '../test-utils/session-lock-mock';
+import { AttendancesService } from '../attendances/attendances.service';
 
 type A = {
   id: string;
@@ -80,8 +82,16 @@ async function build(opts: {
       },
       { provide: getRepositoryToken(Attendance), useValue: attendancesRepo },
       { provide: getRepositoryToken(AttendanceGuest), useValue: guestsRepo },
-      { provide: getRepositoryToken(PlayerSeparationRule), useValue: {} },
+      { provide: getRepositoryToken(PlayerSeparationRule), useValue: { find: jest.fn().mockResolvedValue([]) } },
       { provide: StatsService, useValue: {} },
+      sessionLockProvider([
+        TrainingTeamAssignment,
+        TrainingSession,
+        Attendance,
+        AttendanceGuest,
+        PlayerSeparationRule,
+      ]),
+      { provide: AttendancesService, useValue: { syncCapPromotions: jest.fn().mockResolvedValue(undefined) } },
       { provide: PushNotificationsService, useValue: {} },
     ],
   }).compile();

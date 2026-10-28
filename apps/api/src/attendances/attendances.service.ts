@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
+import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
+import { SessionLockService } from '../trainings/session-lock.service';
+import { separatedPartnersOf, teamsForNewcomer } from '../team-balancing/team-placement';
 import {
   guestLabelFor,
   isEffectivelyPresent,
@@ -27,9 +30,26 @@ export interface GuestNameInput {
  * (only while PRESENT) plus however many of their guests are confirmed. Guests count
  * regardless of the inviter's own status (see team-balancing: a guest can still show up
  * even if the inviter ends up absent), so this is the one place both concerns are unified. */
-function headcount(a: Pick<Attendance, 'status' | 'confirmed' | 'confirmedGuestCount'>): number {
-  return (a.status === AttendanceStatus.PRESENT && a.confirmed ? 1 : 0) + a.confirmedGuestCount;
+type HeadcountRow = Pick<Attendance, 'status' | 'confirmed' | 'confirmedGuestCount'> & {
+  actualStatus?: AttendanceStatus | null;
+};
+
+/** Whether the player's own place counts against the cap: a confirmed PRESENT — unless the
+ * coach has since marked them absent for real (taking them off a team does exactly that),
+ * which gives the place back. */
+function holdsPlace(a: Pick<HeadcountRow, 'status' | 'confirmed' | 'actualStatus'>): boolean {
+  return (
+    a.status === AttendanceStatus.PRESENT &&
+    a.confirmed &&
+    a.actualStatus !== AttendanceStatus.ABSENT
+  );
 }
+
+function headcount(a: HeadcountRow): number {
+  return (holdsPlace(a) ? 1 : 0) + a.confirmedGuestCount;
+}
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AttendancesService {
@@ -46,7 +66,37 @@ export class AttendancesService {
     private readonly usersRepository: Repository<User>,
     @InjectRepository(TrainingTeamAssignment)
     private readonly assignmentsRepository: Repository<TrainingTeamAssignment>,
+    @InjectRepository(PlayerSeparationRule)
+    private readonly separationRulesRepository: Repository<PlayerSeparationRule>,
+    private readonly lock: SessionLockService,
   ) {}
+
+  /** The same service, bound to a transaction: every repository goes through `manager`, so
+   * everything done through the returned instance commits or rolls back together (see
+   * SessionLockService). Its private methods never lock again — only the public entry points
+   * below do, once. */
+  private within(manager: EntityManager): AttendancesService {
+    return new AttendancesService(
+      manager.getRepository(Attendance),
+      manager.getRepository(AttendanceGuest),
+      manager.getRepository(AttendanceStatusChange),
+      manager.getRepository(TrainingSession),
+      manager.getRepository(User),
+      manager.getRepository(TrainingTeamAssignment),
+      manager.getRepository(PlayerSeparationRule),
+      this.lock,
+    );
+  }
+
+  /** Whether anything at all is recorded against a session — an answer from a player, or a
+   * team slot. Used before retiring a session that fell off its training's schedule. */
+  async sessionHasActivity(sessionId: string): Promise<boolean> {
+    const [answers, slots] = await Promise.all([
+      this.attendancesRepository.count({ where: { trainingSessionId: sessionId } }),
+      this.assignmentsRepository.count({ where: { trainingSessionId: sessionId } }),
+    ]);
+    return answers + slots > 0;
+  }
 
   findBySession(trainingSessionId: string): Promise<Attendance[]> {
     return this.attendancesRepository.find({
@@ -65,7 +115,27 @@ export class AttendancesService {
     });
   }
 
-  async setAttendance(
+  setAttendance(
+    trainingSessionId: string,
+    userId: string,
+    status: AttendanceStatus,
+    guests: GuestNameInput[] = [],
+    bypassLock = false,
+    changedBy: string = userId,
+  ): Promise<Attendance> {
+    return this.lock.run(trainingSessionId, (manager) =>
+      this.within(manager).applyAttendance(
+        trainingSessionId,
+        userId,
+        status,
+        guests,
+        bypassLock,
+        changedBy,
+      ),
+    );
+  }
+
+  private async applyAttendance(
     trainingSessionId: string,
     userId: string,
     status: AttendanceStatus,
@@ -91,6 +161,10 @@ export class AttendancesService {
       where: { trainingSessionId, userId },
     });
 
+    if (session.cancelled) {
+      throw new BadRequestException('Cet entraînement est annulé');
+    }
+
     // Locked once the session starts. Teams are auto-generated earlier (1h30 before), but a
     // late declaration still has to work: a player turning PRESENT after that is placed on a
     // team (or waitlisted if the cap is full) by syncTeamMembership below, and turning
@@ -101,6 +175,15 @@ export class AttendancesService {
     // `new Date('…T20:30:00')` is 20:30 UTC — an hour (winter) or two (summer) after the real
     // kickoff, which let players keep changing their answer well into the session.
     const lockAt = parisWallTimeToDate(session.date, session.startTime).getTime();
+    // Once the session is over nothing about who came may change any more — not even a guest
+    // list, which the lock above deliberately leaves open while it's under way (a friend
+    // turning up late): the teams, the pointage and the ranking are built on it.
+    const startsAt = parisWallTimeToDate(session.date, session.startTime).getTime();
+    let endsAt = parisWallTimeToDate(session.date, session.endTime).getTime();
+    if (endsAt <= startsAt) endsAt += ONE_DAY_MS;
+    if (!bypassLock && Date.now() >= endsAt) {
+      throw new BadRequestException("L'entraînement est terminé, tu ne peux plus modifier ta réponse");
+    }
     const statusChanged = !attendance || attendance.status !== status;
     if (!bypassLock && Date.now() >= lockAt && statusChanged) {
       throw new BadRequestException(
@@ -114,6 +197,7 @@ export class AttendancesService {
     const previousStatus = attendance?.status ?? null;
     const previousConfirmed = attendance?.confirmed ?? true;
     const previousConfirmedGuestCount = attendance?.confirmedGuestCount ?? 0;
+    const previousActualStatus = attendance?.actualStatus ?? null;
     const wasConfirmedPresent = previousStatus === AttendanceStatus.PRESENT && previousConfirmed;
 
     if (!attendance) {
@@ -187,7 +271,13 @@ export class AttendancesService {
           }
         }
       }
-      const selfSlot = status === AttendanceStatus.PRESENT && attendance.confirmed ? 1 : 0;
+      const selfSlot = holdsPlace({
+        status,
+        confirmed: attendance.confirmed,
+        actualStatus: attendance.actualStatus,
+      })
+        ? 1
+        : 0;
       const remainingForGuests = cap - otherHeadcount - selfSlot;
       attendance.confirmedGuestCount = Math.max(0, Math.min(guests.length, remainingForGuests));
     }
@@ -212,9 +302,12 @@ export class AttendancesService {
 
     if (cap != null) {
       const freed =
-        (previousStatus === AttendanceStatus.PRESENT && previousConfirmed ? 1 : 0) +
-        previousConfirmedGuestCount -
-        headcount(attendance);
+        headcount({
+          status: previousStatus,
+          confirmed: previousConfirmed,
+          confirmedGuestCount: previousConfirmedGuestCount,
+          actualStatus: previousActualStatus,
+        }) - headcount(attendance);
       if (freed > 0) {
         await this.promoteWaitlist(trainingSessionId, cap);
       }
@@ -297,19 +390,15 @@ export class AttendancesService {
     if (existingAssignments.some((a) => a.userId === userId)) return;
 
     const teamCount = Math.max(2, Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1);
-    const teamCounts = new Array(teamCount).fill(0);
-    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
-    let minTeam = 0;
-    for (let i = 1; i < teamCount; i++) {
-      if (teamCounts[i] < teamCounts[minTeam]) minTeam = i;
-    }
+    const partners = separatedPartnersOf(userId, await this.separationRulesRepository.find());
+    const teamIndex = teamsForNewcomer(existingAssignments, teamCount, partners);
 
     await this.assignmentsRepository.save(
       this.assignmentsRepository.create({
         trainingSessionId,
         userId,
         guestLabel: null,
-        teamIndex: minTeam,
+        teamIndex,
       }),
     );
   }
@@ -320,7 +409,13 @@ export class AttendancesService {
    * stayed waitlisted even though there's now room. Promotes as many as now fit, same
    * priority as a slot freeing up naturally (see promoteWaitlist) — and everyone left on the
    * waitlist when the cap is removed altogether. No-op when nothing changed. */
-  async syncCapPromotions(trainingSessionId: string): Promise<void> {
+  syncCapPromotions(trainingSessionId: string): Promise<void> {
+    return this.lock.run(trainingSessionId, (manager) =>
+      this.within(manager).promoteForSession(trainingSessionId),
+    );
+  }
+
+  private async promoteForSession(trainingSessionId: string): Promise<void> {
     const session = await this.sessionsRepository.findOne({
       where: { id: trainingSessionId },
       relations: { training: true },
@@ -551,8 +646,7 @@ export class AttendancesService {
       .filter(
         (a) =>
           a.userId !== arrivingUserId &&
-          a.status === AttendanceStatus.PRESENT &&
-          a.confirmed &&
+          holdsPlace(a) &&
           a.user &&
           priorityRank(a.user) < arrivingRank,
       )
@@ -593,7 +687,17 @@ export class AttendancesService {
 
   /** Coach-only: records what actually happened, independently of what the player declared.
    * Creates the row if the player never responded at all. */
-  async validateAttendance(
+  validateAttendance(
+    trainingSessionId: string,
+    userId: string,
+    actualStatus: AttendanceStatus,
+  ): Promise<Attendance> {
+    return this.lock.run(trainingSessionId, (manager) =>
+      this.within(manager).applyPointage(trainingSessionId, userId, actualStatus),
+    );
+  }
+
+  private async applyPointage(
     trainingSessionId: string,
     userId: string,
     actualStatus: AttendanceStatus,

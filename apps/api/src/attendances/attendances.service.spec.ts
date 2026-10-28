@@ -9,6 +9,8 @@ import { AttendanceStatusChange } from './entities/attendance-status-change.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { User } from '../users/entities/user.entity';
+import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
+import { sessionLockProvider } from '../test-utils/session-lock-mock';
 
 type Row = Partial<Attendance> & { userId: string };
 
@@ -18,6 +20,9 @@ async function build(opts: {
   cap?: number | null;
   attendances?: Row[];
   assignments?: Record<string, unknown>[];
+  endTime?: string;
+  cancelled?: boolean;
+  separationRules?: { userAId: string; userBId: string }[];
 }) {
   const attendances: Row[] = (opts.attendances ?? []).map((a) => ({
     id: `att-${a.userId}`,
@@ -37,6 +42,8 @@ async function build(opts: {
     id: 's1',
     date: opts.sessionDate,
     startTime: opts.startTime ?? '19:00',
+    endTime: opts.endTime ?? '22:00',
+    cancelled: opts.cancelled ?? false,
     maxPresentPlayersOverride: opts.cap ?? null,
     training: { maxPresentPlayers: null },
   };
@@ -124,6 +131,19 @@ async function build(opts: {
         provide: getRepositoryToken(TrainingTeamAssignment),
         useValue: assignmentsRepo,
       },
+      {
+        provide: getRepositoryToken(PlayerSeparationRule),
+        useValue: { find: jest.fn().mockResolvedValue(opts.separationRules ?? []) },
+      },
+      sessionLockProvider([
+        Attendance,
+        AttendanceGuest,
+        AttendanceStatusChange,
+        TrainingSession,
+        User,
+        TrainingTeamAssignment,
+        PlayerSeparationRule,
+      ]),
     ],
   }).compile();
   return {
@@ -628,5 +648,118 @@ describe('AttendancesService — guests follow the teams', () => {
     const slots = assignments.filter((a) => a.guestLabel === 'Yacine Djemai');
     expect(slots).toHaveLength(1);
     expect(slots[0].attendanceGuestId).toBe('g1');
+  });
+});
+
+describe('AttendancesService — cancelled and finished sessions', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('refuses an answer for a cancelled session', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T10:00:00Z'));
+    const { service } = await build({ sessionDate: '2026-10-27', cancelled: true });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // 20:30–22:00 Paris on 27 Oct (CET): 19:30Z–21:00Z.
+  const evening = { sessionDate: '2026-10-27', startTime: '20:30', endTime: '22:00' };
+
+  it('still lets a player add a guest while the session is under way', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-27T20:00:00Z')); // 21:00 Paris
+    const { service } = await build({ ...evening, attendances: [{ userId: 'u1', user: user() }] });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT, [{ firstName: 'Ami' }]),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses any change once the session is over, guest lists included', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-27T21:30:00Z')); // 22:30 Paris
+    const { service } = await build({ ...evening, attendances: [{ userId: 'u1', user: user() }] });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT, [{ firstName: 'Ami' }]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('still lets the coach correct a finished session', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-28T09:00:00Z'));
+    const { service } = await build({ ...evening, attendances: [{ userId: 'u1', user: user() }] });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.ABSENT, [], true, 'coach'),
+    ).resolves.toBeDefined();
+  });
+
+  it('treats an end time before the start time as the next morning', async () => {
+    // 23:00–01:00 Paris: at 00:30 Paris on the 28th the session is still going.
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-27T23:30:00Z'));
+    const { service } = await build({
+      sessionDate: '2026-10-27',
+      startTime: '23:00',
+      endTime: '01:00',
+      attendances: [{ userId: 'u1', user: user() }],
+    });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT, [{ firstName: 'Ami' }]),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe('AttendancesService — a place the coach gave back', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-10-27T10:00:00Z')));
+  afterEach(() => jest.useRealTimers());
+
+  it("doesn't count a player marked absent for real against the cap", async () => {
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 2,
+      attendances: [
+        { userId: 'removed', actualStatus: AttendanceStatus.ABSENT },
+        { userId: 'b' },
+      ],
+    });
+    await service.setAttendance('s1', 'c', AttendanceStatus.PRESENT);
+    expect(attendances.find((a) => a.userId === 'c')!.confirmed).toBe(true);
+  });
+
+  it('promotes the waitlist into a place freed that way', async () => {
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 2,
+      attendances: [
+        { userId: 'removed', actualStatus: AttendanceStatus.ABSENT },
+        { userId: 'b' },
+        { userId: 'waiting', confirmed: false },
+      ],
+    });
+    await service.syncCapPromotions('s1');
+    expect(attendances.find((a) => a.userId === 'waiting')!.confirmed).toBe(true);
+  });
+});
+
+describe('AttendancesService — late arrivals and separation rules', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-10-27T10:00:00Z')));
+  afterEach(() => jest.useRealTimers());
+
+  const teams = [
+    { userId: 'karim', teamIndex: 0 },
+    { userId: 'x', teamIndex: 0 },
+    { userId: 'y', teamIndex: 1 },
+    { userId: 'z', teamIndex: 1 },
+  ];
+
+  it("doesn't put a late arrival on the team of someone they must never play with", async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      assignments: teams,
+      separationRules: [{ userAId: 'bilal', userBId: 'karim' }],
+    });
+    await service.setAttendance('s1', 'bilal', AttendanceStatus.PRESENT);
+    expect(assignments.find((a) => a.userId === 'bilal')!.teamIndex).toBe(1);
+  });
+
+  it('falls back to the smallest team when there is no rule', async () => {
+    const { service, assignments } = await build({ sessionDate: '2026-10-28', assignments: teams });
+    await service.setAttendance('s1', 'bilal', AttendanceStatus.PRESENT);
+    expect(assignments.find((a) => a.userId === 'bilal')!.teamIndex).toBe(0);
   });
 });

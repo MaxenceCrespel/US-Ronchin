@@ -6,6 +6,8 @@ import { AttendanceStatusChange } from './entities/attendance-status-change.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { User } from '../users/entities/user.entity';
+import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
+import { SessionLockService } from '../trainings/session-lock.service';
 import { AttendancesService } from './attendances.service';
 import { AttendancesController } from './attendances.controller';
 
@@ -18,10 +20,11 @@ import { AttendancesController } from './attendances.controller';
       TrainingSession,
       TrainingTeamAssignment,
       User,
+      PlayerSeparationRule,
     ]),
   ],
   controllers: [AttendancesController],
-  providers: [AttendancesService],
-  exports: [AttendancesService],
+  providers: [AttendancesService, SessionLockService],
+  exports: [AttendancesService, SessionLockService],
 })
 export class AttendancesModule {}

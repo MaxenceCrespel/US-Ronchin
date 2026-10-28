@@ -146,3 +146,80 @@ describe('TrainingsService.generateSessions', () => {
     );
   });
 });
+
+describe('TrainingsService.updateTraining — moving to another weekday', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-09-20T10:00:00Z'))); // a Sunday
+  afterEach(() => jest.useRealTimers());
+
+  async function buildUpdate(sessions: Record<string, unknown>[], hasActivity: Record<string, boolean> = {}) {
+    const training = { id: 't1', ...recurring({ dayOfWeek: 2 }) };
+    const stored = sessions.map((s, i) => ({ id: `s${i}`, trainingId: 't1', cancelled: false, ...s }));
+    const chain: Record<string, unknown> = {};
+    for (const k of ['update', 'set', 'where', 'andWhere']) chain[k] = () => chain;
+    chain.execute = () => Promise.resolve();
+    const sessionsRepo = {
+      find: jest.fn(() => Promise.resolve([...stored])),
+      create: jest.fn((s: unknown) => s),
+      save: jest.fn((list: unknown[]) => Promise.resolve(list)),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+      createQueryBuilder: jest.fn(() => chain),
+    };
+    const attendancesService = {
+      sessionHasActivity: jest.fn((id: string) => Promise.resolve(hasActivity[id] ?? false)),
+    };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        TrainingsService,
+        {
+          provide: getRepositoryToken(Training),
+          useValue: { findOne: jest.fn().mockResolvedValue(training), save: jest.fn((t: unknown) => Promise.resolve(t)) },
+        },
+        { provide: getRepositoryToken(TrainingSession), useValue: sessionsRepo },
+        { provide: AttendancesService, useValue: attendancesService },
+      ],
+    }).compile();
+    return { service: moduleRef.get(TrainingsService), sessionsRepo };
+  }
+
+  // Tuesdays: 2026-09-22, 2026-09-29. Thursdays: 2026-09-24. Today (Sunday 20th) is excluded.
+  const tuesdays = [{ date: '2026-09-22' }, { date: '2026-09-29' }];
+
+  it('deletes upcoming sessions on the old weekday that nobody answered', async () => {
+    const { service, sessionsRepo } = await buildUpdate(tuesdays);
+    await service.updateTraining('t1', { dayOfWeek: 4 });
+    expect(sessionsRepo.delete).toHaveBeenCalledTimes(2);
+    expect(sessionsRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('cancels, rather than deletes, one that already has answers or teams', async () => {
+    const { service, sessionsRepo } = await buildUpdate(tuesdays, { s0: true });
+    await service.updateTraining('t1', { dayOfWeek: 4 });
+    expect(sessionsRepo.update).toHaveBeenCalledWith('s0', { cancelled: true });
+    expect(sessionsRepo.delete).toHaveBeenCalledWith('s1');
+  });
+
+  it('cancels one that already has a score', async () => {
+    const { service, sessionsRepo } = await buildUpdate([{ date: '2026-09-22', scoreTeam0: 2, scoreTeam1: 1 }]);
+    await service.updateTraining('t1', { dayOfWeek: 4 });
+    expect(sessionsRepo.update).toHaveBeenCalledWith('s0', { cancelled: true });
+    expect(sessionsRepo.delete).not.toHaveBeenCalled();
+  });
+
+  it('leaves past sessions, today and sessions already on the new weekday alone', async () => {
+    const { service, sessionsRepo } = await buildUpdate([
+      { date: '2026-09-15' }, // past Tuesday
+      { date: '2026-09-20' }, // today
+      { date: '2026-09-24' }, // a Thursday, the new weekday
+    ]);
+    await service.updateTraining('t1', { dayOfWeek: 4 });
+    expect(sessionsRepo.delete).not.toHaveBeenCalled();
+    expect(sessionsRepo.update).not.toHaveBeenCalled();
+  });
+
+  it("does nothing to sessions when the weekday isn't what changed", async () => {
+    const { service, sessionsRepo } = await buildUpdate(tuesdays);
+    await service.updateTraining('t1', { location: 'Terrain B' });
+    expect(sessionsRepo.delete).not.toHaveBeenCalled();
+  });
+});

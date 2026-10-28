@@ -9,6 +9,8 @@ import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity
 import { PlayerSubPosition } from '../users/entities/user.entity';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { sessionLockProvider } from '../test-utils/session-lock-mock';
+import { AttendancesService } from '../attendances/attendances.service';
 
 const POSITIONS = [
   PlayerSubPosition.GOALKEEPER,
@@ -69,6 +71,14 @@ async function generate(opts: {
         provide: StatsService,
         useValue: { getPlayerStats: jest.fn().mockResolvedValue(opts.players.map((p) => ({ userId: p.id, trainingLevel: p.score }))) },
       },
+      sessionLockProvider([
+        TrainingTeamAssignment,
+        TrainingSession,
+        Attendance,
+        AttendanceGuest,
+        PlayerSeparationRule,
+      ]),
+      { provide: AttendancesService, useValue: { syncCapPromotions: jest.fn().mockResolvedValue(undefined) } },
       { provide: PushNotificationsService, useValue: { sendToUsers: jest.fn().mockResolvedValue(undefined) } },
     ],
   }).compile();

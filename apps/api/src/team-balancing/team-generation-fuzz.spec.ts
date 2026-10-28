@@ -1,6 +1,12 @@
 import { TeamBalancingService } from './team-balancing.service';
 import { AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { PlayerSubPosition } from '../users/entities/user.entity';
+import { Attendance } from '../attendances/entities/attendance.entity';
+import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
+import { TrainingTeamAssignment } from './entities/training-team-assignment.entity';
+import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { PlayerSeparationRule } from '../users/entities/player-separation-rule.entity';
+import { manualSessionLock } from '../test-utils/session-lock-mock';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let seed = 12345;
@@ -42,14 +48,30 @@ function run(nPlayers: number, guestsPer: number[], nRules: number, teamCount: n
     save: jest.fn((a: any[]) => ((saved = a), Promise.resolve(a))),
     find: jest.fn(() => Promise.resolve(saved)),
   };
+  const sessionsRepo = {
+    findOne: jest.fn().mockResolvedValue({ id: 's1', date: '2026-10-27', teamsAutoGenerationDisabled: flagged }),
+    update: sessionUpdate,
+  };
+  const attendancesRepo = { find: jest.fn().mockResolvedValue(attendances) };
+  const guestsRepo = {};
+  const rulesRepo = { find: jest.fn().mockResolvedValue(rules) };
+  const lock = manualSessionLock([
+    [TrainingTeamAssignment, assignmentsRepo],
+    [TrainingSession, sessionsRepo],
+    [Attendance, attendancesRepo],
+    [AttendanceGuest, guestsRepo],
+    [PlayerSeparationRule, rulesRepo],
+  ]);
   const service = new TeamBalancingService(
     assignmentsRepo as any,
-    { findOne: jest.fn().mockResolvedValue({ id: 's1', date: '2026-10-27', teamsAutoGenerationDisabled: flagged }), update: sessionUpdate } as any,
-    { find: jest.fn().mockResolvedValue(attendances) } as any,
-    {} as any,
-    { find: jest.fn().mockResolvedValue(rules) } as any,
+    sessionsRepo as any,
+    attendancesRepo as any,
+    guestsRepo as any,
+    rulesRepo as any,
     { getPlayerStats: jest.fn().mockResolvedValue(users.map((u) => ({ userId: u.id, trainingLevel: Math.round(rnd() * 100) }))) } as any,
     { sendToUsers: jest.fn().mockResolvedValue(undefined) } as any,
+    lock as any,
+    { syncCapPromotions: jest.fn() } as any,
   );
   return { service, rules, users, attendances, sessionUpdate, getSaved: () => saved };
 }
