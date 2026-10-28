@@ -40,8 +40,6 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 - **Load Testing** (Siege), **DAST** (OWASP ZAP), **E2E** (Cypress — smoke test golden path : connexion, accueil, navigation Entraînements/Matchs)
 - **Deploy Staging** — déploiement SSH sur le VPS (voir checklist ci-dessous)
 
-`qodo-pr-agent.yml` (relecture IA des pull requests) tourne indépendamment du DAG principal, sur les événements de PR.
-
 ### Exceptions de sécurité documentées
 
 - **~48 CVE Debian** dans l'image `api` — dépendances (perl, glib, ncurses, util-linux, python3, curl, libtiff, libldap, libssh2...) que le paquet `.deb` de Google Chrome installe lui-même via ses propres `Recommends:`, indépendamment de ce que le Dockerfile installe explicitement. Aucune n'est un chemin d'attaque atteignable : le scraper FFF ne visite qu'un seul domaine fixe et de confiance, en headless pur, sans jamais traiter de fichier, de connexion LDAP/SSH ni d'image TIFF fournis par un tiers. Documentées et ignorées dans `.trivyignore`.
@@ -49,7 +47,6 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 ### État connu au premier run
 
 - **Deploy-Staging** est actif — VPS configuré, secrets SSH en place (voir checklist ci-dessous, déjà faite).
-- **Qodo Merge** reste inactif tant que `OPENAI_KEY` n'est pas ajouté (voir plus bas).
 
 ## Checklist : activer le déploiement automatique sur le VPS
 
@@ -71,7 +68,3 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 > **Notifications push** — sur iPhone, elles ne fonctionnent que si l'app est installée sur l'écran d'accueil (PWA), et uniquement à partir d'iOS 16.4 ; ce n'est pas un bug, c'est une limitation de Safari.
 
 > `docker-compose.staging.yml` limite déjà la RAM de chaque conteneur (`mem_limit` — 1 Go pour `api`, 300 Mo pour `postgres`, 128 Mo pour `web`) : si le scraper FFF s'emballe, seul son propre conteneur peut en faire les frais, jamais un service d'un autre projet hébergé sur le même VPS (CarlaCréation, par exemple).
-
-## Activer Qodo Merge (relecture IA des PR)
-
-Ajouter le secret `OPENAI_KEY` (Settings → Secrets and variables → Actions) — `qodo-pr-agent.yml` s'active automatiquement dès qu'il est présent, sans autre changement.
