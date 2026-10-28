@@ -15,6 +15,7 @@ import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity'
 import { AttendancePollReminder, PollReminderKind } from './entities/attendance-poll-reminder.entity';
 import { PushNotificationsService } from './push-notifications.service';
 import { parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
+import { NotificationCategory } from './notification-category';
 
 @Injectable()
 export class PushNotificationsScheduler {
@@ -70,6 +71,7 @@ export class PushNotificationsScheduler {
       try {
         await this.pushNotificationsService.sendToCoaches({
           title: 'Résultat manquant',
+          category: NotificationCategory.COACH,
           body: `Le résultat du match contre ${match.opponent} du ${match.date} n'a pas encore été saisi.`,
           url: `/matches/${match.id}`,
         });
@@ -106,6 +108,7 @@ export class PushNotificationsScheduler {
         if (validatedCount === 0) {
           await this.pushNotificationsService.sendToCoaches({
             title: 'Pointage à faire',
+            category: NotificationCategory.COACH,
             body: `Le pointage réel de l'entraînement du ${session.date} n'a pas encore été fait.`,
             url: '/trainings',
           });
@@ -150,6 +153,7 @@ export class PushNotificationsScheduler {
           targets.map((u) => u.id),
           {
             title: 'Présence à confirmer',
+            category: NotificationCategory.ATTENDANCE_REMINDERS,
             body: `Tu n'as pas encore répondu pour l'entraînement du ${session.date} — les équipes vont bientôt être tirées.`,
             url: `/trainings?session=${session.id}`,
           },
@@ -202,6 +206,7 @@ export class PushNotificationsScheduler {
           targets.map((u) => u.id),
           {
             title: 'Présence à confirmer',
+            category: NotificationCategory.ATTENDANCE_REMINDERS,
             body: `Tu n'as pas encore répondu pour le match contre ${match.opponent} demain.`,
             url: `/matches/${match.id}`,
           },
@@ -250,6 +255,7 @@ export class PushNotificationsScheduler {
           if (isMotmRevealed(votes, totalPlayers)) {
             await this.pushNotificationsService.sendToUsers(recipientIds, {
               title: 'Homme du match révélé',
+              category: NotificationCategory.MATCH_RESULTS,
               body: `Le résultat du vote homme du match contre ${match.opponent} est disponible.`,
               url: `/matches/${match.id}`,
             });
@@ -263,6 +269,7 @@ export class PushNotificationsScheduler {
           if (isMotmRevealed(votes, totalPlayers)) {
             await this.pushNotificationsService.sendToUsers(recipientIds, {
               title: 'Patron de la défense révélé',
+              category: NotificationCategory.MATCH_RESULTS,
               body: `Le résultat du vote patron de la défense contre ${match.opponent} est disponible.`,
               url: `/matches/${match.id}`,
             });
@@ -297,6 +304,7 @@ export class PushNotificationsScheduler {
         const recipientIds = activeUsers.filter((u) => u.id !== birthdayUser.id).map((u) => u.id);
         await this.pushNotificationsService.sendToUsers(recipientIds, {
           title: "🎂 C'est un anniversaire !",
+          category: NotificationCategory.BIRTHDAYS,
           body: `${birthdayUser.firstName} ${birthdayUser.lastName} fête son anniversaire aujourd'hui — pense à lui souhaiter !`,
           url: '/',
         });
@@ -353,6 +361,7 @@ export class PushNotificationsScheduler {
       try {
         await this.pushNotificationsService.sendToUsers([coach.id], {
           title: `${missing} joueur${missing > 1 ? 's' : ''} à noter`,
+          category: NotificationCategory.COACH,
           body: `Tu as encore ${missing} joueur${missing > 1 ? 's' : ''} à noter. Ça prend quelques minutes.`,
           url: '/player-ratings',
         });

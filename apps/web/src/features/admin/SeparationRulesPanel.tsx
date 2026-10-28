@@ -69,7 +69,7 @@ export function SeparationRulesPanel() {
                       type="button"
                       disabled={deleteRuleMutation.isPending}
                       onClick={() => deleteRuleMutation.mutate(r.id)}
-                      className="text-muted-foreground hover:text-destructive disabled:opacity-40"
+                      className="text-muted-foreground hover:text-destructive flex size-10 items-center justify-center rounded-full disabled:opacity-40"
                       aria-label="Retirer cette règle"
                     >
                       <X className="size-3.5" />

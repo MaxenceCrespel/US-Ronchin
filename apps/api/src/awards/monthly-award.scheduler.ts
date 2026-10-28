@@ -8,7 +8,11 @@ import { monthBounds, monthLabel, monthLabelDisplay, previousMonthLabel } from '
 import { parisToday } from '../common/utils/paris-time';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { Match } from '../matches/entities/match.entity';
-import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import {
+  PushNotificationsService,
+  type PushPayload,
+} from '../push-notifications/push-notifications.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 /** Same rule as the frontend's isRosterPlayer / AwardsService's own local copy — only
  * active regular players and playing coaches are forced to vote, so only they get pinged
@@ -91,6 +95,7 @@ export class MonthlyAwardScheduler {
     this.logger.log(`Votes du mois ouverts pour ${month}: ${missing.map((c) => c.key).join(', ')}`);
     await this.notifyRoster({
       title: 'Joueur du mois',
+      category: NotificationCategory.AWARDS,
       body: `Le vote « Joueur du mois » de ${monthLabelDisplay(month)} est ouvert — à toi de voter !`,
       url: '/',
     });
@@ -111,6 +116,7 @@ export class MonthlyAwardScheduler {
     this.logger.log(`Votes du mois clôturés pour ${month}: ${active.map((c) => c.key).join(', ')}`);
     await this.notifyRoster({
       title: 'Joueur du mois dévoilé',
+      category: NotificationCategory.AWARDS,
       body: `Viens découvrir si tu as été élu Joueur du mois de ${monthLabelDisplay(month)} !`,
       url: '/',
     });
@@ -118,7 +124,7 @@ export class MonthlyAwardScheduler {
 
   /** Same idea as AwardsScheduler's own notifyRoster — kept as its own small copy rather
    * than shared, same reasoning as this file's isRosterPlayer duplicate (see that comment). */
-  private async notifyRoster(payload: { title: string; body: string; url: string }) {
+  private async notifyRoster(payload: PushPayload) {
     const users = await this.usersRepository.find();
     const recipientIds = users.filter(isRosterPlayer).map((u) => u.id);
     if (recipientIds.length === 0) return;

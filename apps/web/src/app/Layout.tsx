@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { BarChart3, CalendarDays, CircleHelp, Gauge, Home, Menu, ShieldHalf, Swords, Trophy, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, CircleHelp, Ellipsis, Gauge, Home, ShieldHalf, Swords, Trophy, Users, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/auth-store'
 import type { UserRole } from '@/lib/types'
@@ -54,6 +54,45 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-white/85 hover:bg-white/15 hover:text-white',
   )
 
+/** The phone's main navigation — the four screens players open every week, plus "Plus" for the
+ * rest (the /plus page of tiles). Hidden from md up, where the sidebar is always on screen. */
+const tabItems: { to: string; label: string; icon: typeof Home; end?: boolean }[] = [
+  { to: '/', label: 'Accueil', icon: Home, end: true },
+  { to: '/trainings', label: 'Entraîn.', icon: CalendarDays },
+  { to: '/matches', label: 'Matchs', icon: ShieldHalf },
+  { to: '/stats', label: 'Stats', icon: BarChart3 },
+]
+
+const tabClass = (isActive: boolean) =>
+  cn(
+    'flex min-h-11 flex-col items-center justify-center gap-1 text-[11px] transition-colors',
+    isActive ? 'text-club-blue font-bold' : 'text-muted-foreground font-semibold',
+  )
+
+function MobileTabBar({ moreActive }: { moreActive: boolean }) {
+  return (
+    <nav
+      aria-label="Navigation principale"
+      className="bg-card fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t px-2 pt-1.5 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:hidden"
+    >
+      {tabItems.map(({ to, label, icon: Icon, end }) => (
+        <NavLink key={to} to={to} end={end} className={({ isActive }) => tabClass(isActive)}>
+          {({ isActive }) => (
+            <>
+              <Icon className="size-[22px]" strokeWidth={isActive ? 2.4 : 2} />
+              {label}
+            </>
+          )}
+        </NavLink>
+      ))}
+      <Link to="/plus" className={tabClass(moreActive)} aria-current={moreActive ? 'page' : undefined}>
+        <Ellipsis className="size-[22px]" strokeWidth={moreActive ? 2.4 : 2} />
+        Plus
+      </Link>
+    </nav>
+  )
+}
+
 export function Layout() {
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
@@ -63,6 +102,9 @@ export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const pageHelp = getRouteHelp(location.pathname)
+  const onTab = tabItems.some(({ to, end }) =>
+    end ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`),
+  )
 
   useEffect(() => {
     setSidebarOpen(false)
@@ -109,7 +151,7 @@ export function Layout() {
               className="animate-net-wobble h-9 w-9 shrink-0 drop-shadow"
             />
             <div className="leading-tight">
-              <p className="text-sm font-bold tracking-wide text-white uppercase">US Ronchin</p>
+              <p className="font-display text-lg leading-none font-extrabold tracking-wide text-white uppercase">US Ronchin</p>
               <p className="text-club-gold text-xs font-medium">Football · Depuis 1902</p>
             </div>
           </div>
@@ -142,20 +184,18 @@ export function Layout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b px-4 py-2.5 sm:justify-end sm:px-6">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            className="text-foreground md:hidden"
-            aria-label="Ouvrir le menu"
-          >
-            <Menu className="size-5" />
-          </button>
+        {/* On a phone the header carries the club's identity (the sidebar is tucked behind
+            "Plus"), so it takes the club's dark blue; from md up it's the light utility bar. */}
+        <header className="max-md:bg-club-blue-dark flex items-center justify-between gap-3 px-4 py-2.5 max-md:text-white md:justify-end md:border-b md:px-6">
+          <Link to="/" className="flex items-center gap-2.5 md:hidden">
+            <img src="/club-logo.png" alt="" className="size-8 shrink-0" />
+            <span className="font-display text-lg font-extrabold tracking-wide uppercase">US Ronchin</span>
+          </Link>
           <div className="flex items-center gap-3">
             {user && (
               <Link
                 to="/profile"
-                className="hover:bg-accent flex items-center gap-2 rounded-full py-1 pr-3 pl-1 transition-colors"
+                className="md:hover:bg-accent flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-white/15 sm:pr-3"
                 data-tour="nav-profile"
               >
                 <AccountLevelRing userId={user.id} ringWidth={2}>
@@ -169,7 +209,7 @@ export function Layout() {
                   <p className="text-sm font-medium">
                     {user.firstName} {user.lastName}
                   </p>
-                  <p className="text-muted-foreground text-xs">{roleLabel}</p>
+                  <p className="text-muted-foreground text-xs max-md:text-white/75">{roleLabel}</p>
                 </div>
               </Link>
             )}
@@ -177,7 +217,7 @@ export function Layout() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 rounded-full"
+                className="size-9 rounded-full hover:bg-white/15 hover:text-white md:size-8 md:hover:bg-accent md:hover:text-accent-foreground"
                 onClick={() => setHelpOpen(true)}
                 aria-label="Aide sur cet écran"
                 title="Aide sur cet écran"
@@ -185,7 +225,7 @@ export function Layout() {
                 <CircleHelp className="size-4" />
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={logout}>
+            <Button variant="outline" size="sm" onClick={logout} className="hidden md:inline-flex">
               Déconnexion
             </Button>
           </div>
@@ -217,13 +257,14 @@ export function Layout() {
         <PlayerRatingsReminder />
         <InstallAppBanner />
         <NotificationPrompt />
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none sm:px-6 md:pb-6">
           <div className="mx-auto w-full min-w-0 max-w-6xl">
             <SrHeading />
             <Outlet />
           </div>
         </main>
       </div>
+      <MobileTabBar moreActive={!onTab} />
     </div>
   )
 }

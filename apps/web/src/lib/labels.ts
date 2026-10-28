@@ -41,6 +41,22 @@ export const SUB_POSITION_ABBR: Record<PlayerSubPosition, string> = {
   STRIKER: 'BU',
 }
 
+/** Which pitch band a profile position belongs to — for filtering the roster by line. */
+export const SUB_POSITION_BAND: Record<PlayerSubPosition, PlayerPosition> = {
+  GOALKEEPER: 'GOALKEEPER',
+  CENTER_BACK: 'DEFENDER',
+  RIGHT_BACK: 'DEFENDER',
+  LEFT_BACK: 'DEFENDER',
+  DEFENSIVE_MIDFIELDER: 'MIDFIELDER',
+  CENTER_MIDFIELDER: 'MIDFIELDER',
+  RIGHT_MIDFIELDER: 'MIDFIELDER',
+  LEFT_MIDFIELDER: 'MIDFIELDER',
+  ATTACKING_MIDFIELDER: 'MIDFIELDER',
+  RIGHT_WINGER: 'FORWARD',
+  LEFT_WINGER: 'FORWARD',
+  STRIKER: 'FORWARD',
+}
+
 export const SENIORITY_TIER_LABELS: Record<SeniorityTier, string> = {
   ONE_TO_THREE: '1 à 3 ans',
   THREE_TO_SEVEN: '3 à 7 ans',

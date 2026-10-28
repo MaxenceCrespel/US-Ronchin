@@ -66,6 +66,11 @@ export function NotificationSettingsCard() {
       </CardHeader>
       {isPushSupported() && (
         <CardContent className="flex flex-col gap-3">
+          {enabled && (
+            <p className="bg-accent text-accent-foreground rounded-xl px-4 py-3 text-sm font-semibold">
+              Activées sur ce téléphone — tu reçois les alertes même app fermée.
+            </p>
+          )}
           <Button
             type="button"
             variant={enabled ? 'outline' : 'default'}

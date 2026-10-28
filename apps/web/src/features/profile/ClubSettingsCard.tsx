@@ -96,7 +96,7 @@ export function ClubSettingsCard() {
             apps/api/src/local-fff-sync.ts) — le serveur ne peut pas forcément scraper ces sites lui-même.
           </p>
 
-          <Button type="submit" className="w-fit" size="sm" disabled={mutation.isPending}>
+          <Button type="submit" className="w-full sm:w-fit" disabled={mutation.isPending}>
             {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
           {mutation.isSuccess && (

@@ -56,8 +56,8 @@ function BandTiles({ counts }: { counts: Record<Band, number> }) {
   return (
     <div className="grid grid-cols-4 gap-1.5">
       {BANDS.map((band) => (
-        <div key={band} className="flex flex-col items-center gap-0.5 rounded-md border px-1 py-2">
-          <span className={cn('text-base font-bold tabular-nums', counts[band] === 0 ? 'text-destructive' : 'text-club-blue')}>
+        <div key={band} className="flex flex-col items-center gap-1 rounded-xl border px-1 py-2">
+          <span className={cn('font-display text-2xl leading-none font-extrabold tabular-nums', counts[band] === 0 ? 'text-destructive' : 'text-club-blue')}>
             {counts[band]}
           </span>
           <span className="text-muted-foreground text-[9.5px] font-medium tracking-wide uppercase">
@@ -359,12 +359,12 @@ function ConvocationDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="flex shrink-0 flex-col gap-2.5">
-            <div className="bg-accent flex items-center gap-2.5 rounded-lg border px-3 py-2.5">
-              <span className="text-club-blue text-xl font-bold tabular-nums">
+            <div className="bg-club-blue-dark flex items-center gap-3 rounded-xl px-3.5 py-3 text-white">
+              <span className="font-display text-club-gold text-4xl leading-none font-extrabold tabular-nums">
                 {draft.size}/{present.length}
               </span>
-              <span className="text-muted-foreground text-xs">
-                joueurs convoqués parmi les <strong className="text-foreground">{present.length} présents</strong>.
+              <span className="text-xs text-white/85">
+                joueurs convoqués parmi les <strong className="text-white">{present.length} présents</strong>.
               </span>
             </div>
             <BandTiles counts={counts} />
@@ -383,8 +383,8 @@ function ConvocationDialog({
                   type="button"
                   onClick={() => toggle(a.id)}
                   className={cn(
-                    'hover:bg-accent flex w-full items-center gap-2.5 border-b px-3 py-2 text-left last:border-b-0',
-                    draft.has(a.id) && 'bg-club-blue/5',
+                    'hover:bg-accent flex min-h-12 w-full items-center gap-2.5 border-b px-3 py-2 text-left last:border-b-0',
+                    draft.has(a.id) && 'bg-club-blue/10',
                   )}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">

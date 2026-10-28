@@ -109,16 +109,16 @@ export function ProfilePage() {
         </div>
       )}
 
-      <Card className="mx-auto w-full max-w-xl" data-tour="profile-form">
+      <Card className="bg-club-blue-dark mx-auto w-full max-w-xl border-0 text-white shadow-lg" data-tour="profile-form">
         <CardHeader className="relative">
           <Link
             to="/profile/edit"
             aria-label="Modifier mon profil"
-            className="border-input hover:bg-accent absolute top-6 right-6 flex size-9 shrink-0 items-center justify-center rounded-full border"
+            className="absolute top-6 right-6 flex size-11 shrink-0 items-center justify-center rounded-full border border-white/30 hover:bg-white/15"
           >
             <Pencil className="size-4" />
           </Link>
-          <div className="flex items-center gap-4 pr-11">
+          <div className="flex items-center gap-4 pr-14">
             {levelQuery.data ? (
                 <AccountLevelDialog level={levelQuery.data}>
                   <AccountLevelRing userId={user.id} ringWidth={4}>
@@ -141,7 +141,7 @@ export function ProfilePage() {
                 </AccountLevelRing>
               )}
               <div className="min-w-0">
-                <CardTitle className="flex flex-wrap items-center gap-1.5">
+                <CardTitle className="flex flex-wrap items-center gap-1.5 text-2xl">
                   <span className="truncate">
                     {user.firstName} {user.lastName}
                   </span>
@@ -156,7 +156,7 @@ export function ProfilePage() {
                     </span>
                   )}
                 </CardTitle>
-                <CardDescription className="break-words">
+                <CardDescription className="break-words text-white/80">
                   {user.isLicensed ? 'Joueur licencié' : 'Joueur non licencié'} — {user.email}
                 </CardDescription>
               </div>

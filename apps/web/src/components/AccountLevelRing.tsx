@@ -16,12 +16,14 @@ export const TIER_LABELS: Record<AccountTier, string> = {
 }
 
 export const TIER_BADGE_CLASS: Record<AccountTier, string> = {
-  BRONZE: 'bg-amber-800/15 text-amber-800',
-  SILVER: 'bg-slate-400/20 text-slate-600',
-  GOLD: 'bg-amber-400/20 text-amber-600',
-  PLATINUM: 'bg-teal-400/20 text-teal-700',
-  DIAMOND: 'bg-sky-400/20 text-sky-600',
-  RUBY: 'bg-rose-500/20 text-rose-700',
+  // Opaque light fill + dark text: the pill sits on white cards and on the dark-blue profile
+  // header alike, and a see-through tint would vanish into the latter.
+  BRONZE: 'bg-amber-100 text-amber-900',
+  SILVER: 'bg-slate-100 text-slate-700',
+  GOLD: 'bg-yellow-100 text-amber-800',
+  PLATINUM: 'bg-teal-100 text-teal-800',
+  DIAMOND: 'bg-sky-100 text-sky-800',
+  RUBY: 'bg-rose-100 text-rose-800',
 }
 
 const TIER_RING: Record<AccountTier, string> = {

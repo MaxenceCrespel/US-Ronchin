@@ -373,6 +373,58 @@ function RatingLegend({ value }: { value?: number }) {
   )
 }
 
+/** Every note given so far, placed on one 0–10 line — to see at a glance whether the ranking
+ * between teammates is the one meant (the defender above the scorer?) before validating.
+ * Close notes stack on a new lane instead of hiding each other. */
+function RatingsOverview({ notes }: { notes: { id: string; initials: string; name: string; value: number }[] }) {
+  if (notes.length === 0) return null
+  const sorted = [...notes].sort((a, b) => a.value - b.value)
+  const lanes: number[] = []
+  const placed = sorted.map((n) => {
+    let lane = 0
+    while (lanes[lane] !== undefined && n.value - lanes[lane] < 1) lane++
+    lanes[lane] = n.value
+    return { ...n, lane }
+  })
+  const height = 40 + Math.max(1, lanes.length) * 28
+  return (
+    <div
+      role="img"
+      aria-label={`Vue d'ensemble de tes notes : ${sorted.map((n) => `${n.name} ${formatNote(n.value)}`).join(', ')}`}
+      className="bg-club-blue-dark relative rounded-xl px-4"
+      style={{ height }}
+    >
+      <div
+        className="absolute inset-x-4 bottom-6 h-1 rounded-full"
+        style={{ background: `linear-gradient(90deg, ${ratingColor(0)}, ${ratingColor(5)}, ${ratingColor(10)})` }}
+      />
+      {[0, 2, 4, 6, 8, 10].map((n) => (
+        <span
+          key={n}
+          className="font-display absolute bottom-1 -translate-x-1/2 text-xs font-bold text-white/70"
+          style={{ left: `calc(1rem + (100% - 2rem) * ${n / 10})` }}
+        >
+          {n}
+        </span>
+      ))}
+      {placed.map((n) => (
+        <span
+          key={n.id}
+          title={`${n.name} · ${formatNote(n.value)}`}
+          className="border-club-blue-dark absolute flex h-6 min-w-7 -translate-x-1/2 items-center justify-center rounded-full border-2 px-1 text-[11px] font-extrabold text-white"
+          style={{
+            left: `calc(1rem + (100% - 2rem) * ${n.value / 10})`,
+            bottom: 34 + n.lane * 28,
+            backgroundColor: ratingColor(n.value),
+          }}
+        >
+          {n.initials}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /** Just the slider itself, always full-width — a fixed-width wrapper (with a value label
  * squeezed next to it) used to overflow the vote modal's own padding on a real phone, even
  * though it looked fine at desktop widths. The value now lives on its own line above,
@@ -412,10 +464,10 @@ function RatingSlider({
  * · pelouse" sentence — that used to wrap wherever the browser felt like mid-phrase, unreadable
  * once a scraped FFF venue address made the string long. Each fact now gets its own line and
  * wraps on its own terms, so a phone-width column stays scannable. */
-function MatchMetaLines({ match }: { match: Match }) {
+function MatchMetaLines({ match, tone = 'light' }: { match: Match; tone?: 'light' | 'dark' }) {
   return (
-    <CardDescription className="flex flex-col gap-1.5">
-      <span className="text-foreground/90 text-sm font-semibold capitalize">
+    <CardDescription className={cn('flex flex-col gap-1.5', tone === 'dark' && 'text-white/80')}>
+      <span className={cn('text-sm font-semibold capitalize', tone === 'dark' ? 'text-white' : 'text-foreground/90')}>
         {format(new Date(match.date), 'EEEE d MMMM yyyy', { locale: fr })}
         {match.kickOffTime && ` · ${match.kickOffTime.slice(0, 5)}`}
       </span>
@@ -1035,6 +1087,9 @@ export function MatchDetailPage() {
   const [ratingDrafts, setRatingDrafts] = useState<Record<string, number>>({})
   // The note being dragged right now, previewed on the legend's scale (see RatingLegend).
   const [previewRating, setPreviewRating] = useState<number | undefined>(undefined)
+  // "compo" keeps the match sheet's order; "note" ranks teammates by the note being given, so
+  // the gaps between them can be checked and adjusted against each other before validating.
+  const [ratingsOrder, setRatingsOrder] = useState<'compo' | 'note'>('compo')
 
   const submitRatingsMutation = useMutation({
     mutationFn: (ratings: { ratedUserId?: string; ratedGuestId?: string; rating: number }[]) =>
@@ -2317,7 +2372,7 @@ export function MatchDetailPage() {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {teammates.map((entry) => {
                       const selected = motmSelection === entry.id
                       return (
@@ -2325,7 +2380,11 @@ export function MatchDetailPage() {
                           key={entry.id}
                           type="button"
                           onClick={() => setMotmSelection(entry.id)}
-                          className="flex flex-col items-center gap-1.5"
+                          aria-pressed={selected}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition-colors',
+                            selected ? 'border-club-gold bg-club-gold/10' : 'bg-card hover:bg-accent border-transparent',
+                          )}
                         >
                           <PlayerAvatar
                             avatarUrl={entry.user?.avatarUrl}
@@ -2335,12 +2394,10 @@ export function MatchDetailPage() {
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
-                              selected
-                                ? 'border-club-gold ring-club-gold/40 border-2 ring-4'
-                                : 'opacity-70',
+                              selected ? 'border-club-gold ring-club-gold/40 border-2 ring-4' : 'opacity-80',
                             )}
                           />
-                          <span className="w-16 truncate text-center text-xs font-medium">
+                          <span className="w-full truncate text-center text-xs font-semibold">
                             {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
@@ -2472,7 +2529,7 @@ export function MatchDetailPage() {
                 )
               ) : defenseBossCandidates.length > 0 ? (
                 <>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                     {defenseBossCandidates.map((entry) => {
                       const selected = defenseBossSelection === entry.id
                       return (
@@ -2480,7 +2537,11 @@ export function MatchDetailPage() {
                           key={entry.id}
                           type="button"
                           onClick={() => setDefenseBossSelection(entry.id)}
-                          className="flex flex-col items-center gap-1.5"
+                          aria-pressed={selected}
+                          className={cn(
+                            'flex flex-col items-center gap-1.5 rounded-2xl border-2 p-2 transition-colors',
+                            selected ? 'border-club-blue bg-club-blue/10' : 'bg-card hover:bg-accent border-transparent',
+                          )}
                         >
                           <PlayerAvatar
                             avatarUrl={entry.user?.avatarUrl}
@@ -2490,12 +2551,10 @@ export function MatchDetailPage() {
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
-                              selected
-                                ? 'border-club-blue ring-club-blue/40 border-2 ring-4'
-                                : 'opacity-70',
+                              selected ? 'border-club-blue ring-club-blue/40 border-2 ring-4' : 'opacity-80',
                             )}
                           />
-                          <span className="w-16 truncate text-center text-xs font-medium">
+                          <span className="w-full truncate text-center text-xs font-semibold">
                             {entry.user?.firstName ?? entry.guestFirstName}
                           </span>
                         </button>
@@ -2560,8 +2619,55 @@ export function MatchDetailPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {iPlayed && pendingRatingIds.size > 0 && <RatingLegend key={previewRating} value={previewRating} />}
+            {iPlayed && pendingRatingIds.size > 0 && (
+              <>
+                <RatingsOverview
+                  notes={teammatesToRate
+                    .filter((entry) => ratingDrafts[entry.id] != null)
+                    .map((entry) => {
+                      const first = entry.user?.firstName ?? entry.guestFirstName ?? ''
+                      const last = entry.user?.lastName ?? entry.guestLastName ?? ''
+                      return {
+                        id: entry.id,
+                        initials: `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || '?',
+                        name: `${first} ${last}`.trim(),
+                        value: ratingDrafts[entry.id]!,
+                      }
+                    })}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground text-xs font-semibold">
+                    {teammatesToRate.filter((entry) => ratingDrafts[entry.id] != null).length} / {teammatesToRate.length} notés
+                  </span>
+                  <div role="group" aria-label="Ordre des joueurs" className="bg-muted flex rounded-full p-0.5">
+                    {(['compo', 'note'] as const).map((order) => (
+                      <button
+                        key={order}
+                        type="button"
+                        aria-pressed={ratingsOrder === order}
+                        onClick={() => setRatingsOrder(order)}
+                        className={cn(
+                          'min-h-8 rounded-full px-3 text-xs font-semibold transition-colors',
+                          ratingsOrder === order ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                        )}
+                      >
+                        {order === 'compo' ? 'Compo' : 'Par note'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
             <div className="divide-y">
-            {compositionQuery.data?.filter((entry) => !entry.isSpectator).map((entry) => {
+            {(compositionQuery.data ?? [])
+              .filter((entry) => !entry.isSpectator)
+              .map((entry, index) => ({ entry, index }))
+              .sort((a, b) =>
+                ratingsOrder === 'note'
+                  ? (ratingDrafts[b.entry.id] ?? -1) - (ratingDrafts[a.entry.id] ?? -1) || a.index - b.index
+                  : a.index - b.index,
+              )
+              .map(({ entry }) => {
               const isSelf = entry.userId === user?.id
               // A teammate added to the composition after this rater already validated once
               // stays pending on its own — everyone else rated earlier is locked, regardless
@@ -2624,11 +2730,16 @@ export function MatchDetailPage() {
                             : 'Tu ne peux pas te noter toi-même'}
                       </span>
                     ) : isPending ? (
-                      <span
-                        className="shrink-0 text-sm font-semibold tabular-nums"
-                        style={{ color: ratingColor(draftValue ?? 0) }}
-                      >
-                        {draftValue != null ? `${formatNote(draftValue)} / 10` : 'Non noté'}
+                      <span className="flex shrink-0 flex-col items-end">
+                        <span
+                          className="font-display text-xl leading-none font-extrabold tabular-nums"
+                          style={{ color: draftValue != null ? ratingColor(draftValue) : undefined }}
+                        >
+                          {draftValue != null ? `${formatNote(draftValue)} / 10` : 'Non noté'}
+                        </span>
+                        {draftValue != null && (
+                          <span className="text-muted-foreground text-[11px]">{ratingLabel(draftValue)}</span>
+                        )}
                       </span>
                     ) : (
                       <span className="flex shrink-0 items-center gap-2 text-xs">
@@ -2749,18 +2860,21 @@ export function MatchDetailPage() {
   )
 
   const recapHeader = (
-    <Card className="gap-2 py-3">
+    <Card className="bg-club-blue-dark gap-3 border-0 py-4 text-white shadow-lg">
       <CardHeader className="gap-1 px-4">
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span>vs {match.opponent}</span>
-          <Badge variant={match.status === 'PLAYED' ? 'success' : 'outline'}>
+          <Badge
+            variant={match.status === 'PLAYED' ? 'success' : 'outline'}
+            className={match.status === 'PLAYED' ? undefined : 'border-white/40 text-white'}
+          >
             {match.status === 'PLAYED' ? 'Joué' : 'À venir'}
           </Badge>
         </CardTitle>
-        <MatchMetaLines match={match} />
+        <MatchMetaLines match={match} tone="dark" />
       </CardHeader>
       <CardContent className="px-4">
-        <FinalScore match={match} />
+        <FinalScore match={match} tone="dark" />
       </CardContent>
     </Card>
   )
@@ -2952,6 +3066,7 @@ export function MatchDetailPage() {
     {
       needed: needsMotmVote,
       node: motmCard,
+      heading: 'Homme du match',
       title: 'Vote obligatoire',
       description: "Avant de voir le résumé du match, vote pour l'homme du match.",
     },
@@ -2960,6 +3075,7 @@ export function MatchDetailPage() {
           {
             needed: needsDefenseBossVote,
             node: defenseBossCard,
+            heading: 'Patron de la défense',
             title: 'Vote obligatoire',
             description: 'Avant de voir le résumé du match, vote pour le patron de la défense.',
           },
@@ -2968,6 +3084,7 @@ export function MatchDetailPage() {
     {
       needed: needsRatings,
       node: ratingsCard,
+      heading: 'Note tes coéquipiers',
       title: 'Notes obligatoires',
       description: 'Avant de voir le résumé du match, note tes coéquipiers.',
     },
@@ -2985,9 +3102,30 @@ export function MatchDetailPage() {
       >
         {activeStep && (
           <>
-            <DialogHeader>
-              <DialogTitle>
-                {activeStep.title} (étape {activeStepIndex + 1}/{voteSteps.length})
+            <DialogHeader className="gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="bg-club-gold text-club-blue-dark rounded-full px-3 py-1 text-xs font-extrabold tracking-wide uppercase">
+                  {activeStep.title}
+                </span>
+                <span className="text-muted-foreground text-xs font-semibold">
+                  Étape {activeStepIndex + 1} sur {voteSteps.length}
+                </span>
+              </div>
+              <div
+                className="bg-muted h-1.5 overflow-hidden rounded-full"
+                role="progressbar"
+                aria-label="Avancement du vote"
+                aria-valuemin={1}
+                aria-valuemax={voteSteps.length}
+                aria-valuenow={activeStepIndex + 1}
+              >
+                <div
+                  className="bg-club-gold h-full rounded-full transition-all"
+                  style={{ width: `${((activeStepIndex + 1) / voteSteps.length) * 100}%` }}
+                />
+              </div>
+              <DialogTitle className="font-display text-2xl font-extrabold uppercase italic">
+                {activeStep.heading}
               </DialogTitle>
               <DialogDescription>{activeStep.description}</DialogDescription>
             </DialogHeader>

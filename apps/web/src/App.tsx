@@ -9,6 +9,7 @@ import { AcceptInvitationPage } from '@/features/auth/AcceptInvitationPage'
 import { JoinPage } from '@/features/auth/JoinPage'
 import { JoinWaitingPage } from '@/features/auth/JoinWaitingPage'
 import { HomePage } from '@/features/home/HomePage'
+import { MorePage } from '@/app/MorePage'
 
 // Every screen after login/home is fetched on demand: the first load only needs the entry
 // screens, not the trainings, stats, admin and PDF-import code.
@@ -69,6 +70,7 @@ function App() {
                 <Route path="/championship" element={<ChampionshipPage />} />
                 <Route path="/coupe" element={<CoupePage />} />
                 <Route path="/players" element={<PlayersPage />} />
+                <Route path="/plus" element={<MorePage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/edit" element={<EditProfilePage />} />
                 <Route path="/profile/badges" element={<BadgesPage />} />

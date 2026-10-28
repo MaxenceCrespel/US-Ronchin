@@ -29,7 +29,6 @@ CVE-2023-2953
 CVE-2023-45853
 CVE-2023-52355
 CVE-2025-59375
-CVE-2025-69534
 CVE-2025-69720
 CVE-2025-7458
 CVE-2026-11822
@@ -37,28 +36,17 @@ CVE-2026-11824
 CVE-2026-11940
 CVE-2026-12064
 CVE-2026-12912
-CVE-2026-13221
 CVE-2026-14456
-CVE-2026-15308
 CVE-2026-25210
 CVE-2026-34980
-CVE-2026-3644
 CVE-2026-36849
 CVE-2026-41992
-CVE-2026-42496
-CVE-2026-42497
-CVE-2026-45186
-CVE-2026-48962
 CVE-2026-52490
 CVE-2026-53613
 CVE-2026-53615
 CVE-2026-54369
 CVE-2026-55199
 CVE-2026-55200
-CVE-2026-56131
-CVE-2026-56408
-CVE-2026-57432
-CVE-2026-57433
 CVE-2026-58010
 CVE-2026-58011
 CVE-2026-58012
@@ -66,34 +54,17 @@ CVE-2026-58013
 CVE-2026-58014
 CVE-2026-58015
 CVE-2026-58016
-CVE-2026-58050
 CVE-2026-58471
 CVE-2026-58472
 CVE-2026-6276
-CVE-2026-66046
 CVE-2026-6653
 CVE-2026-7210
-CVE-2026-7598
 CVE-2026-8286
-CVE-2026-8376
 CVE-2026-8458
 CVE-2026-8927
 CVE-2026-8932
 CVE-2026-9538
-CVE-2026-84782
 CVE-2026-103111
-
-# CVE-2026-77214 (expat heap buffer over-read in XML_ParseBuffer, information
-# disclosure) affects libexpat1 2.5.0-1+deb12u4 — the same system expat whose
-# earlier CVEs are already listed in this file, installed explicitly by
-# apps/api/Dockerfile for headless Chrome (see CVE-2026-93990 below). Status: affected, no
-# Fixed Version, no Debian bookworm fix published yet (`apt-get upgrade` in
-# the Dockerfile already runs). Not reachable from our code: the API never
-# parses XML (no XML parser in apps/api at all — Node's own HTTP/JSON stack
-# doesn't use expat), and the only expat consumers in the image read local,
-# image-baked files (fontconfig's font configuration) — never XML supplied
-# by a user or a remote server.
-CVE-2026-77214
 
 # CVE-2026-88647 (hostname verification bypass) and CVE-2026-88648 (incomplete X.509
 # name-constraint validation) affect libgnutls30 3.7.9-2+deb12u7 — not installed by
@@ -195,41 +166,6 @@ CVE-2026-74860
 # reached, same reachability argument as the rest of source 1.
 CVE-2026-82049
 
-# CVE-2026-8328 (Python ftplib: FTP connection redirection via ftpcp(), HIGH) — same four
-# packages (libpython3.11-minimal, libpython3.11-stdlib, python3.11, python3.11-minimal),
-# same installed version 3.11.2-6+deb12u8, Status: affected with no Fixed Version, same
-# source (Chrome's Recommends chain, not the bare base image) as CVE-2026-82049 immediately
-# above — just another newly-assigned CVE against that unchanged, unpatched build.
-# Unreachable on top of that: nothing here ever runs Python, let alone ftplib or an FTP
-# connection — the API is Node.js only and the scraper only speaks HTTPS to one fixed domain.
-CVE-2026-8328
-
-# CVE-2026-19553 (Python: certificate verification bypass via missing server_hostname
-# validation in SSLContext.wrap_bio(), HIGH) — same four packages, same installed version
-# (3.11.2-6+deb12u8) and same source (Chrome's Recommends chain) as CVE-2026-82049/
-# CVE-2026-8328 above; re-verified 2026-10-02 (`apt-cache policy` inside the built image:
-# Installed == Candidate, no Debian bookworm fix). Same unreachability: this is a TLS
-# certificate-pinning bug in Python's own ssl module — nothing here ever runs Python or
-# opens a TLS connection through it; the API is Node.js only.
-CVE-2026-19553
-
-# CVE-2026-93990 (Expat: XML injection via malformed UTF-16 input, HIGH) hits libexpat1 at
-# the installed 2.5.0-1+deb12u3 — Status: affected, no Fixed Version. Different source from
-# the rest of this file's Chrome-Recommends/base-image entries: libexpat1 is explicitly
-# listed in apps/api/Dockerfile's own `apt-get install --no-install-recommends` block, one of
-# the shared libraries headless Chrome (`channel: 'chrome'`) actually links against at
-# runtime — not something pulled in incidentally. Re-verified 2026-09-23: a fresh `docker run
-# node:22-bookworm-slim` doesn't have libexpat1 installed at all (so it's genuinely this
-# Dockerfile's own explicit dependency, not the base image), and `apt-cache policy libexpat1`
-# in it shows 2.5.0-1+deb12u3 as both the current security-channel candidate and the version
-# already installed in our built image — nothing newer for `apt-get upgrade` (already run in
-# the Dockerfile) to move to; no Debian bookworm fix published yet. Unreachable regardless:
-# exploiting malformed-UTF-16 XML injection needs attacker-controlled XML/SVG content actually
-# reaching Chrome's parser, and the FFF scraper only ever visits one fixed, trusted FFF domain
-# over HTTPS in pure headless mode — never attacker- or user-supplied URLs or files, same
-# reachability argument as this file's libxml2/Python entries above.
-CVE-2026-93990
-
 # CVE-2026-88806 (libX11: heap-based buffer overflow via a malicious X server, HIGH) and
 # CVE-2026-88807 (libXrender: code injection via heap overflow in RenderQueryPictFormats,
 # HIGH) hit libx11-6/libx11-data/libx11-xcb1 (installed 2:1.8.4-2+deb12u2) and libxrender1
@@ -279,40 +215,6 @@ CVE-2026-96889
 # mitigation-bypass follow-up) is fixed, not ignored — see the root
 # package.json `overrides` entry pinning the minimatch@3.1.5 instance to
 # brace-expansion@1.1.18 (same 1.x API, no rewrite needed).
-#
-# --- apps/api image only: SEPARATE, unrelated vulnerabilities vendored
-# INSIDE the npm CLI itself (apps/api/Dockerfile runs `npm install -g
-# npm@latest` to patch npm's own bundled tar/picomatch/sigstore versions —
-# see that Dockerfile's comment). As of npm@12.0.2 (checked 2026-08-05),
-# npm vendored brace-expansion@5.0.7 internally (CVE-2026-14257 / its
-# later-assigned CVE-2026-69152, fixed only at 5.0.9+) and ip-address@10.2.0
-# (CVE-2026-69192, fixed at 10.3.1+) — and the base image's own default
-# npm@10.9.8 was equally affected on brace-expansion (vendors 2.0.2, fixed
-# only at 2.1.4+). Re-verified 2026-10-02 against the built image: npm@latest
-# is now 12.2.0 and those two original CVEs are gone (brace-expansion moved
-# to 5.0.9, past the 5.0.9+ fix line), but it now vendors that exact 5.0.9
-# internally, which a newer round of CVEs (CVE-2026-102276/102278, fixed at
-# 5.0.10/5.0.11) catches again, plus undici@6.28.0 (CVE-2026-19534, fixed at
-# 6.28.1+) — same unfixable-by-us situation, just a different round of it:
-# nothing in our control (not our package.json, not `overrides` — these
-# live inside the globally-installed npm binary, not our dependency tree).
-# Re-verified 2026-10-03: npm@latest is still 12.2.0 (no newer release
-# published) and now also vendors http-cache-semantics@4.2.0, newly caught by
-# CVE-2026-93748 (information disclosure via the max-stale directive) — no
-# fixed version published for it yet either. Same situation, same reasoning.
-# Not reachable either way: this npm install is only ever used to bootstrap
-# the image at build time and for the one `npx playwright install chrome`
-# call below it — never invoked at runtime, never fed attacker- or
-# HTTP-controlled input. Revisit by checking `npm view npm@latest
-# dependencies` — or just rebuilding the image — once npm ships a release
-# with all of these fixed.
-CVE-2026-14257
-CVE-2026-69152
-CVE-2026-69192
-CVE-2026-102276
-CVE-2026-102278
-CVE-2026-19534
-CVE-2026-93748
 
 # libcups2 (Debian 12 bookworm-slim base image, apps/api/Dockerfile) —
 # CVE-2026-55453: arbitrary code execution via newline injection in printer
@@ -331,18 +233,24 @@ CVE-2026-93748
 CVE-2026-55453
 
 # undici@6.29.0 (CVE-2026-109869: Denial of Service via an unhandled stream
-# error on excessive content, HIGH) — vendored INSIDE the globally-installed
-# npm binary (the Dockerfile's `npm install -g npm@latest`), same
-# unfixable-by-us situation as the earlier undici@6.28.0 round above, not our
-# dependency tree: `npm ls undici --omit=dev --workspace=api` is empty and
-# nothing in apps/api references undici. The container runs
+# error on excessive content; CVE-2026-109383: certificate validation bypass via TLS
+# options dropped in Agent; CVE-2026-87018: Denial of Service via TLS renegotiation with a
+# mismatched certificate — all HIGH, all fixed at 6.29.1 / 7.30.1 / 8.12.2) — vendored INSIDE the globally-installed
+# npm binary (the Dockerfile's `npm install -g npm@latest`, which refreshes
+# npm's own bundled dependencies), unfixable by us, not our dependency
+# tree: `npm ls undici --omit=dev --workspace=api` is empty and nothing in apps/api
+# references undici. The container runs
 # `node dist/main.js`, never npm, so the vendored copy isn't loaded by the API
 # process. Verified 2026-10-24: the very latest npm release (12.2.1) still
 # vendors undici 6.29.0 — the fix (6.29.1 / 7.30.1 / 8.12.2) isn't shipped by
 # any npm release yet, so upgrading npm can't clear it. Revisit by re-packing
 # the newest npm (`npm pack npm@latest` and reading
 # node_modules/undici/package.json) and dropping this entry once it vendors
-# 6.29.1+. The same scan's body-parser and multer findings were NOT ignored —
+# 6.29.1+. The undici TLS findings (109383, 87018) need an outbound TLS connection made
+# through that vendored copy — npm is never run at runtime and the API process never loads
+# it. The same scan's body-parser and multer findings were NOT ignored —
 # those are in our tree and were fixed by bumping them (body-parser 2.4.0,
 # multer 2.5.0 via the root package.json override).
 CVE-2026-109869
+CVE-2026-109383
+CVE-2026-87018

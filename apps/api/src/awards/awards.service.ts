@@ -10,6 +10,7 @@ import { monthLabelDisplay } from './month.util';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { MatchesService } from '../matches/matches.service';
 import { StatsService } from '../stats/stats.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 /** The `season` column doubles as a season label ("2026-2027") for the 5 end-of-season
  * categories and a month label ("2026-09") for the monthly ones — this is the one place that
@@ -251,12 +252,14 @@ export class AwardsService {
     if (isSeasonLabel(season)) {
       await this.pushNotificationsService.sendToUsers(recipientIds, {
         title: 'Trophées de la saison dévoilés',
+        category: NotificationCategory.AWARDS,
         body: `Les résultats des trophées de fin de saison ${season} sont prêts — viens découvrir qui a gagné !`,
         url: '/',
       });
     } else {
       await this.pushNotificationsService.sendToUsers(recipientIds, {
         title: 'Joueur du mois dévoilé',
+        category: NotificationCategory.AWARDS,
         body: `Viens découvrir si tu as été élu Joueur du mois de ${monthLabelDisplay(season)} !`,
         url: '/',
       });

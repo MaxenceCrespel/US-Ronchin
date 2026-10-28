@@ -265,13 +265,25 @@ export function PlayerRatingsPage() {
               key={p.userId}
               id={`rating-${p.userId}`}
               className={cn(
-                'rounded-xl border p-3 transition-colors',
+                'bg-card rounded-2xl border p-3 transition-colors',
                 highlightedUserId === p.userId && 'border-club-blue bg-club-blue/5',
               )}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold">{name}</span>
-                <span className={cn('text-xs font-semibold', p.effectiveRating != null ? 'text-club-blue-dark' : 'text-muted-foreground')}>
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 text-xs font-semibold',
+                    p.effectiveRating != null ? 'text-club-blue-dark' : 'text-muted-foreground',
+                  )}
+                >
+                  {p.effectiveRating != null && (
+                    <span
+                      aria-hidden="true"
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: ratingLevel(p.effectiveRating).color }}
+                    />
+                  )}
                   {p.effectiveRating != null
                     ? `${formatRating(p.effectiveRating)} · ${ratingLevel(p.effectiveRating).label}`
                     : 'Pas encore noté'}
@@ -286,7 +298,7 @@ export function PlayerRatingsPage() {
                     aria-label={`Note ${n} pour ${name}`}
                     onClick={() => rate(p.userId, half && whole === n ? n + 0.5 : n)}
                     className={cn(
-                      'h-9 rounded-md border text-sm font-semibold tabular-nums',
+                      'font-display h-10 rounded-lg border text-base font-bold tabular-nums',
                       whole === n ? 'bg-club-blue border-club-blue text-white' : 'bg-muted/40',
                     )}
                   >
@@ -300,7 +312,7 @@ export function PlayerRatingsPage() {
                   disabled={p.effectiveRating == null}
                   onClick={() => rate(p.userId, half ? Math.floor(p.effectiveRating as number) : Math.min((p.effectiveRating as number) + 0.5, 10))}
                   className={cn(
-                    'h-9 rounded-md border text-xs font-semibold disabled:opacity-40',
+                    'h-10 rounded-lg border text-xs font-semibold disabled:opacity-40',
                     half ? 'bg-club-blue-dark border-club-blue-dark text-white' : 'bg-background',
                   )}
                 >
@@ -313,7 +325,7 @@ export function PlayerRatingsPage() {
       </ul>
 
       {/* Save bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/95 px-4 py-2.5 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[calc(4.25rem+env(safe-area-inset-bottom))] z-20 border-t bg-white/95 px-4 py-2.5 backdrop-blur md:bottom-0">
         <div className="mx-auto flex max-w-xl items-center gap-3">
           <p className="text-muted-foreground flex-1 text-xs leading-snug" aria-live="polite">
             {!allRated ? (

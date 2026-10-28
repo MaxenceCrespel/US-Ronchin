@@ -6,7 +6,11 @@ import { AwardCategory } from './entities/award-category.entity';
 import { FIXED_AWARD_CATEGORIES } from './fixed-categories';
 import { getCurrentSeasonLabel } from '../stats/season.util';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
-import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import {
+  PushNotificationsService,
+  type PushPayload,
+} from '../push-notifications/push-notifications.service';
+import { NotificationCategory } from '../push-notifications/notification-category';
 
 // The vote window opens every 1st of June and force-closes on the 16th — AwardsService
 // itself closes it earlier the instant the whole roster has voted everywhere, so this is
@@ -67,6 +71,7 @@ export class AwardsScheduler {
     this.logger.log(`Votes des trophées de fin de saison ouverts pour ${season}`);
     await this.notifyRoster({
       title: 'Trophées de fin de saison',
+      category: NotificationCategory.AWARDS,
       body: `Le vote pour les 5 récompenses de la saison ${season} est ouvert — à toi de voter !`,
       url: '/',
     });
@@ -85,6 +90,7 @@ export class AwardsScheduler {
     this.logger.log(`Votes des trophées de fin de saison clôturés pour ${season}`);
     await this.notifyRoster({
       title: 'Trophées de la saison dévoilés',
+      category: NotificationCategory.AWARDS,
       body: `Les résultats des trophées de fin de saison ${season} sont prêts — viens découvrir qui a gagné !`,
       url: '/',
     });
@@ -94,7 +100,7 @@ export class AwardsScheduler {
    * instant the whole roster has voted everywhere) — both are genuine "results are in"
    * moments and both should announce it, so this stays a plain public-ish helper other
    * award services can reuse rather than each re-implementing the roster lookup. */
-  async notifyRoster(payload: { title: string; body: string; url: string }) {
+  async notifyRoster(payload: PushPayload) {
     const users = await this.usersRepository.find();
     const recipientIds = users.filter(isRosterPlayer).map((u) => u.id);
     if (recipientIds.length === 0) return;

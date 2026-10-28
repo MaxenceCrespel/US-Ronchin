@@ -6,11 +6,14 @@ import * as webPush from 'web-push';
 import { PushSubscription } from './entities/push-subscription.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { SubscribeDto } from './dto/subscribe.dto';
+import { NotificationCategory } from './notification-category';
 
 export interface PushPayload {
   title: string;
   body: string;
   url: string;
+  /** Lets a user mute this kind of push. Omitted → always sent. Never sent to the device. */
+  category?: NotificationCategory;
 }
 
 @Injectable()
@@ -78,14 +81,32 @@ export class PushNotificationsService {
     return rows.map((r) => r.userId);
   }
 
-  async sendToUser(userId: string, payload: PushPayload): Promise<void> {
-    const subscriptions = await this.subscriptionsRepository.find({
-      where: { userId },
+  async getMutedCategories(userId: string): Promise<NotificationCategory[]> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      select: { id: true, mutedNotificationCategories: true },
     });
-    await this.sendToSubscriptions(subscriptions, payload);
+    return user?.mutedNotificationCategories ?? [];
+  }
+
+  async setMutedCategories(
+    userId: string,
+    categories: NotificationCategory[],
+  ): Promise<NotificationCategory[]> {
+    const unique = [...new Set(categories)];
+    await this.usersRepository.update(
+      { id: userId },
+      { mutedNotificationCategories: unique },
+    );
+    return unique;
+  }
+
+  async sendToUser(userId: string, payload: PushPayload): Promise<void> {
+    await this.sendToUsers([userId], payload);
   }
 
   async sendToUsers(userIds: string[], payload: PushPayload): Promise<void> {
+    userIds = await this.withoutMuted(userIds, payload.category);
     if (userIds.length === 0) return;
     const subscriptions = await this.subscriptionsRepository
       .createQueryBuilder('sub')
@@ -102,6 +123,25 @@ export class PushNotificationsService {
       coaches.map((c) => c.id),
       payload,
     );
+  }
+
+  /** Drops the users who turned this category off on their notifications screen. */
+  private async withoutMuted(
+    userIds: string[],
+    category: NotificationCategory | undefined,
+  ): Promise<string[]> {
+    if (!category || userIds.length === 0) return userIds;
+    const muted = await this.usersRepository
+      .createQueryBuilder('user')
+      .select('user.id', 'id')
+      .where('user.id IN (:...userIds)', { userIds })
+      .andWhere(':category = ANY(user.muted_notification_categories)', {
+        category,
+      })
+      .getRawMany<{ id: string }>();
+    if (muted.length === 0) return userIds;
+    const mutedIds = new Set(muted.map((m) => m.id));
+    return userIds.filter((id) => !mutedIds.has(id));
   }
 
   private async sendToSubscriptions(
@@ -124,7 +164,11 @@ export class PushNotificationsService {
               endpoint: sub.endpoint,
               keys: { p256dh: sub.p256dh, auth: sub.auth },
             },
-            JSON.stringify(payload),
+            JSON.stringify({
+              title: payload.title,
+              body: payload.body,
+              url: payload.url,
+            }),
           );
           this.logger.log(`Notification envoyée (${sub.id}): "${payload.title}"`);
         } catch (error) {

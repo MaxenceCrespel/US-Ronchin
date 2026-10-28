@@ -14,7 +14,7 @@ export function SubPageHeader({ title, backTo }: { title: string; backTo: string
       >
         <ChevronLeft className="size-5" />
       </Link>
-      <h1 className="text-xl font-semibold">{title}</h1>
+      <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">{title}</h1>
     </div>
   )
 }

@@ -13,7 +13,7 @@ interface RouteMeta {
 }
 
 const ROUTES: RouteMeta[] = [
-  { pattern: /^\/login$/, title: 'Connexion', ownH1: false },
+  { pattern: /^\/login$/, title: 'Connexion', ownH1: true },
   { pattern: /^\/join$/, title: 'Créer mon compte', ownH1: false },
   { pattern: /^\/join\/waiting$/, title: 'Compte en attente de validation', ownH1: false },
   { pattern: /^\/accept-invitation$/, title: 'Activer mon compte', ownH1: false },
@@ -73,6 +73,7 @@ const ROUTES: RouteMeta[] = [
     ownH1: true,
     help: 'Après chaque match, donne une note à tes coéquipiers — ça alimente leur moyenne dans les stats.',
   },
+  { pattern: /^\/plus$/, title: 'Plus', ownH1: true },
   { pattern: /^\/profile$/, title: 'Mon profil', ownH1: false, help: 'Tes infos, tes badges, tes trophées, tes notifications et ton mot de passe.' },
   { pattern: /^\/profile\/edit$/, title: 'Modifier mon profil', ownH1: false },
   {

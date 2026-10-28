@@ -450,7 +450,7 @@ export function TrophyCasePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="flex items-center gap-2 text-2xl font-bold">
+      <h1 className="flex items-center gap-2 font-display text-3xl leading-tight font-extrabold uppercase">
         <Trophy className="text-club-gold size-6" />
         Mes vitrines de trophées
       </h1>

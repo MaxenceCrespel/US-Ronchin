@@ -70,6 +70,86 @@ function RoundColumn({ label, children }: { label: string; children: ReactNode }
   )
 }
 
+/** Our own run, one round per step — the story a player actually wants ("are we still in?"),
+ * shown above the full pool table. Which side is us comes from the team name: the sync flags
+ * the match (isUs) but not the side, and every club name on the district site carries its
+ * town. A draw on the sheet (decided on penalties) stays neutral rather than guessing. */
+function OurPath({ matches }: { matches: CupMatch[] }) {
+  if (matches.length === 0) return null
+  return (
+    <section className="flex flex-col gap-3" aria-label="Notre parcours">
+      <h2 className="font-display text-xl font-bold tracking-wide uppercase">Notre parcours</h2>
+      <ol className="flex flex-col">
+        {matches.map((m, i) => {
+          const homeIsUs = /ronchin/i.test(m.homeTeam)
+          const opponent = homeIsUs ? m.awayTeam : m.homeTeam
+          const ours = homeIsUs ? m.scoreHome : m.scoreAway
+          const theirs = homeIsUs ? m.scoreAway : m.scoreHome
+          const outcome = !m.played || ours == null || theirs == null ? 'next' : ours > theirs ? 'won' : ours < theirs ? 'lost' : 'draw'
+          const last = i === matches.length - 1
+          const card = (
+            <div
+              className={cn(
+                'flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3',
+                outcome === 'next' ? 'bg-club-blue-dark border-club-blue-dark text-white' : 'bg-card',
+              )}
+            >
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-sm font-semibold">
+                  {homeIsUs ? `Ronchin – ${opponent}` : `${opponent} – Ronchin`}
+                </span>
+                <span className={cn('text-xs', outcome === 'next' ? 'text-white/80' : 'text-muted-foreground')}>
+                  {formatDate(m.date)} · {homeIsUs ? 'Domicile' : 'Extérieur'}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  'shrink-0 rounded-lg px-2.5 py-1',
+                  outcome === 'next'
+                    ? 'bg-club-gold text-club-blue-dark text-xs font-bold'
+                    : cn(
+                        'font-display text-lg font-extrabold text-white',
+                        outcome === 'won' ? 'bg-result-win' : outcome === 'lost' ? 'bg-result-loss' : 'bg-slate-500',
+                      ),
+                )}
+              >
+                {outcome === 'next' ? 'À venir' : `${m.scoreHome} – ${m.scoreAway}`}
+              </span>
+            </div>
+          )
+          return (
+            <li key={m.id} className="flex gap-3">
+              <div className="flex w-5 flex-col items-center" aria-hidden="true">
+                <span
+                  className={cn(
+                    'mt-5 size-4 shrink-0 rounded-full',
+                    outcome === 'next'
+                      ? 'bg-club-gold ring-club-gold/30 ring-4'
+                      : outcome === 'lost'
+                        ? 'bg-result-loss'
+                        : 'bg-club-blue',
+                  )}
+                />
+                {!last && <span className="bg-club-blue/40 mt-1 w-0.5 flex-1" />}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5 pb-4">
+                <span className="text-muted-foreground text-xs font-bold tracking-wide uppercase">{m.round}</span>
+                {m.matchId ? (
+                  <Link to={`/matches/${m.matchId}`} className="transition-transform hover:-translate-y-0.5">
+                    {card}
+                  </Link>
+                ) : (
+                  card
+                )}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
 /** Not a fixed knockout tree — this district's cup redraws pairings from scratch each round
  * (confirmed by the coach: round 2's pairs aren't round 1's neighbouring winners), so there's
  * no real bracket-slot relationship to wire a connector line to. One column per round instead,
@@ -96,6 +176,8 @@ export function CoupePage() {
       .sort((a, b) => (a.minDate < b.minDate ? -1 : 1))
   }, [cupQuery.data])
 
+  const ourMatches = rounds.flatMap((r) => r.matches.filter((m) => m.isUs))
+
   const lastRound = rounds.at(-1)
   // A single match in the last known round is the final — nothing more to draw, so no
   // placeholder after it. Otherwise the next round still has to be drawn from whoever wins.
@@ -103,10 +185,11 @@ export function CoupePage() {
 
   return (
     <div className="flex flex-col gap-6" data-tour="coupe-page">
-      <h1 className="flex items-center gap-2 text-xl font-semibold">
+      <h1 className="flex items-center gap-2 font-display text-3xl leading-tight font-extrabold uppercase">
         <Swords className="text-club-gold size-5" />
         Coupe
       </h1>
+      <OurPath matches={ourMatches} />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Tableau de la coupe</CardTitle>

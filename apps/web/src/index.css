@@ -25,6 +25,8 @@
   --club-blue: #0071ab;
   --club-blue-dark: #004f78;
   --club-gold: #f4b400;
+  --result-win: #18794a;
+  --result-loss: #c2410c;
 }
 
 
@@ -54,6 +56,10 @@
   --color-club-blue: var(--club-blue);
   --color-club-blue-dark: var(--club-blue-dark);
   --color-club-gold: var(--club-gold);
+  --color-result-win: var(--result-win);
+  --color-result-loss: var(--result-loss);
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', ui-sans-serif, sans-serif;
 }
 
 @layer base {
@@ -63,6 +69,21 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Text that's meant for a light surface (muted grey, default ink, card descriptions) turns
+   unreadable once it lands on the club's blue or dark-blue fills — lift it to white there.
+   Anything inside a light surface nested back on top (a white card on the auth backdrop, a
+   popover) keeps its own colours. Unlayered on purpose so it wins over the utilities. */
+:where(.bg-club-blue, .bg-club-blue-dark)
+  :is(.text-muted-foreground, [data-slot='card-description']):not(
+    :where(.bg-card, .bg-background, .bg-white, .bg-muted, .bg-popover) *
+  ) {
+  color: rgb(255 255 255 / 0.8);
+}
+:where(.bg-club-blue, .bg-club-blue-dark)
+  .text-foreground:not(:where(.bg-card, .bg-background, .bg-white, .bg-muted, .bg-popover) *) {
+  color: #fff;
 }
 
 @keyframes football-bounce {

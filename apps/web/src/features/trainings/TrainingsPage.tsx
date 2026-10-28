@@ -59,6 +59,7 @@ import { cn } from '@/lib/utils'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useAuthStore } from '@/lib/auth-store'
+import { fetchPlayerStats } from '@/features/stats/api'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
 import { describeAttendanceChange } from './attendance-history'
@@ -110,7 +111,12 @@ interface GuestNameInput {
   position?: PlayerSubPosition
 }
 
-const TEAM_STYLES = ['border-club-blue/30 bg-accent', 'border-red-400/40 bg-red-50']
+// Solid team colours, white text — muted text and icon buttons inside are lifted to white so
+// they stay readable on the fill.
+const TEAM_STYLES = [
+  'border-club-blue bg-club-blue text-white [&_.text-muted-foreground]:text-white/80',
+  'border-result-loss bg-result-loss text-white [&_.text-muted-foreground]:text-white/80',
+]
 const TEAM_LABELS = ['Équipe Bleue', 'Équipe Rouge']
 const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
 
@@ -144,7 +150,7 @@ export function AttendanceToggle({
   disabled?: boolean
 }) {
   return (
-    <div className="bg-muted/60 inline-flex items-center gap-0.5 rounded-full p-1">
+    <div className="bg-muted/70 grid w-full max-w-sm grid-cols-3 items-center gap-0.5 rounded-full p-1">
       {(['PRESENT', 'MAYBE', 'ABSENT'] as AttendanceStatus[]).map((status) => (
         <button
           key={status}
@@ -293,16 +299,33 @@ function ManageTrainingsDialog() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as TrainingType)}>
-                <SelectTrigger aria-label="Type d'entraînement" className="bg-background w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="RECURRING">Récurrent (hebdomadaire)</SelectItem>
-                  <SelectItem value="ONE_OFF">Ponctuel</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label id="training-type-label">Type</Label>
+              <div
+                role="radiogroup"
+                aria-labelledby="training-type-label"
+                className="bg-muted grid grid-cols-2 gap-1 rounded-xl p-1"
+              >
+                {(
+                  [
+                    ['ONE_OFF', 'Ponctuel'],
+                    ['RECURRING', 'Récurrent (hebdo)'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={type === value}
+                    onClick={() => setType(value)}
+                    className={cn(
+                      'min-h-10 rounded-lg text-sm font-semibold transition-colors',
+                      type === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -318,19 +341,28 @@ function ManageTrainingsDialog() {
 
             {type === 'RECURRING' && (
               <div className="flex flex-col gap-1.5">
-                <Label>Jour de la semaine</Label>
-                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger aria-label="Jour de la semaine" className="bg-background w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAYS.map((day, index) => (
-                      <SelectItem key={day} value={String(index)}>
-                        {day}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label id="training-day-label">Jour de la semaine</Label>
+                <div role="radiogroup" aria-labelledby="training-day-label" className="grid grid-cols-7 gap-1">
+                  {/* Monday first, like the week strip; DAYS itself stays Sunday-indexed (the API's). */}
+                  {[1, 2, 3, 4, 5, 6, 0].map((index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      role="radio"
+                      aria-checked={dayOfWeek === String(index)}
+                      aria-label={DAYS[index]}
+                      onClick={() => setDayOfWeek(String(index))}
+                      className={cn(
+                        'min-h-11 rounded-lg border text-sm font-bold transition-colors',
+                        dayOfWeek === String(index)
+                          ? 'bg-club-blue border-club-blue text-white'
+                          : 'bg-background hover:bg-accent',
+                      )}
+                    >
+                      {DAYS[index].charAt(0)}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -527,9 +559,9 @@ function TeamsSection({
         {TEAM_LABELS.map((label, teamIndex) => (
           <div
             key={teamIndex}
-            className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+            className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
           >
-            <p className="mb-1.5 text-sm font-semibold">{label}</p>
+            <p className="font-display mb-1.5 text-lg font-extrabold uppercase">{label}</p>
             <ul className="flex flex-col gap-1">
               {teams
                 .filter((t) => t.teamIndex === teamIndex)
@@ -592,7 +624,7 @@ function AttendanceHistoryDialog({ sessionId }: { sessionId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
+        <Button size="sm" variant="outline" className="h-10 gap-2">
           <History className="size-3.5" />
           Historique
         </Button>
@@ -665,7 +697,7 @@ function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+        <Button type="button" variant="outline" size="sm" className="h-10 gap-2">
           <Shuffle className="size-3.5" />
           Générer les équipes
         </Button>
@@ -755,7 +787,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
     <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 gap-2 text-xs">
+        <Button type="button" variant="outline" size="sm" className="h-10 gap-2">
           <ArrowRightLeft className="size-3.5" />
           Modifier les équipes
         </Button>
@@ -766,8 +798,8 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
         </DialogHeader>
         <div className="grid grid-cols-2 gap-2">
           {TEAM_LABELS.map((label, teamIndex) => (
-            <div key={teamIndex} className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
-              <p className="mb-1.5 text-sm font-semibold">{label}</p>
+            <div key={teamIndex} className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
+              <p className="font-display mb-1.5 text-lg font-extrabold uppercase">{label}</p>
               <ul className="flex flex-col gap-1">
                 {teams
                   .filter((t) => t.teamIndex === teamIndex)
@@ -779,7 +811,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                           type="button"
                           title="Déplacer dans l'autre équipe"
                           aria-label="Déplacer dans l'autre équipe"
-                          className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
                           onClick={() => moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })}
                         >
                           <ArrowRightLeft className="size-3.5" />
@@ -789,7 +821,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                           title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           disabled={removeMutation.isPending}
-                          className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                           onClick={() =>
                             setConfirmingRemove({
                               assignmentId: t.id,
@@ -828,7 +860,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                       title="Marquer présent et ajouter à l'équipe"
                       aria-label="Marquer présent et ajouter à l'équipe"
                       disabled={addPresentMutation.isPending}
-                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-40"
+                      className="flex size-10 items-center justify-center rounded-xl border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-result-win hover:text-result-win disabled:opacity-40"
                       onClick={() => addPresentMutation.mutate(player.id)}
                     >
                       <Check className="size-4" />
@@ -838,7 +870,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                       title="Marquer absent"
                       aria-label="Marquer absent"
                       disabled={forceAbsentMutation.isPending}
-                      className="flex size-7 items-center justify-center rounded-full border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-destructive hover:text-destructive disabled:opacity-40"
+                      className="flex size-10 items-center justify-center rounded-xl border border-muted-foreground/30 text-muted-foreground transition-colors hover:border-result-loss hover:text-result-loss disabled:opacity-40"
                       onClick={() => forceAbsentMutation.mutate(player.id)}
                     >
                       <X className="size-4" />
@@ -1059,7 +1091,7 @@ function ManageSessionDialog({
           type="button"
           variant="outline"
           size="sm"
-          className={cn('h-9 justify-start gap-2 text-xs', fullyDone && 'border-emerald-500/40 text-emerald-700')}
+          className={cn('h-auto min-h-10 justify-start gap-2 rounded-2xl py-1.5', fullyDone && 'border-emerald-500/40 text-emerald-700')}
         >
           <ClipboardCheck className="size-3.5" />
           <span className="flex flex-col items-start leading-tight">
@@ -1174,24 +1206,24 @@ function ManageSessionDialog({
                         disabled={validateMutation.isPending || bulkPresentMutation.isPending}
                         onClick={() => validateMutation.mutate({ userId: player.id, status: 'PRESENT' })}
                         className={cn(
-                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          'flex size-11 items-center justify-center rounded-xl border transition-colors',
                           actual === 'PRESENT'
-                            ? 'border-emerald-500 bg-emerald-500 text-white'
-                            : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500 hover:text-emerald-600',
+                            ? 'border-result-win bg-result-win text-white'
+                            : 'border-muted-foreground/30 bg-muted/50 text-muted-foreground hover:border-result-win hover:text-result-win',
                         )}
                         aria-label="Marquer présent"
                       >
-                        <Check className="size-4" />
+                        <Check className="size-5" strokeWidth={2.6} />
                       </button>
                       <button
                         type="button"
                         disabled={validateMutation.isPending || bulkPresentMutation.isPending}
                         onClick={() => validateMutation.mutate({ userId: player.id, status: 'ABSENT' })}
                         className={cn(
-                          'flex size-8 items-center justify-center rounded-full border transition-colors',
+                          'flex size-11 items-center justify-center rounded-xl border transition-colors',
                           actual === 'ABSENT'
-                            ? 'border-destructive bg-destructive text-white'
-                            : 'border-muted-foreground/30 text-muted-foreground hover:border-destructive hover:text-destructive',
+                            ? 'border-result-loss bg-result-loss text-white'
+                            : 'border-muted-foreground/30 bg-muted/50 text-muted-foreground hover:border-result-loss hover:text-result-loss',
                         )}
                         aria-label="Marquer absent"
                       >
@@ -1236,9 +1268,9 @@ function ManageSessionDialog({
                   {Array.from({ length: teamCount }).map((_, teamIndex) => (
                     <div
                       key={teamIndex}
-                      className={cn('rounded-lg border p-2.5', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
+                      className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
                     >
-                      <p className="mb-1.5 text-sm font-semibold">
+                      <p className="font-display mb-1.5 text-lg font-extrabold uppercase">
                         {TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}
                       </p>
                       <ul className="flex flex-col gap-1">
@@ -1257,7 +1289,7 @@ function ManageSessionDialog({
                                   type="button"
                                   title="Déplacer dans l'autre équipe"
                                   aria-label="Déplacer dans l'autre équipe"
-                                  className="text-muted-foreground hover:text-foreground hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
                                   onClick={() =>
                                     moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })
                                   }
@@ -1269,7 +1301,7 @@ function ManageSessionDialog({
                                   title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   disabled={removeMutation.isPending}
-                                  className="text-muted-foreground hover:text-destructive hover:bg-background flex size-6 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                                   onClick={() =>
                                     setConfirmingRemove({
                                       assignmentId: t.id,
@@ -1585,6 +1617,11 @@ export function SessionCard({
   const cardTeamsQuery = useQuery({ queryKey: ['teams', sessionId], queryFn: () => fetchTeams(sessionId) })
 
   const myAttendance = attendancesQuery.data?.find((a) => a.userId === currentUser?.id)
+  // Who answered what — the bar and line under the title, so the turnout reads at a glance.
+  const answered = attendancesQuery.data?.filter((a) => a.status) ?? []
+  const presentAnswers = answered.filter((a) => a.status === 'PRESENT').length
+  const maybeAnswers = answered.filter((a) => a.status === 'MAYBE').length
+  const absentAnswers = answered.filter((a) => a.status === 'ABSENT').length
   const [guests, setGuests] = useState<GuestNameInput[]>([])
   const [newGuestFirstName, setNewGuestFirstName] = useState('')
   const [newGuestLastName, setNewGuestLastName] = useState('')
@@ -1602,8 +1639,8 @@ export function SessionCard({
     <>
     <Card
       className={cn(
-        'gap-4 overflow-hidden rounded-2xl border-l-4 py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-        dimmed ? 'bg-muted border-muted-foreground/30' : 'border-club-blue/70',
+        'gap-4 overflow-hidden rounded-2xl py-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+        dimmed && 'bg-muted',
       )}
     >
       <CardHeader>
@@ -1619,9 +1656,7 @@ export function SessionCard({
             >
               <Dumbbell className="size-4.5" />
             </span>
-            <span className={cn('text-base font-semibold', dimmed && 'text-muted-foreground')}>
-              Entraînement
-            </span>
+            <span className={cn('text-xl', dimmed && 'text-muted-foreground')}>Entraînement</span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
             {cancelled ? (
@@ -1634,7 +1669,7 @@ export function SessionCard({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="size-7"
+                  className="size-9"
                   onClick={() => setEditing(true)}
                   aria-label="Modifier"
                 >
@@ -1643,7 +1678,7 @@ export function SessionCard({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-destructive hover:text-destructive size-7"
+                  className="text-destructive hover:text-destructive size-9"
                   disabled={deleteSessionMutation.isPending}
                   onClick={() => setConfirmingDeleteSession(true)}
                   aria-label="Supprimer"
@@ -1716,6 +1751,24 @@ export function SessionCard({
           </form>
         ) : (
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 pl-11.5 text-sm capitalize">
+            {!cancelled && !isPast && attendancesQuery.data && (
+              <span className="basis-full sm:basis-auto">
+              <span
+                className={cn(
+                  'inline-block rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap normal-case',
+                  myAttendance?.status === 'PRESENT'
+                    ? 'bg-club-blue/10 text-club-blue-dark'
+                    : myAttendance?.status === 'ABSENT'
+                      ? 'bg-result-loss/10 text-result-loss'
+                      : myAttendance?.status === 'MAYBE'
+                        ? 'bg-amber-100 text-amber-900'
+                        : 'bg-club-gold text-club-blue-dark',
+                )}
+              >
+                {myAttendance?.status ? ATTENDANCE_STATUS_LABELS[myAttendance.status] : 'À répondre'}
+              </span>
+              </span>
+            )}
             <span>{formatDate(date)}</span>
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3.5" />
@@ -1729,6 +1782,19 @@ export function SessionCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {!cancelled && answered.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="bg-muted flex h-2 overflow-hidden rounded-full" aria-hidden="true">
+              <span className="bg-club-blue" style={{ width: `${(presentAnswers / answered.length) * 100}%` }} />
+              <span className="bg-club-gold" style={{ width: `${(maybeAnswers / answered.length) * 100}%` }} />
+              <span className="bg-result-loss" style={{ width: `${(absentAnswers / answered.length) * 100}%` }} />
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {presentAnswers} présent{presentAnswers > 1 ? 's' : ''} · {maybeAnswers} peut-être · {absentAnswers} absent
+              {absentAnswers > 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
         {!cancelled && (
           <div className="flex flex-col gap-2" data-tour="attendance-toggle">
             <AttendanceToggle
@@ -1927,7 +1993,7 @@ export function SessionCard({
             <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
               Espace coach
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 [&>button]:flex-1">
               {hasEnded ? (
                 <ManageSessionDialog
                   sessionId={sessionId}
@@ -2239,6 +2305,36 @@ function TrainingRankingCard() {
   )
 }
 
+/** "Ton assiduité" — the player's own training attendance this season, as a ring. Same query
+ * key as the home page's stats, so it's usually already cached. Hidden until they've answered
+ * at least once (a 0% ring on day one would only discourage). */
+function MyAttendanceCard({ userId }: { userId: string }) {
+  const statsQuery = useQuery({ queryKey: ['stats', 'players'], queryFn: () => fetchPlayerStats() })
+  const me = statsQuery.data?.find((p) => p.userId === userId)
+  if (!me || me.trainingsResponded === 0) return null
+  const rate = Math.round((me.trainingAttendanceRate ?? 0) * 100)
+  return (
+    <div className="bg-card flex items-center gap-3 rounded-2xl border p-3.5">
+      <div
+        className="flex size-14 shrink-0 items-center justify-center rounded-full"
+        style={{ background: `conic-gradient(var(--club-blue) 0 ${rate}%, var(--muted) ${rate}% 100%)` }}
+        aria-hidden="true"
+      >
+        <span className="bg-card font-display flex size-11 items-center justify-center rounded-full text-base font-extrabold">
+          {rate}%
+        </span>
+      </div>
+      <div className="flex flex-col">
+        <span className="font-semibold">Ton assiduité cette saison</span>
+        <span className="text-muted-foreground text-sm">
+          {me.trainingsPresent} séance{me.trainingsPresent > 1 ? 's' : ''} sur {me.trainingsResponded}
+          {me.presenceStreak > 1 && ` · 🔥 ${me.presenceStreak} d'affilée`}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function TrainingsPage() {
   const user = useAuthStore((s) => s.user)
   const isCoach = hasCoachAccess(user)
@@ -2285,8 +2381,17 @@ export function TrainingsPage() {
     return map
   }, [weekMatches])
 
-  const selectedSessions = sessionsByDate.get(selectedDate) ?? []
-  const selectedMatches = matchesByDate.get(selectedDate) ?? []
+  const selectedDaySessions = sessionsByDate.get(selectedDate) ?? []
+  const selectedDayMatches = matchesByDate.get(selectedDate) ?? []
+  // A day with nothing on it shows what's left of the week instead of an empty box — on a
+  // phone the strip above no longer lists the sessions, so this is where they're found.
+  const showRestOfWeek = selectedDaySessions.length === 0 && selectedDayMatches.length === 0
+  const selectedSessions = showRestOfWeek
+    ? (sessionsQuery.data ?? [])
+        .filter((s) => s.date > selectedDate)
+        .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+    : selectedDaySessions
+  const selectedMatches = showRestOfWeek ? weekMatches.filter((m) => m.date > selectedDate) : selectedDayMatches
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null)
@@ -2326,16 +2431,18 @@ export function TrainingsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Entraînements &amp; matchs</h1>
+        <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Entraînements &amp; matchs</h1>
         {isCoach && <ManageTrainingsDialog />}
       </div>
+
+      {!isCoach && user && <MyAttendanceCard userId={user.id} />}
 
       <TrainingRankingCard />
 
       <Card className="min-w-0 rounded-2xl py-5 shadow-sm" data-tour="trainings-calendar">
         <CardContent className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-base font-semibold capitalize">
+            <p className="font-display text-xl font-bold uppercase">
               {format(weekStart, 'd MMM', { locale: fr })} – {format(weekEnd, 'd MMM yyyy', { locale: fr })}
             </p>
             <div className="flex items-center gap-1">
@@ -2371,8 +2478,8 @@ export function TrainingsPage() {
             </div>
           </div>
 
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          <div className="grid min-w-[620px] grid-cols-7 gap-2 sm:min-w-0">
+          <div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {weekDays.map((day) => {
               const key = toDateKey(day)
               const daySessions = sessionsByDate.get(key) ?? []
@@ -2386,7 +2493,7 @@ export function TrainingsPage() {
                   data-tour={daySessions.length > 0 ? 'training-day-with-session' : undefined}
                   onClick={() => setSelectedDate(key)}
                   className={cn(
-                    'flex min-h-32 cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-2 text-left align-top transition-all duration-150',
+                    'flex min-h-20 cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-1 text-left align-top transition-all duration-150 sm:min-h-32 sm:p-2',
                     selected
                       ? 'border-club-blue bg-club-blue shadow-md'
                       : 'border-transparent bg-muted/40 hover:bg-muted/70',
@@ -2413,7 +2520,7 @@ export function TrainingsPage() {
                   </span>
                   <span
                     className={cn(
-                      'mx-auto flex size-7 items-center justify-center rounded-full text-sm font-semibold',
+                      'font-display mx-auto flex size-8 items-center justify-center rounded-full text-lg font-bold',
                       selected
                         ? 'bg-white text-club-blue-dark'
                         : today
@@ -2424,7 +2531,20 @@ export function TrainingsPage() {
                     {format(day, 'd')}
                   </span>
                   </button>
-                  <div className="flex flex-col gap-1">
+                  {/* On a phone the day is just a tappable date with a dot per event (blue =
+                      training, gold = match); the selected day's cards below carry the detail. */}
+                  <div className="flex justify-center gap-1 sm:hidden" aria-hidden="true">
+                    {daySessions.map((s) => (
+                      <span
+                        key={s.id}
+                        className={cn('size-1.5 rounded-full', s.cancelled ? 'bg-muted-foreground/40' : selected ? 'bg-white' : 'bg-club-blue')}
+                      />
+                    ))}
+                    {dayMatches.map((m) => (
+                      <span key={m.id} className="bg-club-gold size-1.5 rounded-full" />
+                    ))}
+                  </div>
+                  <div className="hidden flex-col gap-1 sm:flex">
                     {daySessions.map((s) => (
                       <button
                         key={s.id}
@@ -2477,6 +2597,9 @@ export function TrainingsPage() {
       <div className="flex flex-col gap-4">
         <h2 className="text-muted-foreground text-sm font-semibold capitalize">
           {format(new Date(`${selectedDate}T00:00:00`), 'EEEE d MMMM yyyy', { locale: fr })}
+          {showRestOfWeek && (selectedSessions.length > 0 || selectedMatches.length > 0) && (
+            <span className="normal-case"> — rien ce jour-là, voici la suite de la semaine</span>
+          )}
         </h2>
         {sessionsQuery.isLoading || matchesQuery.isLoading ? (
           <FootballSpinner />
