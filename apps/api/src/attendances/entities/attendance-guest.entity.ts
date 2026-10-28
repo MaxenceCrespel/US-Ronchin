@@ -32,4 +32,11 @@ export class AttendanceGuest {
    * across teams by position band, not just headcount. */
   @Column({ type: 'enum', enum: PlayerSubPosition, nullable: true })
   position: PlayerSubPosition | null;
+
+  /** Position in the list the player declared. A relation load has no guaranteed row order,
+   * and "which of a player's guests hold a confirmed place" is simply "the first N of this
+   * list" (see orderedGuests) — without a stored order that choice could silently change
+   * from one load to the next. */
+  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  sortOrder: number;
 }

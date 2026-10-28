@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { AttendancesService } from './attendances.service';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
+import { FindOperator } from 'typeorm';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
@@ -16,9 +17,10 @@ async function build(opts: {
   startTime?: string;
   cap?: number | null;
   attendances?: Row[];
-  assignments?: { userId: string; teamIndex: number }[];
+  assignments?: Record<string, unknown>[];
 }) {
   const attendances: Row[] = (opts.attendances ?? []).map((a) => ({
+    id: `att-${a.userId}`,
     trainingSessionId: 's1',
     status: AttendanceStatus.PRESENT,
     confirmed: true,
@@ -29,7 +31,8 @@ async function build(opts: {
     user: { isLicensed: false, seniorityTier: null } as User,
     ...a,
   }));
-  const assignments = [...(opts.assignments ?? [])];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assignments: any[] = (opts.assignments ?? []).map((a, i) => ({ id: `as${i}`, ...a }));
   const session = {
     id: 's1',
     date: opts.sessionDate,
@@ -44,7 +47,7 @@ async function build(opts: {
       ),
     ),
     find: jest.fn(() => Promise.resolve(attendances)),
-    create: jest.fn((a: Row) => ({ confirmedGuestCount: 0, ...a })),
+    create: jest.fn((a: Row) => ({ id: `att-${a.userId}`, confirmedGuestCount: 0, ...a })),
     save: jest.fn((a: Row) => {
       if (!attendances.includes(a)) attendances.push(a);
       return Promise.resolve(a);
@@ -52,14 +55,23 @@ async function build(opts: {
   };
   const assignmentsRepo = {
     find: jest.fn(() => Promise.resolve(assignments)),
-    delete: jest.fn(({ userId }: { userId: string }) => {
-      const i = assignments.findIndex((x) => x.userId === userId);
-      if (i >= 0) assignments.splice(i, 1);
+    delete: jest.fn((criteria: unknown) => {
+      const matches = (x: Record<string, unknown>): boolean => {
+        if (Array.isArray(criteria)) return criteria.includes(x.id);
+        // Rows in this mock all belong to the one session, so that key never discriminates.
+        return Object.entries(criteria as Record<string, unknown>).every(([k, v]) =>
+          k === 'trainingSessionId' ||
+          (v instanceof FindOperator ? (v.value as unknown[]).includes(x[k]) : x[k] === v),
+        );
+      };
+      for (let i = assignments.length - 1; i >= 0; i--) {
+        if (matches(assignments[i])) assignments.splice(i, 1);
+      }
       return Promise.resolve();
     }),
-    create: jest.fn((a: { userId: string; teamIndex: number }) => a),
-    save: jest.fn((a: { userId: string; teamIndex: number }) => {
-      assignments.push(a);
+    create: jest.fn((a: Record<string, unknown>) => ({ id: `as-new-${assignments.length}`, ...a })),
+    save: jest.fn((a: Record<string, unknown>) => {
+      if (!assignments.includes(a)) assignments.push(a);
       return Promise.resolve(a);
     }),
   };
@@ -70,8 +82,22 @@ async function build(opts: {
       {
         provide: getRepositoryToken(AttendanceGuest),
         useValue: {
-          delete: jest.fn().mockResolvedValue(undefined),
-          save: jest.fn((g: unknown[]) => Promise.resolve(g)),
+          find: jest.fn(({ where }: { where: { attendanceId: string } }) =>
+            Promise.resolve(attendances.find((a) => a.id === where.attendanceId)?.guests ?? []),
+          ),
+          delete: jest.fn((ids: string[]) => {
+            for (const a of attendances) a.guests = (a.guests ?? []).filter((g) => !ids.includes(g.id));
+            return Promise.resolve();
+          }),
+          save: jest.fn((list: AttendanceGuest[]) => {
+            list.forEach((g, i) => (g.id ??= `g-new-${g.attendanceId}-${i}-${g.firstName}`));
+            const row = attendances.find((a) => a.id === list[0]?.attendanceId);
+            if (row) {
+              const kept = (row.guests ?? []).filter((g) => !list.some((x) => x.id === g.id));
+              row.guests = [...kept, ...list];
+            }
+            return Promise.resolve(list);
+          }),
           create: jest.fn((g: unknown) => g),
         },
       },
@@ -366,5 +392,241 @@ describe('AttendancesService.setAttendance', () => {
       expect(d.confirmed).toBe(true);
       expect(b.confirmedGuestCount).toBe(0); // b's guest waits behind every waitlisted player
     });
+  });
+});
+
+const user = (o: Record<string, unknown> = {}) =>
+  ({ firstName: 'Host', isLicensed: false, seniorityTier: null, ...o }) as unknown as User;
+
+describe('AttendancesService — lock, queue and cap', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('locks at the real Paris kickoff, not at the same wall-clock time in UTC', async () => {
+    // 20:30 Paris on 27 Oct (CET, UTC+1) is 19:30 UTC; it is 19:45 UTC, i.e. 15 min after kickoff.
+    jest.setSystemTime(new Date('2026-10-27T19:45:00Z'));
+    const { service } = await build({ sessionDate: '2026-10-27', startTime: '20:30:00' });
+    await expect(
+      service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('still accepts an answer before the Paris kickoff', async () => {
+    jest.setSystemTime(new Date('2026-10-27T19:00:00Z'));
+    const { service } = await build({ sessionDate: '2026-10-27', startTime: '20:30:00' });
+    await expect(service.setAttendance('s1', 'u1', AttendanceStatus.PRESENT)).resolves.toBeDefined();
+  });
+
+  it('clears the waitlist when the cap is removed altogether', async () => {
+    jest.setSystemTime(new Date('2026-10-27T10:00:00Z'));
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: null,
+      attendances: [
+        { userId: 'w', confirmed: false },
+        { userId: 'g', guestCount: 2, confirmedGuestCount: 0 },
+      ],
+    });
+    await service.syncCapPromotions('s1');
+    expect(attendances.find((a) => a.userId === 'w')!.confirmed).toBe(true);
+    expect(attendances.find((a) => a.userId === 'g')!.confirmedGuestCount).toBe(2);
+  });
+
+  it('keeps a waitlisted player at their place in the queue when they re-submit PRESENT', async () => {
+    jest.setSystemTime(new Date('2026-10-27T10:00:00Z'));
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 1,
+      attendances: [
+        { userId: 'a' },
+        { userId: 'b', confirmed: false, respondedAt: new Date('2026-10-27T08:00:00Z') },
+        { userId: 'c', confirmed: false, respondedAt: new Date('2026-10-27T09:00:00Z') },
+      ],
+    });
+    await service.setAttendance('s1', 'b', AttendanceStatus.PRESENT, [{ firstName: 'G' }]);
+    await service.setAttendance('s1', 'a', AttendanceStatus.ABSENT);
+    expect(attendances.find((a) => a.userId === 'b')!.confirmed).toBe(true);
+    expect(attendances.find((a) => a.userId === 'c')!.confirmed).toBe(false);
+  });
+
+  it('sends a player to the back of the queue when they actually change their answer', async () => {
+    jest.setSystemTime(new Date('2026-10-27T10:00:00Z'));
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 1,
+      attendances: [
+        { userId: 'a' },
+        { userId: 'b', confirmed: false, respondedAt: new Date('2026-10-27T08:00:00Z') },
+        { userId: 'c', confirmed: false, respondedAt: new Date('2026-10-27T09:00:00Z') },
+      ],
+    });
+    await service.setAttendance('s1', 'b', AttendanceStatus.ABSENT);
+    await service.setAttendance('s1', 'b', AttendanceStatus.PRESENT);
+    await service.setAttendance('s1', 'a', AttendanceStatus.ABSENT);
+    expect(attendances.find((a) => a.userId === 'c')!.confirmed).toBe(true);
+    expect(attendances.find((a) => a.userId === 'b')!.confirmed).toBe(false);
+  });
+});
+
+describe('AttendancesService — guests follow the teams', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-10-27T10:00:00Z')));
+  afterEach(() => jest.useRealTimers());
+
+  const hostWithGuest = (extra: Record<string, unknown> = {}) =>
+    ({
+      userId: 'host',
+      user: user(),
+      guestCount: 1,
+      confirmedGuestCount: 1,
+      guests: [{ id: 'g1', firstName: 'Yacine', lastName: 'Djemai', sortOrder: 0 }],
+      ...extra,
+    }) as Row;
+
+  it('takes a guest off their team when an arriving player bumps them', async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 2,
+      attendances: [hostWithGuest()],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: null, guestLabel: 'Yacine Djemai', attendanceGuestId: 'g1', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'newbie', AttendanceStatus.PRESENT);
+    expect(assignments.some((a) => a.guestLabel === 'Yacine Djemai')).toBe(false);
+  });
+
+  it("takes a player's guests off the teams when a higher-ranked player waitlists them", async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 2,
+      attendances: [hostWithGuest()],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: null, guestLabel: 'Yacine Djemai', attendanceGuestId: 'g1', teamIndex: 1 },
+      ],
+    });
+    // The only holder of a place besides the guest is the host: a licensed arrival with no guest
+    // to bump first would take the guest's place before touching any player.
+    await service.setAttendance('s1', 'licensed', AttendanceStatus.PRESENT);
+    expect(assignments.some((a) => a.userId === 'host')).toBe(true);
+    expect(assignments.some((a) => a.guestLabel === 'Yacine Djemai')).toBe(false);
+  });
+
+  it('puts a guest the player adds after generation on a team', async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 10,
+      attendances: [{ userId: 'host', user: user() }],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: 'other', teamIndex: 0 },
+        { userId: 'third', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'host', AttendanceStatus.PRESENT, [{ firstName: 'Karim' }]);
+    const slot = assignments.find((a) => a.guestLabel === 'Karim');
+    expect(slot).toBeDefined();
+    expect(slot!.teamIndex).toBe(1);
+  });
+
+  it('takes a guest the player removes off their team', async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 10,
+      attendances: [hostWithGuest()],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: null, guestLabel: 'Yacine Djemai', attendanceGuestId: 'g1', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'host', AttendanceStatus.PRESENT, []);
+    expect(assignments.some((a) => a.guestLabel === 'Yacine Djemai')).toBe(false);
+  });
+
+  it('keeps the same guest id, and a single team slot, when the list is re-saved', async () => {
+    const { service, assignments, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 10,
+      attendances: [hostWithGuest()],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: null, guestLabel: 'Yacine Djemai', attendanceGuestId: 'g1', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'host', AttendanceStatus.PRESENT, [
+      { firstName: 'Yacine', lastName: 'Djemai' },
+      { firstName: 'Karim' },
+    ]);
+    const host = attendances.find((a) => a.userId === 'host')!;
+    expect(host.guests!.find((g) => g.firstName === 'Yacine')!.id).toBe('g1');
+    expect(assignments.filter((a) => a.guestLabel === 'Yacine Djemai')).toHaveLength(1);
+    expect(assignments.some((a) => a.guestLabel === 'Karim')).toBe(true);
+  });
+
+  it("doesn't wipe a guest's declared position when the client re-sends names only", async () => {
+    const { service, attendances } = await build({
+      sessionDate: '2026-10-28',
+      cap: 10,
+      attendances: [
+        hostWithGuest({
+          guests: [{ id: 'g1', firstName: 'Yacine', lastName: 'Djemai', sortOrder: 0, position: 'GOALKEEPER' }],
+        }),
+      ],
+    });
+    await service.setAttendance('s1', 'host', AttendanceStatus.PRESENT, [
+      { firstName: 'Yacine', lastName: 'Djemai' },
+    ]);
+    expect(attendances.find((a) => a.userId === 'host')!.guests![0].position).toBe('GOALKEEPER');
+  });
+
+  it('places two different guests that share the same label', async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 5,
+      attendances: [
+        { userId: 'leaver' },
+        { userId: 'a' },
+        {
+          userId: 'other',
+          user: user({ firstName: 'Other' }),
+          guestCount: 1,
+          confirmedGuestCount: 1,
+          guests: [{ id: 'g-other', firstName: 'Karim', sortOrder: 0 }],
+        } as Row,
+        {
+          userId: 'host',
+          user: user(),
+          guestCount: 1,
+          confirmedGuestCount: 0,
+          guests: [{ id: 'g2', firstName: 'Karim', sortOrder: 0 }],
+        } as Row,
+      ],
+      assignments: [
+        { userId: 'leaver', teamIndex: 0 },
+        { userId: 'a', teamIndex: 1 },
+        { userId: null, guestLabel: 'Karim', attendanceGuestId: 'g-other', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'leaver', AttendanceStatus.ABSENT);
+    expect(assignments.filter((a) => a.guestLabel === 'Karim')).toHaveLength(2);
+  });
+
+  it('re-links a slot generated before guest ids were stable instead of duplicating it', async () => {
+    const { service, assignments } = await build({
+      sessionDate: '2026-10-28',
+      cap: 10,
+      attendances: [hostWithGuest()],
+      assignments: [
+        { userId: 'host', teamIndex: 0 },
+        { userId: null, guestLabel: 'Yacine Djemai', attendanceGuestId: 'long-gone-id', teamIndex: 1 },
+      ],
+    });
+    await service.setAttendance('s1', 'host', AttendanceStatus.PRESENT, [
+      { firstName: 'Yacine', lastName: 'Djemai' },
+    ]);
+    const slots = assignments.filter((a) => a.guestLabel === 'Yacine Djemai');
+    expect(slots).toHaveLength(1);
+    expect(slots[0].attendanceGuestId).toBe('g1');
   });
 });

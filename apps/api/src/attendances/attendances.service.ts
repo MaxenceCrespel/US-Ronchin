@@ -1,13 +1,21 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Attendance, AttendanceStatus } from './entities/attendance.entity';
 import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { AttendanceStatusChange } from './entities/attendance-status-change.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { PlayerSubPosition, User } from '../users/entities/user.entity';
-import { pickNextWaitlisted, pickRowToLoseAGuest, priorityRank } from './attendance-cap';
+import {
+  guestLabelFor,
+  isEffectivelyPresent,
+  orderedGuests,
+  pickNextWaitlisted,
+  pickRowToLoseAGuest,
+  priorityRank,
+} from './attendance-cap';
+import { parisWallTimeToDate } from '../common/utils/paris-time';
 
 export interface GuestNameInput {
   firstName: string;
@@ -89,7 +97,10 @@ export class AttendancesService {
     // ABSENT/INCERTAIN takes them back off it — so nothing here needs the status frozen
     // ahead of kickoff. A +1 is still allowed past the lock as long as the status itself
     // isn't changing.
-    const lockAt = new Date(`${session.date}T${session.startTime}`).getTime();
+    // Paris wall time, not the server's: the API runs in UTC, where a naive
+    // `new Date('…T20:30:00')` is 20:30 UTC — an hour (winter) or two (summer) after the real
+    // kickoff, which let players keep changing their answer well into the session.
+    const lockAt = parisWallTimeToDate(session.date, session.startTime).getTime();
     const statusChanged = !attendance || attendance.status !== status;
     if (!bypassLock && Date.now() >= lockAt && statusChanged) {
       throw new BadRequestException(
@@ -114,9 +125,12 @@ export class AttendancesService {
         respondedAt: new Date(),
       });
     } else {
+      // respondedAt is the player's place in the queue (waitlist order, who is bumped first),
+      // so only an actual change of answer moves it — re-submitting the same PRESENT (to add a
+      // guest, say) must not send a waitlisted player to the back of the line.
+      if (attendance.status !== status) attendance.respondedAt = new Date();
       attendance.status = status;
       attendance.guestCount = guests.length;
-      attendance.respondedAt = new Date();
     }
 
     // Headcount allocation against the cap — the player's own slot (sticky: decided once,
@@ -136,7 +150,7 @@ export class AttendancesService {
     } else {
       const others = await this.attendancesRepository.find({
         where: { trainingSessionId },
-        relations: { user: true },
+        relations: { user: true, guests: true },
       });
       let otherHeadcount = others
         .filter((a) => a.userId !== userId)
@@ -194,6 +208,8 @@ export class AttendancesService {
       }),
     );
 
+    await this.persistGuests(attendance, guests);
+
     if (cap != null) {
       const freed =
         (previousStatus === AttendanceStatus.PRESENT && previousConfirmed ? 1 : 0) +
@@ -204,23 +220,57 @@ export class AttendancesService {
       }
     }
 
-    await this.attendanceGuestsRepository.delete({ attendanceId: attendance.id });
-    attendance.guests = guests.length
-      ? await this.attendanceGuestsRepository.save(
-          guests.map((g) =>
-            this.attendanceGuestsRepository.create({
-              attendanceId: attendance.id,
-              firstName: g.firstName,
-              lastName: g.lastName ?? null,
-              position: g.position ?? null,
-            }),
-          ),
-        )
-      : [];
-
     await this.syncTeamMembership(trainingSessionId, userId, attendance);
+    await this.syncGuestTeamMembership(trainingSessionId, attendance);
 
     return attendance;
+  }
+
+  /** Writes the declared guest list WITHOUT recreating the rows: a guest who is still in the
+   * list keeps their id (matched by name), so the team slot that points at them (see
+   * TrainingTeamAssignment.attendanceGuestId) stays valid. Wiping and re-inserting the whole
+   * list on every save gave every guest a new id each time, orphaning their team slot — and
+   * removing them later from the teams screen then freed nothing. A guest dropped from the
+   * list loses their team slot with them. */
+  private async persistGuests(attendance: Attendance, incoming: GuestNameInput[]): Promise<void> {
+    const nameKey = (g: { firstName: string; lastName?: string | null }) =>
+      `${g.firstName.trim().toLowerCase()}|${(g.lastName ?? '').trim().toLowerCase()}`;
+    const existing = orderedGuests({
+      guests: await this.attendanceGuestsRepository.find({ where: { attendanceId: attendance.id } }),
+    });
+    const unmatched = new Map<string, AttendanceGuest[]>();
+    for (const g of existing) unmatched.set(nameKey(g), [...(unmatched.get(nameKey(g)) ?? []), g]);
+
+    const toSave = incoming.map((g, index) => {
+      const match = unmatched.get(nameKey(g))?.shift();
+      if (!match) {
+        return this.attendanceGuestsRepository.create({
+          attendanceId: attendance.id,
+          firstName: g.firstName,
+          lastName: g.lastName ?? null,
+          position: g.position ?? null,
+          sortOrder: index,
+        });
+      }
+      match.firstName = g.firstName;
+      match.lastName = g.lastName ?? null;
+      // The client re-sends names only for guests already on the list — absent means
+      // "unchanged", not "no position".
+      if (g.position !== undefined) match.position = g.position;
+      match.sortOrder = index;
+      return match;
+    });
+
+    const removed = [...unmatched.values()].flat();
+    if (removed.length > 0) {
+      const removedIds = removed.map((g) => g.id);
+      await this.attendanceGuestsRepository.delete(removedIds);
+      await this.assignmentsRepository.delete({
+        trainingSessionId: attendance.trainingSessionId,
+        attendanceGuestId: In(removedIds),
+      });
+    }
+    attendance.guests = toSave.length > 0 ? await this.attendanceGuestsRepository.save(toSave) : [];
   }
 
   /** Keeps the team split in step with a declared status once teams exist for the session.
@@ -235,11 +285,7 @@ export class AttendancesService {
     userId: string,
     attendance: Pick<Attendance, 'status' | 'confirmed' | 'actualStatus'>,
   ): Promise<void> {
-    const effectivelyPresent =
-      attendance.actualStatus != null
-        ? attendance.actualStatus === AttendanceStatus.PRESENT
-        : attendance.status === AttendanceStatus.PRESENT && attendance.confirmed;
-    if (!effectivelyPresent) {
+    if (!isEffectivelyPresent(attendance)) {
       await this.assignmentsRepository.delete({ trainingSessionId, userId });
       return;
     }
@@ -272,8 +318,8 @@ export class AttendancesService {
    * — raising the training template's maxPresentPlayers, or setting a higher per-session
    * override, never touches any Attendance row on its own, so anyone already waitlisted
    * stayed waitlisted even though there's now room. Promotes as many as now fit, same
-   * priority as a slot freeing up naturally (see promoteWaitlist). No-op if the session has
-   * no cap or nothing changed. */
+   * priority as a slot freeing up naturally (see promoteWaitlist) — and everyone left on the
+   * waitlist when the cap is removed altogether. No-op when nothing changed. */
   async syncCapPromotions(trainingSessionId: string): Promise<void> {
     const session = await this.sessionsRepository.findOne({
       where: { id: trainingSessionId },
@@ -281,8 +327,10 @@ export class AttendancesService {
     });
     if (!session) return;
     const cap = session.maxPresentPlayersOverride ?? session.training?.maxPresentPlayers ?? null;
-    if (cap == null) return;
-    await this.promoteWaitlist(trainingSessionId, cap);
+    // No cap any more is just "room for everyone": same promotion with an unlimited ceiling,
+    // so removing the limit clears the waitlist instead of leaving people stuck behind a cap
+    // that no longer exists.
+    await this.promoteWaitlist(trainingSessionId, cap ?? Number.POSITIVE_INFINITY);
   }
 
   /** Headcount just freed up — fills it as far as it goes, one unit of demand at a time:
@@ -362,13 +410,14 @@ export class AttendancesService {
     }
   }
 
-  /** A guest promoted off the waitlist takes the place a withdrawing player left empty, so
-   * once teams exist they need a team slot too — promoting a waitlisted PLAYER already gets
-   * one (syncTeamMembership), but a guest only had its confirmedGuestCount bumped, leaving
-   * the freed place on the team unfilled. Adds every confirmed guest of this row that has no
-   * team slot yet (matched by source guest, or by label when the guest record is gone),
-   * each on whichever team is currently smallest, same as a late-arriving player. No-op when
-   * no teams exist yet. */
+  /** Brings one row's guests in line with the teams, once teams exist: every guest holding a
+   * place (the first `confirmedGuestCount` of the declared list) has a team slot, placed on
+   * the currently smallest team like a late-arriving player, and a guest who no longer holds
+   * one (bumped by an arriving player, waitlisted along with their inviter) loses it. Covers
+   * every way that count moves after generation — a waitlist promotion, an eviction, the
+   * player editing their own list. A slot is matched to its guest by id; slots from before
+   * ids were kept stable carry the id of a row that no longer exists, and are re-linked by
+   * label rather than duplicated. No-op when no teams exist yet. */
   private async syncGuestTeamMembership(
     trainingSessionId: string,
     attendance: Pick<Attendance, 'confirmedGuestCount' | 'guests' | 'user'>,
@@ -378,19 +427,56 @@ export class AttendancesService {
     });
     if (existingAssignments.length === 0) return;
 
+    const guests = orderedGuests(attendance);
+    const holding = guests.slice(0, attendance.confirmedGuestCount);
+    const holdingIds = new Set(holding.map((g) => g.id));
+    const ownIds = new Set(guests.map((g) => g.id));
+
+    const leaving = existingAssignments.filter(
+      (a) => a.attendanceGuestId && ownIds.has(a.attendanceGuestId) && !holdingIds.has(a.attendanceGuestId),
+    );
+    if (leaving.length > 0) {
+      await this.assignmentsRepository.delete(leaving.map((a) => a.id));
+    }
+    const remaining = existingAssignments.filter((a) => !leaving.includes(a));
+
+    const sessionGuestIds = new Set<string>();
+    for (const row of await this.attendancesRepository.find({
+      where: { trainingSessionId },
+      relations: { guests: true },
+    })) {
+      for (const g of row.guests ?? []) sessionGuestIds.add(g.id);
+    }
+    const orphans = remaining.filter(
+      (a) => a.userId == null && a.attendanceGuestId && !sessionGuestIds.has(a.attendanceGuestId),
+    );
+
     const teamCount = Math.max(2, Math.max(...existingAssignments.map((a) => a.teamIndex)) + 1);
     const teamCounts = new Array(teamCount).fill(0);
-    for (const a of existingAssignments) teamCounts[a.teamIndex]++;
-    const placedGuestIds = new Set(existingAssignments.map((a) => a.attendanceGuestId));
-    const placedLabels = new Set(existingAssignments.map((a) => a.guestLabel));
+    for (const a of remaining) teamCounts[a.teamIndex]++;
 
-    for (let i = 0; i < attendance.confirmedGuestCount; i++) {
-      const guest = attendance.guests?.[i];
-      // Same label rule as TeamBalancingService.generateTeams.
-      const label = guest
-        ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
-        : `Invité de ${attendance.user.firstName} #${i + 1}`;
-      if ((guest && placedGuestIds.has(guest.id)) || placedLabels.has(label)) continue;
+    for (let i = 0; i < holding.length; i++) {
+      const guest = holding[i];
+      const label = guestLabelFor(guest, attendance.user?.firstName ?? '', i);
+      let slot = remaining.find((a) => a.attendanceGuestId === guest.id);
+      if (!slot) {
+        const orphanIndex = orphans.findIndex((a) => a.guestLabel === label);
+        if (orphanIndex >= 0) slot = orphans.splice(orphanIndex, 1)[0];
+      }
+
+      if (slot) {
+        if (
+          slot.attendanceGuestId !== guest.id ||
+          slot.guestLabel !== label ||
+          slot.guestPosition !== (guest.position ?? null)
+        ) {
+          slot.attendanceGuestId = guest.id;
+          slot.guestLabel = label;
+          slot.guestPosition = guest.position ?? null;
+          await this.assignmentsRepository.save(slot);
+        }
+        continue;
+      }
 
       let minTeam = 0;
       for (let t = 1; t < teamCount; t++) {
@@ -402,8 +488,8 @@ export class AttendancesService {
           trainingSessionId,
           userId: null,
           guestLabel: label,
-          guestPosition: guest?.position ?? null,
-          attendanceGuestId: guest?.id ?? null,
+          guestPosition: guest.position ?? null,
+          attendanceGuestId: guest.id,
           teamIndex: minTeam,
         }),
       );
@@ -441,6 +527,7 @@ export class AttendancesService {
         newConfirmedGuestCount: row.confirmedGuestCount,
       }),
     );
+    await this.syncGuestTeamMembership(trainingSessionId, row);
     return true;
   }
 
@@ -485,6 +572,7 @@ export class AttendancesService {
     await this.attendancesRepository.save(evicted);
     // Now waitlisted: off their team too, or they'd keep a place the arriving player took.
     await this.syncTeamMembership(trainingSessionId, evicted.userId, evicted);
+    await this.syncGuestTeamMembership(trainingSessionId, evicted);
 
     await this.statusChangesRepository.save(
       this.statusChangesRepository.create({

@@ -51,6 +51,13 @@ export class TrainingSession {
   @Column({ name: 'max_present_players_override', type: 'int', nullable: true })
   maxPresentPlayersOverride: number | null;
 
+  /** Set when the coach wipes the teams (TeamBalancingService.deleteTeams) so the automatic
+   * generation doesn't undo it a minute later — the cron treats "no teams" as "not generated
+   * yet" throughout its catch-up window (1h30 before kickoff to 3h after). Cleared as soon as
+   * the coach generates teams again. */
+  @Column({ name: 'teams_auto_generation_disabled', default: false })
+  teamsAutoGenerationDisabled: boolean;
+
   /** Intra-squad scrimmage score — team 0 vs team 1 (generateTeams always creates exactly
    * two). Null until the coach enters it; feeds the training ranking (see
    * TeamBalancingService.getTrainingRanking). */

@@ -5,6 +5,7 @@ import { TrainingTeamAssignment } from './entities/training-team-assignment.enti
 import { TrainingSession } from '../trainings/entities/training-session.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
+import { guestLabelFor, isEffectivelyPresent, orderedGuests } from '../attendances/attendance-cap';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { PlayerPosition, PlayerSubPosition, User } from '../users/entities/user.entity';
@@ -59,6 +60,9 @@ export class TeamBalancingService {
    * every other team-editing action here. */
   async deleteTeams(sessionId: string): Promise<void> {
     await this.assignmentsRepository.delete({ trainingSessionId: sessionId });
+    // Without this the cron sees "no teams" and regenerates them within the minute (and
+    // re-notifies everyone), for the whole 1h30-before to 3h-after catch-up window.
+    await this.sessionsRepository.update(sessionId, { teamsAutoGenerationDisabled: true });
   }
 
   async generateTeams(
@@ -87,11 +91,7 @@ export class TeamBalancingService {
     // Once a real pointage exists, the coach's call is authoritative and isn't second-
     // guessed by the training's max-present cap (a.confirmed) — that cap only governs the
     // self-service poll, pre-pointage.
-    const presentAttendances = allAttendances.filter((a) =>
-      a.actualStatus != null
-        ? a.actualStatus === AttendanceStatus.PRESENT
-        : a.status === AttendanceStatus.PRESENT && a.confirmed,
-    );
+    const presentAttendances = allAttendances.filter(isEffectivelyPresent);
     // confirmedGuestCount, not the raw guestCount someone declared — a guest is a headcount
     // unit against the SAME cap as the inviting player (see AttendancesService.setAttendance),
     // so an excess guest beyond the cap never makes it onto a team, same as a waitlisted
@@ -184,11 +184,10 @@ export class TeamBalancingService {
       teamIndex: number;
     }[] = [];
     for (const attendance of guestSourceAttendances) {
+      const guests = orderedGuests(attendance);
       for (let i = 0; i < attendance.confirmedGuestCount; i++) {
-        const guest = attendance.guests?.[i];
-        const label = guest
-          ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
-          : `Invité de ${attendance.user.firstName} #${i + 1}`;
+        const guest = guests[i];
+        const label = guestLabelFor(guest, attendance.user.firstName, i);
         const band = guest?.position ? BAND_BY_SUBPOSITION[guest.position] : null;
 
         // Headcount always comes first, exactly like the real players above: only the teams
@@ -221,6 +220,9 @@ export class TeamBalancingService {
     }
 
     await this.assignmentsRepository.delete({ trainingSessionId: sessionId });
+    if (session.teamsAutoGenerationDisabled) {
+      await this.sessionsRepository.update(sessionId, { teamsAutoGenerationDisabled: false });
+    }
     const entities = [...assignments, ...guestAssignments].map((a) =>
       this.assignmentsRepository.create({ trainingSessionId: sessionId, ...a }),
     );
@@ -355,10 +357,10 @@ export class TeamBalancingService {
     const allAttendances = await this.attendancesRepository.find({
       where: { trainingSessionId: sessionId },
     });
+    // Same definition of "there" as generateTeams: a waitlisted PRESENT with no pointage was
+    // never confirmed, so he isn't a last-minute arrival just because he once ticked Présent.
     const effectivePresentUserIds = new Set(
-      allAttendances
-        .filter((a) => (a.actualStatus ?? a.status) === AttendanceStatus.PRESENT)
-        .map((a) => a.userId),
+      allAttendances.filter(isEffectivelyPresent).map((a) => a.userId),
     );
 
     // No-shows: real-player slots (never guest slots — a guest can still have shown up
@@ -490,9 +492,24 @@ export class TeamBalancingService {
     }
 
     if (assignment.attendanceGuestId) {
-      const guest = await this.attendanceGuestsRepository.findOne({
+      let guest = await this.attendanceGuestsRepository.findOne({
         where: { id: assignment.attendanceGuestId },
       });
+      if (!guest) {
+        // A slot generated before guest ids were kept stable points at a row that was since
+        // recreated — find the guest it stands for by label instead of leaving them counted.
+        const rows = await this.attendancesRepository.find({
+          where: { trainingSessionId: sessionId },
+          relations: { user: true, guests: true },
+        });
+        for (const row of rows) {
+          guest =
+            orderedGuests(row).find(
+              (g, i) => guestLabelFor(g, row.user?.firstName ?? '', i) === assignment.guestLabel,
+            ) ?? null;
+          if (guest) break;
+        }
+      }
       if (guest) {
         await this.attendanceGuestsRepository.delete(guest.id);
         await this.attendancesRepository.decrement({ id: guest.attendanceId }, 'guestCount', 1);
@@ -537,6 +554,12 @@ export class TeamBalancingService {
     if (attendance) {
       attendance.status = AttendanceStatus.PRESENT;
       attendance.respondedAt = new Date();
+      // The coach placing him on a team overrides whatever held him off it: a waitlisted
+      // PRESENT is promoted (he's on the pitch, so he counts against the cap), and an
+      // "absent" pointage — set by an earlier removeFromTeam — is undone, or confirmFinalTeams
+      // would drop him again as a no-show and the late-arrival sync would never re-add him.
+      attendance.confirmed = true;
+      if (attendance.actualStatus != null) attendance.actualStatus = AttendanceStatus.PRESENT;
     } else {
       attendance = this.attendancesRepository.create({
         trainingSessionId: sessionId,
@@ -604,6 +627,8 @@ export class TeamBalancingService {
       // range instead: fire any time from 1h30 out through 3 hours after kickoff,
       // relying on the alreadyGenerated check below for idempotency rather than exact timing.
       if (diffMinutes <= 90 && diffMinutes > -180) {
+        // The coach wiped the teams on purpose — not "never generated".
+        if (session.teamsAutoGenerationDisabled) continue;
         const alreadyGenerated = await this.hasTeams(session.id);
         if (!alreadyGenerated) {
           sessionsNeedingTeams.push(session);

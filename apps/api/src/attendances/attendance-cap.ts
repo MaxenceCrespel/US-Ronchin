@@ -1,4 +1,5 @@
-import { Attendance } from './entities/attendance.entity';
+import { Attendance, AttendanceStatus } from './entities/attendance.entity';
+import { AttendanceGuest } from './entities/attendance-guest.entity';
 import { SeniorityTier } from '../users/entities/user.entity';
 
 const SENIORITY_RANK: Record<SeniorityTier, number> = {
@@ -52,4 +53,36 @@ export function pickNextWaitlisted<T extends Pick<Attendance, 'respondedAt'> & {
     if (rankDiff !== 0) return rankDiff;
     return a.respondedAt.getTime() - b.respondedAt.getTime();
   })[0];
+}
+
+/** Whether a row counts as being at the session: the coach's pointage réel when there is one
+ * (authoritative — not second-guessed by the cap), otherwise a confirmed PRESENT declaration
+ * (a waitlisted PRESENT is not). One definition shared by team generation, the post-training
+ * reconciliation and the late-arrival sync, so they can never disagree on who is "there". */
+export function isEffectivelyPresent(
+  a: Pick<Attendance, 'status' | 'confirmed' | 'actualStatus'>,
+): boolean {
+  return a.actualStatus != null
+    ? a.actualStatus === AttendanceStatus.PRESENT
+    : a.status === AttendanceStatus.PRESENT && a.confirmed;
+}
+
+/** A row's guests in the order the player declared them — the first `confirmedGuestCount` of
+ * this list are the ones holding a place. Ties (rows saved before sortOrder existed) fall
+ * back to the id, so the order is at least stable. */
+export function orderedGuests(a: { guests?: AttendanceGuest[] | null }): AttendanceGuest[] {
+  return [...(a.guests ?? [])].sort(
+    (x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0) || x.id.localeCompare(y.id),
+  );
+}
+
+/** How a guest appears on a team slot — the same label wherever one is created. */
+export function guestLabelFor(
+  guest: Pick<AttendanceGuest, 'firstName' | 'lastName'> | undefined,
+  inviterFirstName: string,
+  index: number,
+): string {
+  return guest
+    ? `${guest.firstName}${guest.lastName ? ` ${guest.lastName}` : ''}`
+    : `Invité de ${inviterFirstName} #${index + 1}`;
 }
