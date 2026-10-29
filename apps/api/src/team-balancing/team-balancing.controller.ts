@@ -49,6 +49,13 @@ export class TeamBalancingController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
+  @Get('levels')
+  getLevels(@Param('sessionId') sessionId: string) {
+    return this.teamBalancingService.getTeamLevels(sessionId);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.COACH)
   @Post('generate')
   async generate(@Param('sessionId') sessionId: string, @Body() dto: GenerateTeamsDto) {
     const teams = await this.teamBalancingService.generateTeams(sessionId, dto.teamCount);

@@ -101,6 +101,7 @@ import {
   moveTeamPlayer,
   removeFromTeam,
 } from './teams-api'
+import { PlayerLevelChip, TeamLevelGap, TeamLevelLine, useTeamLevels } from './TeamLevels'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 import { parisWallTimeToDate } from '@/lib/paris-time'
@@ -777,6 +778,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
   })
 
   const teams = teamsQuery.data ?? []
+  const levelsQuery = useTeamLevels(sessionId, teams.length > 0)
   const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
   const teamUserIds = new Set(teams.filter((t) => t.user).map((t) => t.user!.id))
   const otherRosterPlayers = (playersQuery.data ?? [])
@@ -799,13 +801,17 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
         <div className="grid grid-cols-2 gap-2">
           {TEAM_LABELS.map((label, teamIndex) => (
             <div key={teamIndex} className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
-              <p className="font-display mb-1.5 text-lg font-extrabold uppercase">{label}</p>
+              <p className="font-display text-lg font-extrabold uppercase">{label}</p>
+              <TeamLevelLine levels={levelsQuery.data} teamIndex={teamIndex} />
               <ul className="flex flex-col gap-1">
                 {teams
                   .filter((t) => t.teamIndex === teamIndex)
                   .map((t) => (
                     <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
-                      <span className="truncate">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
+                      <span className="truncate">
+                        {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
+                        <PlayerLevelChip levels={levelsQuery.data} userId={t.userId} />
+                      </span>
                       <span className="flex shrink-0 items-center gap-1">
                         <button
                           type="button"
@@ -838,6 +844,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
             </div>
           ))}
         </div>
+        <TeamLevelGap levels={levelsQuery.data} />
         {otherRosterPlayers.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
             <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -1052,6 +1059,7 @@ function ManageSessionDialog({
   const unpointedIds = players.filter((p) => !actualByUserId.get(p.id)).map((p) => p.id)
 
   const teams = teamsQuery.data ?? []
+  const levelsQuery = useTeamLevels(sessionId, teams.length > 0)
   const teamCount = teams.length > 0 ? TEAM_LABELS.length : 0
 
   // The stepper is a guide, not a lock: teams can (and normally do) get built well before
@@ -1270,9 +1278,10 @@ function ManageSessionDialog({
                       key={teamIndex}
                       className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
                     >
-                      <p className="font-display mb-1.5 text-lg font-extrabold uppercase">
+                      <p className="font-display text-lg font-extrabold uppercase">
                         {TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}
                       </p>
+                      <TeamLevelLine levels={levelsQuery.data} teamIndex={teamIndex} />
                       <ul className="flex flex-col gap-1">
                         {teams
                           .filter((t) => t.teamIndex === teamIndex)
@@ -1280,6 +1289,7 @@ function ManageSessionDialog({
                             <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
                               <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
                                 {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
+                                <PlayerLevelChip levels={levelsQuery.data} userId={t.userId} />
                                 {!t.user && t.guestPosition && (
                                   <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
                                 )}
@@ -1318,6 +1328,7 @@ function ManageSessionDialog({
                     </div>
                   ))}
                 </div>
+                <TeamLevelGap levels={levelsQuery.data} />
                 <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
                   {!walkInOpen ? (
                     <Button

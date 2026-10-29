@@ -26,6 +26,21 @@ const DEFAULT_TEAM_COUNT = 2;
 // to make truly tied players swap places between regenerations, never to flip a genuine gap.
 const SCORE_JITTER_RANGE = 2;
 
+export interface TeamLevel {
+  teamIndex: number;
+  playerCount: number;
+  rated: number;
+  unrated: number;
+  total: number;
+  average: number | null;
+}
+
+export interface TeamLevels {
+  /** userId → training level (0-100). */
+  players: Record<string, number>;
+  teams: TeamLevel[];
+}
+
 @Injectable()
 export class TeamBalancingService {
   constructor(
@@ -68,6 +83,46 @@ export class TeamBalancingService {
       relations: { user: true },
       order: { teamIndex: 'ASC' },
     });
+  }
+
+  /** Coach view of how balanced the generated teams are: each player's training level (the very
+   * score the split is built on, 0-100) and, per team, the mean and total over the rated
+   * players. A guest or a walk-in has no record, so is left out of the figures — `unrated`
+   * says how many, so a low total from unrated bodies isn't mistaken for a weaker team. */
+  async getTeamLevels(sessionId: string): Promise<TeamLevels> {
+    const [assignments, playerStats] = await Promise.all([
+      this.getTeams(sessionId),
+      this.statsService.getPlayerStats(),
+    ]);
+    const levelByUserId = new Map(playerStats.map((p) => [p.userId, p.trainingLevel]));
+    const players: Record<string, number> = {};
+    const teams = new Map<number, TeamLevel>();
+    for (const a of assignments) {
+      const team = teams.get(a.teamIndex) ?? {
+        teamIndex: a.teamIndex,
+        playerCount: 0,
+        rated: 0,
+        unrated: 0,
+        total: 0,
+        average: null,
+      };
+      team.playerCount += 1;
+      const level = a.userId ? levelByUserId.get(a.userId) : undefined;
+      if (a.userId && level !== undefined) {
+        players[a.userId] = level;
+        team.rated += 1;
+        team.total += level;
+      } else {
+        team.unrated += 1;
+      }
+      teams.set(a.teamIndex, team);
+    }
+    const list = [...teams.values()].sort((x, y) => x.teamIndex - y.teamIndex);
+    for (const team of list) {
+      team.total = Math.round(team.total * 10) / 10;
+      team.average = team.rated > 0 ? Math.round((team.total / team.rated) * 10) / 10 : null;
+    }
+    return { players, teams: list };
   }
 
   async hasTeams(sessionId: string): Promise<boolean> {

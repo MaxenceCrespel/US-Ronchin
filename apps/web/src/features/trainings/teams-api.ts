@@ -8,6 +8,27 @@ export async function fetchTeams(sessionId: string): Promise<TrainingTeamAssignm
   return data
 }
 
+export interface TeamLevel {
+  teamIndex: number
+  playerCount: number
+  rated: number
+  unrated: number
+  total: number
+  average: number | null
+}
+
+export interface TeamLevels {
+  /** userId → training level (0-100) */
+  players: Record<string, number>
+  teams: TeamLevel[]
+}
+
+/** Coach only — the level each player is balanced on, and each team's mean and total. */
+export async function fetchTeamLevels(sessionId: string): Promise<TeamLevels> {
+  const { data } = await apiClient.get<TeamLevels>(`/training-sessions/${sessionId}/teams/levels`)
+  return data
+}
+
 export async function generateTeams(
   sessionId: string,
   teamCount?: number,
