@@ -50,6 +50,25 @@ describe('team adjustment dialog', () => {
     expect(within(dialog).getAllByTitle('Niveau estimé (moyenne de la séance)')).toHaveLength(1)
   })
 
+  it('adds someone who came without an account straight from the team dialog', async () => {
+    const user = await openUpcoming()
+    await user.click(screen.getByRole('button', { name: 'Modifier les équipes' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /Ajouter quelqu'un qui n'était pas prévu/ }))
+    await user.type(within(dialog).getByPlaceholderText('Prénom'), 'Samir')
+    await user.type(within(dialog).getByPlaceholderText('Nom (optionnel)'), 'Test')
+    await user.click(within(dialog).getByRole('button', { name: 'Ajouter' }))
+    await waitFor(() => expect(fakeApi.called('POST', /teams\/walk-in$/)).toHaveLength(1))
+    expect(fakeApi.called('POST', /teams\/walk-in$/)[0].data).toMatchObject({ firstName: 'Samir', lastName: 'Test' })
+  })
+
+  it('shows full names, wrapped, so two players sharing a first name can be told apart', async () => {
+    const user = await openUpcoming()
+    await user.click(screen.getByRole('button', { name: 'Modifier les équipes' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.querySelectorAll('.truncate')).toHaveLength(0)
+  })
+
   it('removes a player who finally did not come — after confirming', async () => {
     const user = await openUpcoming()
     await user.click(screen.getByRole('button', { name: 'Modifier les équipes' }))

@@ -810,7 +810,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                     <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
-                        <span className="truncate">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
+                        <span className="leading-tight break-words">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-1">
                         <button
@@ -888,6 +888,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
             </ul>
           </div>
         )}
+        <WalkInForm sessionId={sessionId} />
         <Button
           type="button"
           size="sm"
@@ -915,6 +916,95 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
       onConfirm={() => confirmingRemove && removeMutation.mutate(confirmingRemove.assignmentId)}
     />
     </>
+  )
+}
+
+/** Someone who showed up without being on the original list at all — no account (can't have
+ * declared PRESENT themselves) and nobody registered them as a guest either. Added straight to
+ * the thinnest team; the coach can then move them like anyone else. */
+function WalkInForm({ sessionId }: { sessionId: string }) {
+  const queryClient = useQueryClient()
+  const [walkInOpen, setWalkInOpen] = useState(false)
+  const [walkInFirstName, setWalkInFirstName] = useState('')
+  const [walkInLastName, setWalkInLastName] = useState('')
+  const [walkInPosition, setWalkInPosition] = useState<PlayerSubPosition | ''>('')
+  const walkInMutation = useMutation({
+    mutationFn: () =>
+      addWalkIn(sessionId, {
+        firstName: walkInFirstName.trim(),
+        lastName: walkInLastName.trim() || undefined,
+        position: walkInPosition || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
+      setWalkInFirstName('')
+      setWalkInLastName('')
+      setWalkInPosition('')
+      setWalkInOpen(false)
+    },
+  })
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
+      {!walkInOpen ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="gap-1.5 self-start text-xs"
+          onClick={() => setWalkInOpen(true)}
+        >
+          <UserPlus className="size-3.5" />
+          Ajouter quelqu'un qui n'était pas prévu
+        </Button>
+      ) : (
+        <>
+          <p className="text-muted-foreground text-xs">
+            Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
+            directement à l'équipe la moins fournie.
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Input
+              placeholder="Prénom"
+              className="h-7 w-24 text-xs"
+              value={walkInFirstName}
+              onChange={(e) => setWalkInFirstName(e.target.value)}
+            />
+            <Input
+              placeholder="Nom (optionnel)"
+              className="h-7 w-28 text-xs"
+              value={walkInLastName}
+              onChange={(e) => setWalkInLastName(e.target.value)}
+            />
+            <Select value={walkInPosition} onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}>
+              <SelectTrigger aria-label="Poste du joueur" className="h-7 w-32 text-xs">
+                <SelectValue placeholder="Poste (optionnel)" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={walkInMutation.isPending || !walkInFirstName.trim()}
+              onClick={() => walkInMutation.mutate()}
+            >
+              {walkInMutation.isPending ? 'Ajout...' : 'Ajouter'}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setWalkInOpen(false)}>
+              Annuler
+            </Button>
+          </div>
+          {walkInMutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(walkInMutation.error, "Échec — réessaie.")}</p>}
+        </>
+      )}
+    </div>
   )
 }
 
@@ -983,28 +1073,6 @@ function ManageSessionDialog({
       queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['attendances', sessionId] })
       setConfirmingRemove(null)
-    },
-  })
-
-  // Someone who showed up without being on the original list at all — no account (can't
-  // have declared PRESENT themselves) and nobody registered them as a guest either.
-  const [walkInOpen, setWalkInOpen] = useState(false)
-  const [walkInFirstName, setWalkInFirstName] = useState('')
-  const [walkInLastName, setWalkInLastName] = useState('')
-  const [walkInPosition, setWalkInPosition] = useState<PlayerSubPosition | ''>('')
-  const walkInMutation = useMutation({
-    mutationFn: () =>
-      addWalkIn(sessionId, {
-        firstName: walkInFirstName.trim(),
-        lastName: walkInLastName.trim() || undefined,
-        position: walkInPosition || undefined,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teams', sessionId] })
-      setWalkInFirstName('')
-      setWalkInLastName('')
-      setWalkInPosition('')
-      setWalkInOpen(false)
     },
   })
 
@@ -1289,7 +1357,7 @@ function ManageSessionDialog({
                             <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
-                              <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
+                              <span className={cn('leading-tight break-words', !t.user && 'text-muted-foreground italic')}>
                                 {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
                                 {!t.user && t.guestPosition && (
                                   <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
@@ -1331,66 +1399,7 @@ function ManageSessionDialog({
                   ))}
                 </div>
                 <TeamLevelGap levels={levelsQuery.data} />
-                <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
-                  {!walkInOpen ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="gap-1.5 self-start text-xs"
-                      onClick={() => setWalkInOpen(true)}
-                    >
-                      <UserPlus className="size-3.5" />
-                      Ajouter quelqu'un qui n'était pas prévu
-                    </Button>
-                  ) : (
-                    <>
-                      <p className="text-muted-foreground text-xs">
-                        Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
-                        directement à l'équipe la moins fournie.
-                      </p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Input
-                          placeholder="Prénom"
-                          className="h-7 w-24 text-xs"
-                          value={walkInFirstName}
-                          onChange={(e) => setWalkInFirstName(e.target.value)}
-                        />
-                        <Input
-                          placeholder="Nom (optionnel)"
-                          className="h-7 w-28 text-xs"
-                          value={walkInLastName}
-                          onChange={(e) => setWalkInLastName(e.target.value)}
-                        />
-                        <Select value={walkInPosition} onValueChange={(v) => setWalkInPosition(v as PlayerSubPosition)}>
-                          <SelectTrigger aria-label="Poste du joueur" className="h-7 w-32 text-xs">
-                            <SelectValue placeholder="Poste (optionnel)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(SUB_POSITION_LABELS).map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 text-xs"
-                          disabled={walkInMutation.isPending || !walkInFirstName.trim()}
-                          onClick={() => walkInMutation.mutate()}
-                        >
-                          {walkInMutation.isPending ? 'Ajout...' : 'Ajouter'}
-                        </Button>
-                        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setWalkInOpen(false)}>
-                          Annuler
-                        </Button>
-                      </div>
-                      {walkInMutation.isError && <p role="alert" className="text-destructive text-xs">{errorMessage(walkInMutation.error, "Échec — réessaie.")}</p>}
-                    </>
-                  )}
-                </div>
+                <WalkInForm sessionId={sessionId} />
                 <div className="flex gap-2">
                   <Button
                     type="button"
