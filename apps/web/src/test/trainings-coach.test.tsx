@@ -30,27 +30,24 @@ describe('team adjustment dialog', () => {
     expect(fakeApi.called('PATCH', /teams$/)[0].data).toHaveProperty('teamIndex')
   })
 
-  it('shows the coach each team\'s level, each player\'s level and the gap between teams', async () => {
-    const teams = fixtures.roles.coach[`/training-sessions/${meta.upcomingSessionId}/teams`] as {
-      userId: string | null
-      teamIndex: number
-    }[]
-    const withUser = teams.filter((t) => t.userId)
+  it('shows the coach each team\'s level, each player\'s level (estimates marked) and the gap', async () => {
+    const teams = fixtures.roles.coach[`/training-sessions/${meta.upcomingSessionId}/teams`] as { id: string }[]
     const user = await openUpcoming(() =>
       fakeApi.on('GET', /training-sessions\/.+\/teams\/levels$/, {
-        players: Object.fromEntries(withUser.map((t) => [t.userId, 61.5])),
+        assignments: Object.fromEntries(teams.map((t, i) => [t.id, { level: 61.5, estimated: i === 0 }])),
         teams: [
-          { teamIndex: 0, playerCount: 5, rated: 5, unrated: 0, total: 300, average: 60 },
-          { teamIndex: 1, playerCount: 5, rated: 4, unrated: 1, total: 250, average: 62.5 },
+          { teamIndex: 0, playerCount: 5, estimated: 1, total: 300, average: 60 },
+          { teamIndex: 1, playerCount: 5, estimated: 0, total: 312.5, average: 62.5 },
         ],
       }),
     )
     await user.click(screen.getByRole('button', { name: 'Modifier les équipes' }))
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByTestId('team-level-0')).toHaveTextContent('Niveau moyen 60')
-    expect(within(dialog).getByTestId('team-level-1')).toHaveTextContent('4/5 notés')
+    expect(within(dialog).getByTestId('team-level-0')).toHaveTextContent('dont 1 estimé')
     expect(within(dialog).getByTestId('team-level-gap')).toHaveTextContent('2,5')
     expect(within(dialog).getAllByTitle("Niveau d'entraînement").length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByTitle('Niveau estimé (moyenne de la séance)')).toHaveLength(1)
   })
 
   it('removes a player who finally did not come — after confirming', async () => {

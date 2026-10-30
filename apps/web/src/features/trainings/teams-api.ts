@@ -11,15 +11,15 @@ export async function fetchTeams(sessionId: string): Promise<TrainingTeamAssignm
 export interface TeamLevel {
   teamIndex: number
   playerCount: number
-  rated: number
-  unrated: number
+  /** Members counted at the session mean because they have no level of their own. */
+  estimated: number
   total: number
   average: number | null
 }
 
 export interface TeamLevels {
-  /** userId → training level (0-100) */
-  players: Record<string, number>
+  /** assignment id → training level (0-100), `estimated` when the person has no record */
+  assignments: Record<string, { level: number; estimated: boolean }>
   teams: TeamLevel[]
 }
 

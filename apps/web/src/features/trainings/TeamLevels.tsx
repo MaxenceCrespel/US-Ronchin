@@ -19,9 +19,10 @@ export function TeamLevelLine({ levels, teamIndex }: { levels?: TeamLevels; team
   if (!team) return null
   return (
     <p className="mb-1.5 text-xs font-semibold tabular-nums" data-testid={`team-level-${teamIndex}`}>
-      {team.average === null ? 'Niveau inconnu' : `Niveau moyen ${format(team.average)}`}
+      Niveau moyen {format(team.average ?? 0)}
       <span className="font-normal opacity-80">
-        {' '}· total {format(team.total)} · {team.rated}/{team.playerCount} notés
+        {' '}· total {format(team.total)} · {team.playerCount} joueurs
+        {team.estimated > 0 && ` (dont ${team.estimated} estimé${team.estimated > 1 ? 's' : ''})`}
       </span>
     </p>
   )
@@ -39,13 +40,17 @@ export function TeamLevelGap({ levels }: { levels?: TeamLevels }) {
   )
 }
 
-/** A player's level next to his name; nothing for a guest, who has no record. */
-export function PlayerLevelChip({ levels, userId }: { levels?: TeamLevels; userId: string | null }) {
-  const level = userId ? levels?.players[userId] : undefined
-  if (level === undefined) return null
+/** A player's level next to the name; "~" marks an estimate (guest, walk-in, no record yet)
+ * counted at the session mean. */
+export function PlayerLevelChip({ levels, assignmentId }: { levels?: TeamLevels; assignmentId: string }) {
+  const entry = levels?.assignments[assignmentId]
+  if (!entry) return null
   return (
-    <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums dark:bg-white/15" title="Niveau d'entraînement">
-      {format(level)}
+    <span
+      className="shrink-0 rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums dark:bg-white/15"
+      title={entry.estimated ? 'Niveau estimé (moyenne de la séance)' : "Niveau d'entraînement"}
+    >
+      {entry.estimated ? '~' : ''}{format(entry.level)}
     </span>
   )
 }

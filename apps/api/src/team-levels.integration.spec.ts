@@ -41,16 +41,28 @@ describe('team levels for the coach (real stack)', () => {
   });
   afterAll(() => t.close());
 
-  it('gives every team its headcount, total and mean level, and each player a level', async () => {
+  it('gives every team its headcount, total and mean level, and each assignment a level', async () => {
     const res = await t.http().get(`/api/training-sessions/${sessionId}/teams/levels`).set(bearer(coach.token));
     expect(res.status).toBe(200);
     expect(res.body.teams).toHaveLength(2);
     expect(res.body.teams.map((x: { playerCount: number }) => x.playerCount)).toEqual([3, 3]);
     for (const team of res.body.teams) {
-      expect(team.rated + team.unrated).toBe(team.playerCount);
-      expect(team.average).toBeCloseTo(team.total / team.rated, 1);
+      expect(team.average).toBeCloseTo(team.total / team.playerCount, 1);
     }
-    expect(Object.keys(res.body.players).sort()).toEqual(players.map((p) => p.user.id).sort());
+    expect(Object.keys(res.body.assignments)).toHaveLength(6);
+  });
+
+  it('counts a guest at the mean of the known levels, flagged as an estimate', async () => {
+    await t.http().put(`/api/training-sessions/${sessionId}/attendance`).set(bearer(players[0].token)).send({ status: 'PRESENT', guests: [{ firstName: 'Invité' }] });
+    await t.http().post(`/api/training-sessions/${sessionId}/teams/walk-in`).set(bearer(coach.token)).send({ firstName: 'Passant' });
+    const res = await t.http().get(`/api/training-sessions/${sessionId}/teams/levels`).set(bearer(coach.token));
+    const entries = Object.values(res.body.assignments) as { level: number; estimated: boolean }[];
+    const estimated = entries.filter((e) => e.estimated);
+    const known = entries.filter((e) => !e.estimated);
+    expect(estimated.length).toBeGreaterThan(0);
+    const mean = known.reduce((s, e) => s + e.level, 0) / known.length;
+    for (const e of estimated) expect(e.level).toBeCloseTo(mean, 0);
+    expect(res.body.teams.reduce((n: number, x: { estimated: number }) => n + x.estimated, 0)).toBe(estimated.length);
   });
 
   it('is reserved to the coach', async () => {

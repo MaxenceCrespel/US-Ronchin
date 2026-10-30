@@ -808,9 +808,9 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                   .filter((t) => t.teamIndex === teamIndex)
                   .map((t) => (
                     <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
-                      <span className="truncate">
-                        {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
-                        <PlayerLevelChip levels={levelsQuery.data} userId={t.userId} />
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
+                        <span className="truncate">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
                       </span>
                       <span className="flex shrink-0 items-center gap-1">
                         <button
@@ -1287,12 +1287,14 @@ function ManageSessionDialog({
                           .filter((t) => t.teamIndex === teamIndex)
                           .map((t) => (
                             <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
                               <span className={cn('truncate', !t.user && 'text-muted-foreground italic')}>
                                 {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
-                                <PlayerLevelChip levels={levelsQuery.data} userId={t.userId} />
                                 {!t.user && t.guestPosition && (
                                   <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
                                 )}
+                              </span>
                               </span>
                               <span className="flex shrink-0 items-center gap-1">
                                 <button
