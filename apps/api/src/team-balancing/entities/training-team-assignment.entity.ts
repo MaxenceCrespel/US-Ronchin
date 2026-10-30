@@ -55,4 +55,9 @@ export class TrainingTeamAssignment {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  /** When this person landed on their current team — bumped on every move, so the lists show
+   * someone who just changed team at the bottom of the new one while nobody else shifts. */
+  @Column({ name: 'team_joined_at', type: 'timestamptz', default: () => 'now()' })
+  teamJoinedAt: Date;
 }

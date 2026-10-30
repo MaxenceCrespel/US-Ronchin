@@ -101,7 +101,7 @@ import {
   moveTeamPlayer,
   removeFromTeam,
 } from './teams-api'
-import { PlayerLevelChip, TeamLevelGap, TeamLevelLine, useTeamLevels } from './TeamLevels'
+import { PlayerLevelChip, TeamLevelLine, useTeamLevels } from './TeamLevels'
 import { fetchMatchAttendance, fetchMatches, setMyMatchAttendance } from '@/features/matches/api'
 import { fetchPlayers } from '@/features/players/api'
 import { parisWallTimeToDate } from '@/lib/paris-time'
@@ -801,23 +801,23 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
         <div className="grid grid-cols-2 gap-2">
           {TEAM_LABELS.map((label, teamIndex) => (
             <div key={teamIndex} className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}>
-              <p className="font-display text-lg font-extrabold uppercase">{label}</p>
+              <p className="font-display text-base font-extrabold whitespace-nowrap uppercase">{label}</p>
               <TeamLevelLine levels={levelsQuery.data} teamIndex={teamIndex} />
               <ul className="flex flex-col gap-1">
                 {teams
                   .filter((t) => t.teamIndex === teamIndex)
                   .map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
-                      <span className="flex min-w-0 items-center gap-1.5">
+                    <li key={t.id} className="flex h-14 items-center gap-1.5 border-b border-white/15 text-xs last:border-b-0">
+                      <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                        <span className="line-clamp-2 min-w-0 font-medium leading-tight [overflow-wrap:anywhere]">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
                         <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
-                        <span className="leading-tight break-words">{t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}</span>
-                      </span>
-                      <span className="flex shrink-0 items-center gap-1">
+                      </div>
+                      <span className="flex shrink-0 flex-col items-center gap-0.5">
                         <button
                           type="button"
                           title="Déplacer dans l'autre équipe"
                           aria-label="Déplacer dans l'autre équipe"
-                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
+                          className="text-muted-foreground hover:bg-white/20 flex size-7 items-center justify-center rounded-full transition-colors"
                           onClick={() => moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })}
                         >
                           <ArrowRightLeft className="size-3.5" />
@@ -827,7 +827,7 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
                           title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                           disabled={removeMutation.isPending}
-                          className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                          className="text-muted-foreground hover:bg-white/20 flex size-7 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                           onClick={() =>
                             setConfirmingRemove({
                               assignmentId: t.id,
@@ -844,7 +844,6 @@ function AdjustTeamsDialog({ sessionId }: { sessionId: string }) {
             </div>
           ))}
         </div>
-        <TeamLevelGap levels={levelsQuery.data} />
         {otherRosterPlayers.length > 0 && (
           <div className="flex flex-col gap-1.5 rounded-md border border-dashed p-2">
             <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -959,10 +958,6 @@ function WalkInForm({ sessionId }: { sessionId: string }) {
         </Button>
       ) : (
         <>
-          <p className="text-muted-foreground text-xs">
-            Personne sans compte ni invité déclaré, mais bien venue — s'ajoute
-            directement à l'équipe la moins fournie.
-          </p>
           <div className="flex flex-wrap items-center gap-1.5">
             <Input
               placeholder="Prénom"
@@ -1330,11 +1325,6 @@ function ManageSessionDialog({
               </div>
             ) : (
               <>
-                <p className="text-muted-foreground text-xs">
-                  Réconciliées automatiquement avec le pointage réel — qui a dit présent mais
-                  n'est pas venu est retiré, qui est venu sans être prévu est ajouté.
-                  Ajuste-les si besoin — déplace, retire, ajoute quelqu'un qui n'était pas prévu.
-                </p>
                 {confirmTeamsMutation.isError && (
                   <p role="alert" className="text-destructive text-xs">
                     Échec de la mise à jour des équipes — réessaie ou vérifie ta connexion.
@@ -1346,7 +1336,7 @@ function ManageSessionDialog({
                       key={teamIndex}
                       className={cn('rounded-2xl border p-3', TEAM_STYLES[teamIndex % TEAM_STYLES.length])}
                     >
-                      <p className="font-display text-lg font-extrabold uppercase">
+                      <p className="font-display text-base font-extrabold whitespace-nowrap uppercase">
                         {TEAM_LABELS[teamIndex] ?? `Équipe ${teamIndex + 1}`}
                       </p>
                       <TeamLevelLine levels={levelsQuery.data} teamIndex={teamIndex} />
@@ -1354,22 +1344,22 @@ function ManageSessionDialog({
                         {teams
                           .filter((t) => t.teamIndex === teamIndex)
                           .map((t) => (
-                            <li key={t.id} className="flex items-center justify-between gap-1.5 py-0.5 text-xs">
-                              <span className="flex min-w-0 items-center gap-1.5">
-                                <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
-                              <span className={cn('leading-tight break-words', !t.user && 'text-muted-foreground italic')}>
+                            <li key={t.id} className="flex h-14 items-center gap-1.5 border-b border-white/15 text-xs last:border-b-0">
+                              <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                              <span className={cn('line-clamp-2 min-w-0 font-medium leading-tight [overflow-wrap:anywhere]', !t.user && 'text-muted-foreground italic')}>
                                 {t.user ? `${t.user.firstName} ${t.user.lastName}` : t.guestLabel}
                                 {!t.user && t.guestPosition && (
                                   <span className="text-muted-foreground"> · {SUB_POSITION_ABBR[t.guestPosition]}</span>
                                 )}
                               </span>
-                              </span>
-                              <span className="flex shrink-0 items-center gap-1">
+                              <PlayerLevelChip levels={levelsQuery.data} assignmentId={t.id} />
+                              </div>
+                              <span className="flex shrink-0 flex-col items-center gap-0.5">
                                 <button
                                   type="button"
                                   title="Déplacer dans l'autre équipe"
                                   aria-label="Déplacer dans l'autre équipe"
-                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-7 items-center justify-center rounded-full transition-colors"
                                   onClick={() =>
                                     moveMutation.mutate({ assignmentId: t.id, teamIndex: (teamIndex + 1) % teamCount })
                                   }
@@ -1381,7 +1371,7 @@ function ManageSessionDialog({
                                   title={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   aria-label={t.user ? 'Ne vient finalement pas' : 'Retirer cet invité'}
                                   disabled={removeMutation.isPending}
-                                  className="text-muted-foreground hover:bg-white/20 flex size-8 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                                  className="text-muted-foreground hover:bg-white/20 flex size-7 items-center justify-center rounded-full transition-colors disabled:opacity-40"
                                   onClick={() =>
                                     setConfirmingRemove({
                                       assignmentId: t.id,
@@ -1398,8 +1388,7 @@ function ManageSessionDialog({
                     </div>
                   ))}
                 </div>
-                <TeamLevelGap levels={levelsQuery.data} />
-                <WalkInForm sessionId={sessionId} />
+                        <WalkInForm sessionId={sessionId} />
                 <div className="flex gap-2">
                   <Button
                     type="button"

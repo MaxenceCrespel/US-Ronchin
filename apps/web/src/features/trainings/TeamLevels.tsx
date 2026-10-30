@@ -18,12 +18,12 @@ export function TeamLevelLine({ levels, teamIndex }: { levels?: TeamLevels; team
   const team = levels?.teams.find((t) => t.teamIndex === teamIndex)
   if (!team) return null
   return (
-    <p className="mb-1.5 text-xs font-semibold tabular-nums" data-testid={`team-level-${teamIndex}`}>
-      Niveau moyen {format(team.average ?? 0)}
-      <span className="font-normal opacity-80">
-        {' '}· total {format(team.total)} · {team.playerCount} joueurs
-        {team.estimated > 0 && ` (dont ${team.estimated} estimé${team.estimated > 1 ? 's' : ''})`}
-      </span>
+    <p
+      className="mb-1.5 text-sm font-semibold tabular-nums"
+      data-testid={`team-level-${teamIndex}`}
+      title={`Total ${format(team.total)} · ${team.playerCount} joueurs${team.estimated > 0 ? ` dont ${team.estimated} estimé${team.estimated > 1 ? 's' : ''}` : ''}`}
+    >
+      Niveau {format(team.average ?? 0)}
     </p>
   )
 }
@@ -35,7 +35,7 @@ export function TeamLevelGap({ levels }: { levels?: TeamLevels }) {
   const gap = Math.max(...means) - Math.min(...means)
   return (
     <p className="text-muted-foreground text-xs tabular-nums" data-testid="team-level-gap">
-      Écart de niveau entre les équipes : <strong>{format(gap)}</strong> pt{gap >= 2 ? 's' : ''}
+      Écart : <strong>{format(gap)}</strong> pt{gap >= 2 ? 's' : ''}
     </p>
   )
 }

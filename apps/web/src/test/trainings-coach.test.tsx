@@ -30,7 +30,7 @@ describe('team adjustment dialog', () => {
     expect(fakeApi.called('PATCH', /teams$/)[0].data).toHaveProperty('teamIndex')
   })
 
-  it('shows the coach each team\'s level, each player\'s level (estimates marked) and the gap', async () => {
+  it('shows the coach each team\'s level, each player\'s level (estimates marked)', async () => {
     const teams = fixtures.roles.coach[`/training-sessions/${meta.upcomingSessionId}/teams`] as { id: string }[]
     const user = await openUpcoming(() =>
       fakeApi.on('GET', /training-sessions\/.+\/teams\/levels$/, {
@@ -43,9 +43,7 @@ describe('team adjustment dialog', () => {
     )
     await user.click(screen.getByRole('button', { name: 'Modifier les équipes' }))
     const dialog = await screen.findByRole('dialog')
-    expect(await within(dialog).findByTestId('team-level-0')).toHaveTextContent('Niveau moyen 60')
-    expect(within(dialog).getByTestId('team-level-0')).toHaveTextContent('dont 1 estimé')
-    expect(within(dialog).getByTestId('team-level-gap')).toHaveTextContent('2,5')
+    expect(await within(dialog).findByTestId('team-level-0')).toHaveTextContent('Niveau 60')
     expect(within(dialog).getAllByTitle("Niveau d'entraînement").length).toBeGreaterThan(0)
     expect(within(dialog).getAllByTitle('Niveau estimé (moyenne de la séance)')).toHaveLength(1)
   })

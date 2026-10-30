@@ -84,7 +84,7 @@ export class TeamBalancingService {
     return this.assignmentsRepository.find({
       where: { trainingSessionId: sessionId },
       relations: { user: true },
-      order: { teamIndex: 'ASC' },
+      order: { teamIndex: 'ASC', teamJoinedAt: 'ASC', id: 'ASC' },
     });
   }
 
@@ -760,7 +760,10 @@ export class TeamBalancingService {
     if (!assignment) {
       throw new NotFoundException('Affectation introuvable');
     }
-    assignment.teamIndex = teamIndex;
+    if (assignment.teamIndex !== teamIndex) {
+      assignment.teamIndex = teamIndex;
+      assignment.teamJoinedAt = new Date();
+    }
     await this.assignmentsRepository.save(assignment);
     return this.getTeams(sessionId);
   }
