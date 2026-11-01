@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderApp } from './render-app'
-import { fakeApi, fixtures, type Role } from './fake-api'
+import { fakeApi, fixtures, meta, type Role } from './fake-api'
 
 const settle = (ms = 500) => act(() => new Promise<void>((r) => setTimeout(r, ms)))
 
@@ -123,6 +123,40 @@ describe('home page — situations', () => {
     fakeApi.on('GET', /^\/matches$/, [{ ...matches[0], id: 'late', date: yesterday, status: 'SCHEDULED', opponent: 'FC Retard', scoreHome: null, scoreAway: null }, ...matches])
     await settle(800)
     expect(document.body.textContent).toMatch(/FC Retard/)
+  })
+
+  describe('votes still running', () => {
+    const matches = fixtures.roles.coach['/matches'] as Record<string, unknown>[]
+    const mine = meta.playerId
+    const open = { revealed: false, votingOpen: true, totalVotes: 3, totalPlayers: 10, votingClosesAt: null, results: null, myVoteCompositionId: 'c1' }
+    const setup = (role: 'player' | 'coach', composition: { userId: string }[]) => {
+      renderApp('/', role)
+      fakeApi.on('GET', /^\/matches$/, [{ ...matches[0], id: 'vote-match', status: 'PLAYED', opponent: 'FC Votants', resultConfirmedAt: new Date().toISOString() }])
+      fakeApi.on('GET', /\/matches\/vote-match\/composition$/, composition.map((c, i) => ({ id: `c${i}`, matchId: 'vote-match', isSpectator: false, ...c })))
+      fakeApi.on('GET', /\/matches\/vote-match\/motm$/, open)
+      fakeApi.on('GET', /\/matches\/vote-match\/defense-boss$/, { ...open, myVoteIsBlank: false, blankVotes: 0, hasEligibleTargets: true })
+      fakeApi.on('GET', /\/matches\/vote-match\/ratings\/submitted$/, { submitted: true, pendingCompositionIds: [] })
+    }
+
+    it('gives a shortcut to a player of the match who already voted', async () => {
+      setup('player', [{ userId: mine }])
+      await settle(800)
+      const link = screen.getByRole('link', { name: /Votes en cours — vs FC Votants/ })
+      expect(link).toHaveAttribute('href', '/matches/vote-match')
+      expect(link).toHaveTextContent('3/10 ont voté')
+    })
+
+    it('gives it to the coach too when he played the match', async () => {
+      setup('coach', [{ userId: meta.coachId }])
+      await settle(800)
+      expect(screen.getByRole('link', { name: /Votes en cours — vs FC Votants/ })).toBeInTheDocument()
+    })
+
+    it('hides it from someone who was not in the match', async () => {
+      setup('player', [{ userId: 'someone-else' }])
+      await settle(800)
+      expect(screen.queryByRole('link', { name: /Votes en cours/ })).not.toBeInTheDocument()
+    })
   })
 
   it('asks the coach for a pointage that is missing', async () => {

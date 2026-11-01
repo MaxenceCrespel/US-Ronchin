@@ -636,43 +636,37 @@ export function HomePage() {
     [matchesQuery.data],
   )
   const compositionQueries = useQueries({
-    queries: !isCoach
-      ? recentPlayedMatches.map((m) => ({
-          queryKey: ['composition', m.id],
-          queryFn: () => fetchComposition(m.id),
-        }))
-      : [],
+    queries: recentPlayedMatches.map((m) => ({
+      queryKey: ['composition', m.id],
+      queryFn: () => fetchComposition(m.id),
+    })),
   })
   const motmQueries = useQueries({
-    queries: !isCoach
-      ? recentPlayedMatches.map((m) => ({
-          queryKey: ['motm', m.id],
-          queryFn: () => fetchMotm(m.id),
-        }))
-      : [],
+    queries: recentPlayedMatches.map((m) => ({
+      queryKey: ['motm', m.id],
+      queryFn: () => fetchMotm(m.id),
+    })),
   })
   // Same two gates the match detail page itself uses (needsDefenseBossVote, needsRatings) —
   // without these, someone who'd already voted MOTM but still owed ratings (or a
   // patron-de-la-défense vote) never showed up here at all.
   const defenseBossQueries = useQueries({
-    queries: !isCoach
-      ? recentPlayedMatches.map((m) => ({
-          queryKey: ['defense-boss', m.id],
-          queryFn: () => fetchDefenseBoss(m.id),
-        }))
-      : [],
+    queries: recentPlayedMatches.map((m) => ({
+      queryKey: ['defense-boss', m.id],
+      queryFn: () => fetchDefenseBoss(m.id),
+    })),
   })
   const ratingsSubmittedQueries = useQueries({
-    queries: !isCoach
-      ? recentPlayedMatches.map((m) => ({
-          queryKey: ['ratings-submitted', m.id],
-          queryFn: () => fetchRatingsSubmitted(m.id),
-        }))
-      : [],
+    queries: recentPlayedMatches.map((m) => ({
+      queryKey: ['ratings-submitted', m.id],
+      queryFn: () => fetchRatingsSubmitted(m.id),
+    })),
   })
   const matchesNeedingVote = isCoach
     ? []
-    : recentPlayedMatches.filter((_m, i) => {
+    : recentPlayedMatches.filter((m, i) => {
+        // Voting and notes only open once the coach has finished the result setup.
+        if (m.resultConfirmedAt == null) return false
         const composition = compositionQueries[i]?.data
         const iPlayed = composition?.some((c) => c.userId === user?.id) ?? false
         if (!iPlayed || !composition?.length) return false
@@ -692,6 +686,22 @@ export function HomePage() {
 
         return needsMotmVote || needsDefenseBossVote || needsRatings
       })
+
+  // Shortcut to every match of mine whose votes are still running (homme du match, patron de
+  // la défense) — only for those who played it, coach included. A match where something is
+  // still owed already has its own "à faire" line above, so it isn't listed twice.
+  const owedVoteIds = new Set(matchesNeedingVote.map((m) => m.id))
+  const matchesWithOpenVotes = recentPlayedMatches.flatMap((m, i) => {
+    if (m.resultConfirmedAt == null || owedVoteIds.has(m.id)) return []
+    const composition = compositionQueries[i]?.data
+    if (!composition?.some((c) => c.userId === user?.id)) return []
+    const motm = motmQueries[i]?.data
+    const defenseBoss = defenseBossQueries[i]?.data
+    const open =
+      motm !== undefined &&
+      (!motm.revealed || (defenseBoss !== undefined && defenseBoss.hasEligibleTargets && !defenseBoss.revealed))
+    return open ? [{ match: m, totalVotes: motm.totalVotes, totalPlayers: motm.totalPlayers }] : []
+  })
 
   // Only ever the next 3 of each kind, and never anything already past — a cancelled
   // session isn't something to prepare for anymore, so it doesn't take up a slot either.
@@ -919,6 +929,29 @@ export function HomePage() {
                 <item.icon className="size-5" />
               </span>
               <span className="flex-1 font-medium">{item.label}</span>
+              <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+            </Link>
+          ))}
+        </section>
+      )}
+
+      {matchesWithOpenVotes.length > 0 && (
+        <section className="flex flex-col gap-2" aria-label="Votes en cours">
+          {matchesWithOpenVotes.map(({ match, totalVotes, totalPlayers }) => (
+            <Link
+              key={match.id}
+              to={`/matches/${match.id}`}
+              className="bg-card hover:bg-accent flex min-h-14 items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm transition-colors"
+            >
+              <span className="bg-club-blue/10 text-club-blue flex size-10 shrink-0 items-center justify-center rounded-xl">
+                <Vote className="size-5" />
+              </span>
+              <span className="flex-1 font-medium">
+                Votes en cours — vs {match.opponent}
+                <span className="text-muted-foreground block text-xs font-normal tabular-nums">
+                  {totalVotes}/{totalPlayers} ont voté
+                </span>
+              </span>
               <ChevronRight className="text-muted-foreground size-4 shrink-0" />
             </Link>
           ))}
