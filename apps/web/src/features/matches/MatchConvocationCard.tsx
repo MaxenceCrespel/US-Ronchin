@@ -86,10 +86,6 @@ function attendancePositions(a: MatchAttendance): PlayerSubPosition[] {
   return a.guestPosition ? [a.guestPosition] : []
 }
 
-function attendanceJerseyNumber(a: MatchAttendance): number | null {
-  return a.user?.jerseyNumber ?? null
-}
-
 /** Coach-only: call the players who'll be in the squad among those who said PRESENT, then
  * compose the starting XI from them. The XI is picked up again by the post-match composition. */
 export function MatchConvocationCard({ match }: { match: Match }) {
@@ -496,7 +492,6 @@ function LineupDialog({
       userId: id,
       firstName: a?.user?.firstName ?? a?.guestFirstName ?? '',
       lastName: a?.user?.lastName ?? a?.guestLastName ?? '',
-      shirtNumber: a ? attendanceJerseyNumber(a) : null,
       label: pending ? codes[id] : undefined,
       x: pos.x,
       y: pos.y,

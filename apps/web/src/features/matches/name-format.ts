@@ -8,6 +8,21 @@ export function toDisplayCase(name: string): string {
     .join('')
 }
 
+/** "AD" for Akram Djelabet, "A" for a guest known by first name only — never the literal
+ * text "undefined"/"null" a missing surname used to produce. */
+export function initialsOf(firstName?: string | null, lastName?: string | null): string {
+  return [firstName, lastName]
+    .map((part) => part?.trim().charAt(0) ?? '')
+    .join('')
+    .toUpperCase()
+}
+
+/** "Akram D." — or just "Adam" when there is no surname to abbreviate. */
+export function shortName(firstName?: string | null, lastName?: string | null): string {
+  const last = lastName?.trim()
+  return last ? `${firstName ?? ''} ${last.charAt(0).toUpperCase()}.`.trim() : (firstName ?? '')
+}
+
 /** Joins a guest's first and last name, dropping a missing/blank last name instead of
  * stringifying it as the literal text "null"/"undefined" (a guest entered with first name
  * only is common — a scorer added by name mid-match rarely gets their surname typed too). */

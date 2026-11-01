@@ -3,9 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { PitchFormationEditor, type FormationPlayer } from '@/features/matches/PitchFormationEditor'
 
 const players: FormationPlayer[] = [
-  { userId: 'gk', firstName: 'Gardien', lastName: 'Un', shirtNumber: 1, x: 50, y: 92 },
-  { userId: 'df', firstName: 'Def', lastName: 'Deux', shirtNumber: null, x: 30, y: 70 },
-  { userId: 'st', firstName: 'Buteur', lastName: 'Trois', shirtNumber: 9, x: 50, y: 18, label: 'BU' },
+  { userId: 'gk', firstName: 'Gardien', lastName: 'Un', x: 50, y: 92 },
+  { userId: 'df', firstName: 'Def', lastName: 'Deux', x: 30, y: 70 },
+  { userId: 'st', firstName: 'Buteur', lastName: 'Trois', x: 50, y: 18, label: 'BU' },
+  { userId: 'gu', firstName: 'Adam', lastName: '', x: 70, y: 40 },
 ]
 
 function mount(props: Partial<React.ComponentProps<typeof PitchFormationEditor>> = {}) {
@@ -19,10 +20,11 @@ function mount(props: Partial<React.ComponentProps<typeof PitchFormationEditor>>
 const dot = (name: RegExp) => screen.getByTitle(name)
 
 describe('PitchFormationEditor', () => {
-  it('shows number, initials or the custom label in each bubble, plus the first name', () => {
+  it('shows initials (or the custom label) in each bubble, never a number or "undefined", plus the first name', () => {
     mount()
-    expect(dot(/Gardien/).textContent).toBe('1')
-    expect(dot(/Def/).textContent).toBe('DD') // no shirt number → initials
+    expect(dot(/Gardien/).textContent).toBe('GU')
+    expect(dot(/Def/).textContent).toBe('DD')
+    expect(dot(/Adam/).textContent).toBe('A') // guest without a surname
     expect(dot(/Buteur/).textContent).toBe('BU') // label wins
     expect(screen.getByText('Def')).toBeInTheDocument()
   })

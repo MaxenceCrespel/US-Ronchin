@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BallIcon, BootIcon, YellowCardIcon, RedCardIcon } from './match-icons'
 import { ratingColor, ratingLabel } from './rating-color'
-import { toDisplayCase } from './name-format'
+import { initialsOf, toDisplayCase } from './name-format'
 
 export interface PitchPlayer {
   compositionId: string
@@ -113,7 +113,7 @@ export function PostMatchPitchView({ players }: { players: PitchPlayer[] }) {
           const displayName = !lastName
             ? toDisplayCase(p.firstName)
             : lastNameCounts[lastName] > 1
-              ? `${p.firstName[0]}. ${lastName}`
+              ? `${initialsOf(p.firstName).charAt(0)}. ${lastName}`
               : lastName
           const goalBalls = Math.min(p.goals, 5)
           // The coach can place a formation dot anywhere from 0–100, including right on the

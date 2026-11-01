@@ -1,12 +1,12 @@
 import { useState } from 'react'
+import { guestFullName, initialsOf } from './name-format'
 import { cn } from '@/lib/utils'
 
 export interface FormationPlayer {
   userId: string
   firstName: string
   lastName: string
-  shirtNumber: number | null
-  /** Shown in the bubble instead of the shirt number/initials (e.g. a position code). */
+  /** Shown in the bubble instead of the initials. */
   label?: string
   x: number
   y: number
@@ -107,7 +107,7 @@ export function PitchFormationEditor({
                 e.currentTarget.setPointerCapture(e.pointerId)
                 setDrag({ userId: p.userId, x: p.x, y: p.y })
               }}
-              title={`${p.firstName} ${p.lastName}`}
+              title={guestFullName(p.firstName, p.lastName)}
               className={cn(
                 'flex size-9 touch-none items-center justify-center rounded-full border-2 text-xs font-bold text-white shadow-md',
                 !readOnly && !pickMode && 'cursor-grab active:cursor-grabbing',
@@ -117,7 +117,7 @@ export function PitchFormationEditor({
                 BAND_COLOR[band],
               )}
             >
-              {p.label ?? p.shirtNumber ?? `${p.firstName[0]}${p.lastName[0]}`}
+              {p.label ?? initialsOf(p.firstName, p.lastName)}
             </button>
             <span className="pointer-events-none max-w-16 truncate rounded bg-black/40 px-1 text-xs font-medium text-white">
               {p.firstName}

@@ -75,7 +75,7 @@ import { SortableTableHead } from '@/components/SortableTableHead'
 import { bandForY, PitchFormationEditor } from './PitchFormationEditor'
 import { PostMatchPitchView } from './PostMatchPitchView'
 import { PlayerSpotlightCard, PlayerSpotlightCarousel } from './PlayerSpotlightCard'
-import { guestFullName } from './name-format'
+import { guestFullName, shortName } from './name-format'
 import { DEFAULT_FORMATION, FORMATIONS, guessFormation } from './formations'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -805,7 +805,6 @@ export function MatchDetailPage() {
       userId: id,
       firstName: player?.firstName ?? guest?.firstName ?? '',
       lastName: player?.lastName ?? guest?.lastName ?? '',
-      shirtNumber: player?.jerseyNumber ?? null,
       x: pos.x,
       y: pos.y,
     }
@@ -1556,7 +1555,7 @@ export function MatchDetailPage() {
                 {attendanceQuery.data.map((a) => (
                   <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                     <AttendanceMark status={a.status} />
-                    {a.user ? `${a.user.firstName} ${a.user.lastName[0]}.` : `${a.guestFirstName} (invité)`}
+                    {a.user ? shortName(a.user.firstName, a.user.lastName) : `${a.guestFirstName} (invité)`}
                     {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
                   </Badge>
                 ))}
@@ -1838,7 +1837,6 @@ export function MatchDetailPage() {
                         userId: e.userId ?? e.id,
                         firstName: e.user?.firstName ?? e.guestFirstName ?? '',
                         lastName: e.user?.lastName ?? e.guestLastName ?? '',
-                        shirtNumber: e.user?.jerseyNumber ?? null,
                         x: e.formationX!,
                         y: e.formationY!,
                       }))}
@@ -1864,7 +1862,6 @@ export function MatchDetailPage() {
                               avatarUrl={undefined}
                               firstName={entry.guestFirstName ?? ''}
                               lastName={entry.guestLastName ?? ''}
-                              shirtNumber={entry.shirtNumber}
                               size="sm"
                             />
                             {guestFullName(entry.guestFirstName, entry.guestLastName)}
@@ -1915,7 +1912,6 @@ export function MatchDetailPage() {
                                   avatarUrl={entry.user?.avatarUrl}
                                   firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                                   lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                                  shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                                   size="sm"
                                   className="ring-club-blue/20 ring-offset-card border-0 ring-2 ring-offset-2"
                                 />
@@ -1985,7 +1981,6 @@ export function MatchDetailPage() {
                                 avatarUrl={entry.user?.avatarUrl}
                                 firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                                 lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                                shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                                 size="sm"
                                 className="border-0 opacity-80 ring-2 ring-slate-400/20 ring-offset-2 ring-offset-transparent"
                               />
@@ -2356,7 +2351,6 @@ export function MatchDetailPage() {
                         avatarUrl={voted.user?.avatarUrl}
                         firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
                         lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
-                        shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
                         size="lg"
                         className="border-club-gold ring-club-gold/40 border-2 ring-4"
                       />
@@ -2390,7 +2384,6 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user?.avatarUrl}
                             firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                             lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -2512,7 +2505,6 @@ export function MatchDetailPage() {
                           avatarUrl={voted.user?.avatarUrl}
                           firstName={voted.user?.firstName ?? voted.guestFirstName ?? ''}
                           lastName={voted.user?.lastName ?? voted.guestLastName ?? ''}
-                          shirtNumber={voted.shirtNumber ?? voted.user?.jerseyNumber ?? null}
                           size="lg"
                           className="border-club-blue ring-club-blue/40 border-2 ring-4"
                         />
@@ -2547,7 +2539,6 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user?.avatarUrl}
                             firstName={entry.user?.firstName ?? entry.guestFirstName ?? ''}
                             lastName={entry.user?.lastName ?? entry.guestLastName ?? ''}
-                            shirtNumber={entry.shirtNumber ?? entry.user?.jerseyNumber ?? null}
                             size="lg"
                             className={cn(
                               'transition-all duration-150',
@@ -2699,7 +2690,6 @@ export function MatchDetailPage() {
                             avatarUrl={entry.user.avatarUrl}
                             firstName={entry.user.firstName}
                             lastName={entry.user.lastName}
-                            shirtNumber={entry.shirtNumber ?? entry.user.jerseyNumber ?? null}
                             size="sm"
                           />
                         </AccountLevelRing>

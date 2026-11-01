@@ -1,4 +1,5 @@
 import { errorMessage } from '@/lib/error-message'
+import { shortName } from '@/features/matches/name-format'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
@@ -1936,7 +1937,7 @@ export function SessionCard({
                   className="animate-pop-in"
                 >
                   <AttendanceMark status={a.status} />
-                  {a.user.firstName} {a.user.lastName[0]}.
+                  {shortName(a.user.firstName, a.user.lastName)}
                   {!a.confirmed && ' (attente)'}
                 </Badge>,
                 // Each guest gets its own badge — a "+2" tucked into the inviter's own badge
@@ -2215,7 +2216,7 @@ export function MatchCard({ match, inDialog }: { match: Match; inDialog?: boolea
             {attendanceQuery.data.map((a) => (
               <Badge key={a.id} variant={ATTENDANCE_STATUS_VARIANTS[a.status]} className="animate-pop-in">
                 <AttendanceMark status={a.status} />
-                {a.user ? `${a.user.firstName} ${a.user.lastName[0]}.` : `${a.guestFirstName} (invité)`}
+                {a.user ? shortName(a.user.firstName, a.user.lastName) : `${a.guestFirstName} (invité)`}
                 {a.guests.length > 0 && ` +${a.guests.map((g) => g.firstName).join(', ')}`}
               </Badge>
             ))}

@@ -1,4 +1,5 @@
 import { ATTENDANCE_STATUS_LABELS } from '@/lib/labels'
+import { shortName } from '@/features/matches/name-format'
 import type { AttendanceStatusChangeEntry } from '@/lib/types'
 
 /** One line of the coach's "Historique des réponses" — see AttendanceStatusChange on the API.
@@ -16,7 +17,7 @@ export function describeAttendanceChange(entry: AttendanceStatusChangeEntry): st
   const from = entry.previousStatus ? ATTENDANCE_STATUS_LABELS[entry.previousStatus] : 'Aucune réponse'
   const to = ATTENDANCE_STATUS_LABELS[entry.newStatus]
   const isSelf = entry.changedBy === entry.userId
-  const actor = isSelf ? null : `${entry.changer.firstName} ${entry.changer.lastName[0]}.`
+  const actor = isSelf ? null : shortName(entry.changer.firstName, entry.changer.lastName)
   const statusChanged = entry.previousStatus !== entry.newStatus
   const confirmedChanged = entry.previousConfirmed !== entry.newConfirmed
   const guestDiff = entry.newConfirmedGuestCount - entry.previousConfirmedGuestCount
