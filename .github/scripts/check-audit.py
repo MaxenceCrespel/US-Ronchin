@@ -19,7 +19,17 @@ import sys
 # only reached through puppeteer-extra-plugin-user-preferences (the FFF scraper's headless
 # Chrome), which merges its own hardcoded preference objects — no attacker-controlled input
 # ever flows into mergeObject. Revisit when a fixed deepmerge ships.
-ACCEPTED_ADVISORIES: set[str] = {"GHSA-gcqx-w48m-w2h4"}
+#
+# minimatch (GHSA-g3hv-75wg-m249, moderate — denial of service through glob-pattern
+# amplification) is only fixed in 11.0.1, a major release the 3.x consumers (eslint/nest
+# tooling, glob, rimraf under puppeteer-extra) cannot take. Every pattern those tools match is
+# hardcoded in the build/tooling configuration — no attacker-controlled glob ever reaches
+# minimatch at runtime. Revisit when those dependants move to minimatch 11.
+ACCEPTED_ADVISORIES: set[str] = {"GHSA-gcqx-w48m-w2h4", "GHSA-g3hv-75wg-m249"}
+
+
+# Only these block the pipeline; lower severities stay visible in the npm audit log.
+BLOCKING_SEVERITIES = {"high", "critical"}
 
 
 def main() -> int:
@@ -31,6 +41,10 @@ def main() -> int:
     for name, vuln in data.get("vulnerabilities", {}).items():
         for via in vuln.get("via", []):
             if not isinstance(via, dict):
+                continue
+            # npm's --audit-level only drives its own exit code (ignored upstream by `|| true`),
+            # the JSON report always lists every severity — so the threshold is applied here.
+            if via.get("severity") not in BLOCKING_SEVERITIES:
                 continue
             advisory_id = via.get("url", "").rstrip("/").rsplit("/", 1)[-1]
             if advisory_id not in ACCEPTED_ADVISORIES:
