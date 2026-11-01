@@ -56,6 +56,11 @@ export class MatchEvent {
   @JoinColumn({ name: 'assist_user_id' })
   assistUser: User | null;
 
+  /** Free-text name for an assist provider who has no account yet — used instead of
+   * assistUserId, same idea as scorerName. */
+  @Column({ name: 'assist_name', type: 'varchar', length: 100, nullable: true })
+  assistName: string | null;
+
   @Column({ type: 'int', nullable: true })
   minute: number | null;
 

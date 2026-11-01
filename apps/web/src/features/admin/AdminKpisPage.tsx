@@ -244,9 +244,6 @@ function PlayerDetailDialog({
           </TabsContent>
 
           <TabsContent value="separation" className="flex flex-col gap-1.5">
-            <p className="text-muted-foreground text-xs">
-              Ces joueurs ne seront jamais dans la même équipe lors d'une génération.
-            </p>
             {rules.length > 0 && (
               <ul className="flex flex-col gap-1">
                 {rules.map((r) => (
@@ -438,9 +435,6 @@ export function AdminKpisPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">Tableau de bord</h1>
-        <p className="text-muted-foreground text-sm">
-          Utilisation de l'application par les membres de l'effectif.
-        </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>

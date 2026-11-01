@@ -182,6 +182,21 @@ describe('match flow (real stack)', () => {
     expect((await t.http().delete(`/api/matches/${matchId}/events/${yellow.id}`).set(auth(coach))).status).toBe(200);
   });
 
+  it('an assist can be credited to someone without an account, but never to the scorer', async () => {
+    const ok = await t.http().post(`/api/matches/${matchId}/events`).set(auth(coach)).send({ type: 'GOAL', userId: players[10].user.id, assistName: 'Passant', minute: 85 });
+    expect(ok.status).toBe(201);
+    expect(ok.body.assistName).toBe('Passant');
+    const both = await t.http().post(`/api/matches/${matchId}/events`).set(auth(coach)).send({ type: 'GOAL', userId: players[10].user.id, assistUserId: players[9].user.id, assistName: 'Passant' });
+    expect(both.status).toBe(400);
+    const self = await t.http().post(`/api/matches/${matchId}/events`).set(auth(coach)).send({ type: 'GOAL', scorerName: 'Passant', assistName: ' passant ' });
+    expect(self.status).toBe(400);
+    const own = await t.http().post(`/api/matches/${matchId}/events`).set(auth(coach)).send({ type: 'GOAL', userId: players[10].user.id, assistUserId: players[10].user.id });
+    expect(own.status).toBe(400);
+    const list = await t.http().get(`/api/matches/${matchId}/events`).set(auth(coach));
+    await t.http().delete(`/api/matches/${matchId}/events/${ok.body.id}`).set(auth(coach));
+    expect(list.body.some((e: { assistName: string | null }) => e.assistName === 'Passant')).toBe(true);
+  });
+
   it('votes are locked until the coach confirms the result', async () => {
     const early = await t.http().put(`/api/matches/${matchId}/motm`).set(auth(players[1])).send({ votedForId: 'b3a7c7f0-0000-4000-8000-000000000000' });
     expect(early.status).toBeGreaterThanOrEqual(400);

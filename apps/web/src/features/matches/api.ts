@@ -132,6 +132,7 @@ export interface CreateEventInput {
   userId?: string
   scorerName?: string
   assistUserId?: string
+  assistName?: string
   minute?: number
   goalType?: GoalType
 }

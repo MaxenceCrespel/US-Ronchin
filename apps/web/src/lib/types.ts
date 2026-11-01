@@ -221,6 +221,8 @@ export interface MatchEvent {
   scorerName: string | null
   assistUserId: string | null
   assistUser: User | null
+  /** Set instead of assistUserId for an assist provider with no account yet. */
+  assistName: string | null
   minute: number | null
   goalType: GoalType | null
 }

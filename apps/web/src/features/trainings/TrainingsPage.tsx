@@ -431,10 +431,6 @@ function ManageTrainingsDialog() {
                 value={maxPresentPlayers}
                 onChange={(e) => setMaxPresentPlayers(e.target.value)}
               />
-              <p className="text-muted-foreground text-xs">
-                Au-delà, les non-licenciés passent en liste d'attente — les licenciés restent
-                prioritaires tant qu'une place est encore libre.
-              </p>
             </div>
 
             <div className="flex gap-2 sm:col-span-2">
@@ -708,10 +704,6 @@ function GenerateTeamsDialog({ sessionId }: { sessionId: string }) {
         <DialogHeader>
           <DialogTitle>Générer les équipes</DialogTitle>
         </DialogHeader>
-        <p className="text-muted-foreground text-xs">
-          Répartit tous les joueurs actuellement « Présent » en deux équipes équilibrées. Tu
-          pourras encore les ajuster (déplacer quelqu'un, tout régénérer) avant le coup d'envoi.
-        </p>
         <Button type="button" disabled={generateMutation.isPending} onClick={() => generateMutation.mutate()}>
           <Shuffle className="size-3.5" />
           {generateMutation.isPending ? 'Génération...' : 'Générer maintenant'}

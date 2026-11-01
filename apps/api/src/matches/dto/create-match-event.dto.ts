@@ -20,6 +20,12 @@ export class CreateMatchEventDto {
   @IsUUID()
   assistUserId?: string;
 
+  /** Passeur sans compte — alternative to assistUserId (never both). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  assistName?: string;
+
   @IsOptional()
   @IsInt()
   @Min(0)

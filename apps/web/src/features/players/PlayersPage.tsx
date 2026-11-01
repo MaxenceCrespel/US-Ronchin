@@ -106,9 +106,6 @@ function ClubJoinQrCard() {
                 <div className="rounded-lg border bg-white p-4">
                   <QRCodeSVG value={joinUrl} size={220} />
                 </div>
-                <p className="text-muted-foreground text-center text-sm">
-                  Scanne pour créer ton compte directement.
-                </p>
               </div>
             </DialogContent>
           </Dialog>
@@ -318,9 +315,6 @@ function EditPlayerDialog({ player, variant }: { player: User; variant: 'mobile'
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-muted-foreground text-xs">
-              Priorité sur un entraînement complet : licencié, puis par ancienneté, puis premier arrivé.
-            </p>
             {seniorityTier === 'UNSET' && (
               <p className="text-xs text-amber-700">
                 À renseigner : choisis « Nouveau joueur » ou une tranche d'ancienneté. Tant que ce n'est pas fait,
@@ -937,10 +931,6 @@ export function PlayersPage() {
               {justApproved?.firstName} {justApproved?.lastName} rejoint l'effectif
             </DialogTitle>
           </DialogHeader>
-          <p className="text-muted-foreground text-sm">
-            Deux infos à compléter pour ne rien oublier. Rien d'obligatoire tout de suite : tant qu'elles manquent,
-            elles restent dans « À traiter » sur l'accueil.
-          </p>
           <ul className="flex flex-col gap-2 text-sm">
             <li className="rounded-lg border p-3">
               <strong>Ancienneté</strong> — depuis le crayon sur sa ligne dans la liste, champ « Ancienneté au club »

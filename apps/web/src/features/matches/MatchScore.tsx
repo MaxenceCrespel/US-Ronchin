@@ -156,9 +156,6 @@ export function ScoreEditor({
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-muted-foreground text-xs">
-        L'équipe qui reçoit est à gauche, comme sur la feuille de match.
-      </p>
       <div className="flex items-stretch gap-2">
         {card(left)}
         <span className="text-muted-foreground flex items-center text-xl font-bold">–</span>

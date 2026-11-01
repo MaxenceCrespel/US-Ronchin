@@ -39,6 +39,17 @@ describe('match wizard (coach, composition already saved → events step)', () =
     expect(fakeApi.called('POST', /events$/)[0].data).toMatchObject({ type: 'GOAL' })
   })
 
+  it('lets the coach credit the assist to someone without an account', async () => {
+    const user = await openWizard()
+    await user.click(byText(/^⚽But/))
+    await user.click(byText(/First3 Last3/))
+    await user.click(byText(/Invité Guest\b.*non inscrit|Guest.*non inscrit/))
+    await user.click(byText(/Peu importe/))
+    await waitFor(() => expect(fakeApi.called('POST', /events$/)).toHaveLength(1))
+    expect(fakeApi.called('POST', /events$/)[0].data).toMatchObject({ type: 'GOAL', assistName: expect.stringContaining('Guest') })
+    expect(fakeApi.called('POST', /events$/)[0].data).not.toHaveProperty('assistUserId')
+  })
+
   it('records a goal without an assist', async () => {
     const user = await openWizard()
     await user.click(byText(/^⚽But/))

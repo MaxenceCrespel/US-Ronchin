@@ -159,9 +159,6 @@ export function PlayerRatingsPage() {
         <h1 ref={h1Ref} tabIndex={-1} className="text-xl font-bold outline-none">
           Noter les joueurs
         </h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Note chaque joueur, puis enregistre tout d'un coup. Tes notes sont privées.
-        </p>
         <button
           type="button"
           onClick={() => setShowInfo(true)}
@@ -492,10 +489,6 @@ export function PlayerRatingsPage() {
             <h2 id="ratings-recap-title" className="text-lg font-bold text-balance">
               Vérifie tes notes avant d'enregistrer
             </h2>
-            <p className="text-muted-foreground text-sm">
-              {players.length} joueurs notés, du mieux noté au moins bien noté. Une fois confirmé, toutes tes notes sont
-              enregistrées d'un coup.
-            </p>
             <ul className="flex flex-col gap-1.5">
               {recapGroups.map((g) => (
                 <li key={g.rating} className="bg-muted/40 grid grid-cols-[64px_1fr] items-start gap-2.5 rounded-lg p-2 text-sm">

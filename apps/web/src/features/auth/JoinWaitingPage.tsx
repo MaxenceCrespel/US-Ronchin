@@ -74,10 +74,6 @@ export function JoinWaitingPage() {
                 <>
                   <Clock className="text-muted-foreground size-10" />
                   <p className="font-medium">En attente de validation par le coach</p>
-                  <p className="text-muted-foreground text-sm">
-                    Cette page se met à jour automatiquement — pas besoin de revenir la vérifier
-                    manuellement.
-                  </p>
                 </>
               )}
             </div>

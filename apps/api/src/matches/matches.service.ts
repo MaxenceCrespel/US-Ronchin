@@ -292,7 +292,16 @@ export class MatchesService {
         'Renseigne soit un joueur du club, soit un nom pour un joueur non inscrit',
       );
     }
-    const event = this.eventsRepository.create({ ...dto, matchId });
+    if (dto.assistUserId && dto.assistName) {
+      throw new BadRequestException('Renseigne soit un passeur du club, soit un nom, pas les deux');
+    }
+    const assistName = dto.assistName?.trim() || undefined;
+    const scorer = dto.userId ?? dto.scorerName?.trim().toLowerCase();
+    const assister = dto.assistUserId ?? assistName?.toLowerCase();
+    if (assister && scorer && assister === scorer) {
+      throw new BadRequestException('Le passeur ne peut pas être le buteur');
+    }
+    const event = this.eventsRepository.create({ ...dto, assistName, matchId });
     return this.eventsRepository.save(event);
   }
 

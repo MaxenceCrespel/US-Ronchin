@@ -44,8 +44,7 @@ export function PlayerRatingsReminder() {
           Il reste {missing.length} joueur{missing.length > 1 ? 's' : ''} à noter
         </h2>
         <p className="text-muted-foreground text-sm">
-          Tu en as déjà noté {total - missing.length} sur {total}, ton brouillon est conservé sur cet appareil. Ça prend
-          quelques minutes pour finir.
+          Déjà noté : {total - missing.length} sur {total}.
         </p>
         <div className="bg-muted h-2.5 overflow-hidden rounded-full">
           <div

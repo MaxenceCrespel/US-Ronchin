@@ -901,11 +901,6 @@ export function HomePage() {
         <h1 className="font-display text-3xl leading-tight font-extrabold uppercase">
           {greeting()} {user?.firstName} 👋
         </h1>
-        <p className="text-muted-foreground text-sm">
-          {isCoach
-            ? "Vue d'ensemble de l'équipe US Ronchin."
-            : 'Voici ton récap personnalisé pour la suite.'}
-        </p>
       </div>
 
       {actionItems.length > 0 && (

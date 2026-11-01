@@ -904,6 +904,7 @@ export function MatchDetailPage() {
       userId?: string
       scorerName?: string
       assistUserId?: string
+      assistName?: string
       goalType?: GoalType
     }) =>
       addEvent(matchId, {
@@ -911,6 +912,7 @@ export function MatchDetailPage() {
         userId: vars.userId,
         scorerName: vars.scorerName,
         assistUserId: vars.assistUserId,
+        assistName: vars.assistName,
         goalType: vars.goalType,
       }),
     onSuccess: () => {
@@ -932,7 +934,12 @@ export function MatchDetailPage() {
   // Stashed between the assist and goalType flow steps — both need the same scorer identity,
   // and neither can rely on the eventUserId/eventScorerName state alone once OTHER_SCORER text
   // input has already been cleared for the next entry.
-  const pendingGoalScorerRef = useRef<{ userId?: string; scorerName?: string; assistUserId?: string } | null>(null)
+  const pendingGoalScorerRef = useRef<{
+    userId?: string
+    scorerName?: string
+    assistUserId?: string
+    assistName?: string
+  } | null>(null)
 
   function pickScorer(pool: { id: string; firstName: string; lastName: string; isGuest: boolean }) {
     const userId = pool.isGuest ? undefined : pool.id
@@ -968,7 +975,9 @@ export function MatchDetailPage() {
     addEventMutation.mutate({ type: effectiveType, scorerName: name })
   }
 
-  function pickAssist(assistUserId?: string) {
+  function pickAssist(assist?: { id: string; firstName: string; lastName: string; isGuest: boolean }) {
+    const assistUserId = assist && !assist.isGuest ? assist.id : undefined
+    const assistName = assist?.isGuest ? guestFullName(assist.firstName, assist.lastName) : undefined
     const selected = eventPlayerPool.find((p) => p.id === eventUserId)
     const userId = eventUserId !== OTHER_SCORER && !selected?.isGuest ? eventUserId : undefined
     const scorerName =
@@ -977,7 +986,7 @@ export function MatchDetailPage() {
         : selected?.isGuest
           ? `${selected.firstName} ${selected.lastName}`.trim()
           : undefined
-    pendingGoalScorerRef.current = { userId, scorerName, assistUserId }
+    pendingGoalScorerRef.current = { userId, scorerName, assistUserId, assistName }
     setEventFlowStep('goalType')
   }
 
@@ -1184,7 +1193,10 @@ export function MatchDetailPage() {
         // A CSC is not a positive contribution — kept separate so it never inflates the
         // scorer's goal tally, but still tracked (the pitch view marks it distinctly).
         if (scorerKey) bump(scorerKey, event.goalType === 'OWN_GOAL' ? 'ownGoals' : 'goals')
-        if (event.goalType !== 'OWN_GOAL' && event.assistUserId) bump(event.assistUserId, 'assists')
+        if (event.goalType !== 'OWN_GOAL') {
+          const assistKey = event.assistUserId ?? (event.assistName ? `name:${event.assistName}` : null)
+          if (assistKey) bump(assistKey, 'assists')
+        }
       } else if (event.type === 'YELLOW_CARD') {
         if (scorerKey) bump(scorerKey, 'yellow')
       } else if (event.type === 'RED_CARD') {
@@ -2073,16 +2085,17 @@ export function MatchDetailPage() {
                   <p className="text-sm font-medium">🅰️ Qui a fait la passe ? (optionnel)</p>
                   <div className="flex flex-wrap gap-2">
                     {eventPlayerPool
-                      .filter((p) => p.id !== eventUserId && !p.isGuest)
+                      .filter((p) => p.id !== eventUserId)
                       .map((player) => (
                         <button
                           key={player.id}
                           type="button"
-                          onClick={() => pickAssist(player.id)}
+                          onClick={() => pickAssist(player)}
                           className="border-input hover:bg-accent flex items-center gap-1.5 rounded-full border py-1.5 pr-3 pl-1.5 text-sm font-medium"
                         >
                           <PlayerAvatar firstName={player.firstName} lastName={player.lastName} size="sm" />
-                          {player.firstName} {player.lastName}
+                          {guestFullName(player.firstName, player.lastName)}
+                          {player.isGuest && <span className="text-muted-foreground text-xs">(non inscrit)</span>}
                         </button>
                       ))}
                     <button
@@ -2231,10 +2244,14 @@ export function MatchDetailPage() {
                   <strong>{EVENT_LABELS[event.type]}</strong> —{' '}
                   {event.user ? `${event.user.firstName} ${event.user.lastName}` : event.scorerName}
                   {event.goalType && <> ({GOAL_TYPE_LABELS[event.goalType]})</>}
-                  {event.assistUser && (
+                  {(event.assistUser || event.assistName) && (
                     <>
                       {' '}
-                      (passe de {event.assistUser.firstName} {event.assistUser.lastName})
+                      (passe de{' '}
+                      {event.assistUser
+                        ? `${event.assistUser.firstName} ${event.assistUser.lastName}`
+                        : event.assistName}
+                      )
                     </>
                   )}
                 </span>
@@ -2297,12 +2314,6 @@ export function MatchDetailPage() {
               <Crown className="text-club-gold size-4" />
               Homme du match
             </p>
-            {!motmQuery.data?.revealed && (
-              <p className="text-muted-foreground text-xs">
-                Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après
-                le premier vote.
-              </p>
-            )}
             {!motmQuery.data?.revealed && motmQuery.data && (
               <VoteProgress
                 totalVotes={motmQuery.data.totalVotes}
@@ -2432,12 +2443,6 @@ export function MatchDetailPage() {
               <Shield className="text-club-blue size-4" />
               Patron de la défense
             </p>
-            {!defenseBossQuery.data?.revealed && (
-              <p className="text-muted-foreground text-xs">
-                Vote en cours — révélé automatiquement quand tout le monde a voté, ou 24h après
-                le premier vote.
-              </p>
-            )}
             {!defenseBossQuery.data?.revealed && defenseBossQuery.data && (
               <VoteProgress
                 totalVotes={defenseBossQuery.data.totalVotes}
@@ -2888,9 +2893,9 @@ export function MatchDetailPage() {
                 <span className="text-muted-foreground text-xs"> (CSC)</span>
               )}
             </span>
-            {event.assistUser && (
+            {(event.assistUser || event.assistName) && (
               <span className="text-muted-foreground flex items-center gap-1">
-                🎯 {event.assistUser.firstName} {event.assistUser.lastName}
+                🎯 {event.assistUser ? `${event.assistUser.firstName} ${event.assistUser.lastName}` : event.assistName}
               </span>
             )}
           </div>
