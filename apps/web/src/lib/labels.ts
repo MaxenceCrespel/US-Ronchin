@@ -9,6 +9,14 @@ export const POSITION_LABELS: Record<PlayerPosition, string> = {
   FORWARD: 'Attaquant',
 }
 
+/** Plural forms — "Milieu" takes an x, so appending an s to POSITION_LABELS isn't enough. */
+export const POSITION_PLURAL_LABELS: Record<PlayerPosition, string> = {
+  GOALKEEPER: 'Gardiens',
+  DEFENDER: 'Défenseurs',
+  MIDFIELDER: 'Milieux',
+  FORWARD: 'Attaquants',
+}
+
 export const SUB_POSITION_LABELS: Record<PlayerSubPosition, string> = {
   GOALKEEPER: 'Gardien',
   CENTER_BACK: 'Défenseur central',

@@ -705,7 +705,8 @@ function CeremonyRecap({
             {record.played} {pluralize('match', record.played)} — {record.wins}V {record.draws}N {record.losses}D
           </p>
           <p className="mt-0.5">
-            {record.goalsFor} {pluralize('but', record.goalsFor)} marqués · {record.goalsAgainst} encaissés
+            {record.goalsFor} {pluralize('but', record.goalsFor)} {record.goalsFor > 1 ? 'marqués' : 'marqué'} · {record.goalsAgainst}{' '}
+            {record.goalsAgainst > 1 ? 'encaissés' : 'encaissé'}
           </p>
         </div>
       )}

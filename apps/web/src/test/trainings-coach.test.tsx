@@ -126,7 +126,7 @@ describe('finished session wizard', () => {
     expect(fakeApi.called('PUT', /actual$/)[0].data).toMatchObject({ status: 'PRESENT' })
     await user.click(within(dialog).getAllByRole('button', { name: 'Marquer absent' })[1])
     await waitFor(() => expect(fakeApi.called('PUT', /actual$/)).toHaveLength(2))
-    await user.click(within(dialog).getByRole('button', { name: /Tout présent/ }))
+    await user.click(within(dialog).getByRole('button', { name: /Tous présents/ }))
     await waitFor(() => expect(fakeApi.called('PUT', /actual$/).length).toBeGreaterThan(2))
   })
 
