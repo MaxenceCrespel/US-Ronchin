@@ -1234,7 +1234,7 @@ function ManageSessionDialog({
                 <CheckCheck className="size-3.5" />
                 {bulkPresentMutation.isPending
                   ? 'Enregistrement...'
-                  : `Tout présent (${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''})`}
+                  : `Tous présents (${unpointedIds.length} restant${unpointedIds.length > 1 ? 's' : ''})`}
               </Button>
             )}
             <div className="flex flex-col divide-y">

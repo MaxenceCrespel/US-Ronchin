@@ -282,7 +282,7 @@ export function BadgeHoldersPanel() {
         title="Retirer ce badge à tout le monde ?"
         description={
           activeBadge
-            ? `Retire « ${activeBadge.title} » à ses ${activeBadge.holders.length} détenteur${activeBadge.holders.length > 1 ? 's' : ''} actuels — pour corriger un badge qui s'est déclenché à tort pour tout le monde. Cette action ne peut pas être annulée.`
+            ? `Retire « ${activeBadge.title} » ${activeBadge.holders.length > 1 ? `à ses ${activeBadge.holders.length} détenteurs actuels` : 'à son détenteur actuel'} — pour corriger un badge qui s'est déclenché à tort pour tout le monde. Cette action ne peut pas être annulée.`
             : undefined
         }
         confirmLabel="Retirer à tout le monde"

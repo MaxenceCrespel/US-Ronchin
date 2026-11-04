@@ -36,7 +36,7 @@ export function AcceptInvitationPage() {
       <Card className="relative w-full max-w-sm border-0 shadow-2xl">
         <CardHeader className="items-center text-center">
           <img src="/club-logo.png" alt="US Ronchin" className="mb-2 h-20 w-20 drop-shadow" />
-          <CardTitle>Bienvenue à Ronchin US</CardTitle>
+          <CardTitle>Bienvenue à l’US Ronchin</CardTitle>
           <CardDescription>Choisis ton mot de passe pour activer ton compte.</CardDescription>
         </CardHeader>
         <CardContent>
