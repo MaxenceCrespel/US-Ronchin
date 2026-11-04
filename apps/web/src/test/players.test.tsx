@@ -21,6 +21,18 @@ describe('players page (coach)', () => {
     expect(screen.getByText(/14 joueurs · 4 licenciés · 10 non licenciés/)).toBeInTheDocument()
   })
 
+  it('names the line filters with their proper plurals', async () => {
+    await openPlayers()
+    const group = screen.getByRole('group', { name: 'Filtrer par ligne' })
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Tous',
+      'Gardiens',
+      'Défenseurs',
+      'Milieux',
+      'Attaquants',
+    ])
+  })
+
   it('links to player ratings for a coach, not for a player', async () => {
     await openPlayers('coach')
     expect(screen.getByRole('link', { name: /Noter les joueurs/ })).toHaveAttribute('href', '/player-ratings')

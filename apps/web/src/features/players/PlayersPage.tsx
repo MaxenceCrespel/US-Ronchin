@@ -45,7 +45,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { approveUser, createInvitation } from '@/features/auth/api'
-import { SENIORITY_TIER_LABELS, SUB_POSITION_ABBR, SUB_POSITION_BAND, POSITION_LABELS } from '@/lib/labels'
+import { SENIORITY_TIER_LABELS, SUB_POSITION_ABBR, SUB_POSITION_BAND, POSITION_PLURAL_LABELS } from '@/lib/labels'
 import { useAuthStore } from '@/lib/auth-store'
 import { hasAdminAccess, hasCoachAccess } from '@/lib/roles'
 import type { PlayerPosition, SeniorityTier, User, UserRole } from '@/lib/types'
@@ -758,7 +758,7 @@ export function PlayersPage() {
                   bandFilter === band ? 'bg-club-blue-dark border-club-blue-dark text-white' : 'bg-card hover:bg-accent',
                 )}
               >
-                {band === 'all' ? 'Tous' : `${POSITION_LABELS[band]}s`}
+                {band === 'all' ? 'Tous' : POSITION_PLURAL_LABELS[band]}
               </button>
             ))}
           </div>
