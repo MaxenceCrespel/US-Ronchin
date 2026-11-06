@@ -273,3 +273,29 @@ CVE-2026-118370
 CVE-2026-119373
 CVE-2026-109089
 CVE-2026-109090
+
+# Six newly-caught HIGH findings on the apps/api image (nightly scan 2026-11-06), all
+# Debian 12 OS packages with Status: affected / fix_deferred and an EMPTY Fixed Version
+# column in the Trivy report itself — no Debian bookworm package exists to upgrade to
+# (`apt-get upgrade` already runs in the Dockerfile). Same situation as the entries above:
+#   - CVE-2026-115506: libexpat1 2.5.0-1+deb12u5, DoS via delayed entity-amplification
+#     detection. The same explicit Dockerfile dependency (headless Chrome) as the expat
+#     entries above; the API never parses XML and Chrome only visits one trusted domain.
+#   - CVE-2026-14741: libhttp-date-perl 6.05-2 (HTTP::Date DoS). Perl library pulled in by
+#     Chrome's Recommends chain; nothing here runs Perl or parses HTTP dates through it.
+#   - CVE-2026-119374, CVE-2026-119379: libsqlite3-0 3.40.1-2+deb12u2 (FTS5 index / session
+#     changesets). The API talks to PostgreSQL only; no SQLite database or changeset is ever
+#     opened from our code, so the corrupted-input precondition cannot occur.
+#   - CVE-2026-76844, CVE-2026-85091: zlib1g 1:1.2.13.dfsg-1. CVE-2026-76844 is titled as a
+#     webpack-dev-middleware advisory but Trivy attaches it to zlib1g — it concerns a dev
+#     server that is not in this image. CVE-2026-85091 (gz_vacate heap overflow) needs a
+#     crafted gzip stream read through the system zlib; Node.js bundles its own zlib and no
+#     untrusted gzip data reaches the system library.
+# Revisit by rebuilding the image or checking `apt-cache policy` for each package once
+# Debian publishes fixes, and drop the entries then.
+CVE-2026-115506
+CVE-2026-14741
+CVE-2026-119374
+CVE-2026-119379
+CVE-2026-76844
+CVE-2026-85091
