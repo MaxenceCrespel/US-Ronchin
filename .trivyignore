@@ -28,7 +28,6 @@ CVE-2023-25193
 CVE-2023-2953
 CVE-2023-45853
 CVE-2023-52355
-CVE-2025-59375
 CVE-2025-69720
 CVE-2025-7458
 CVE-2026-11822
@@ -36,8 +35,6 @@ CVE-2026-11824
 CVE-2026-11940
 CVE-2026-12064
 CVE-2026-12912
-CVE-2026-14456
-CVE-2026-25210
 CVE-2026-34980
 CVE-2026-36849
 CVE-2026-41992
@@ -45,8 +42,6 @@ CVE-2026-52490
 CVE-2026-53613
 CVE-2026-53615
 CVE-2026-54369
-CVE-2026-55199
-CVE-2026-55200
 CVE-2026-58010
 CVE-2026-58011
 CVE-2026-58012
@@ -62,20 +57,7 @@ CVE-2026-7210
 CVE-2026-8286
 CVE-2026-8458
 CVE-2026-8927
-CVE-2026-8932
 CVE-2026-9538
-CVE-2026-103111
-
-# CVE-2026-88647 (hostname verification bypass) and CVE-2026-88648 (incomplete X.509
-# name-constraint validation) affect libgnutls30 3.7.9-2+deb12u7 — not installed by
-# apps/api/Dockerfile itself, part of the source-1 Chrome Recommends chain above (CUPS,
-# curl...). Status: affected, no Fixed Version, no Debian bookworm fix published yet
-# (`apt-get upgrade` in the Dockerfile already runs). Not reachable from our code: both are
-# flaws in GnuTLS's TLS certificate checks, and nothing in this image opens a TLS connection
-# through GnuTLS — the API is Node.js (its own bundled OpenSSL) and the FFF scraper drives
-# Chrome, which uses its own BoringSSL, to one fixed, trusted HTTPS domain.
-CVE-2026-88647
-CVE-2026-88648
 
 # CVE-2026-16742 (systemd-homed local privilege escalation via missing
 # home-record signature verification) affects libnss-systemd, libpam-
@@ -103,9 +85,6 @@ CVE-2026-16742
 # operation to trigger — this container never runs `mount`, `nsenter`, or
 # any privileged namespace operation; its own entrypoint is `node
 # dist/main.js` with no such syscalls anywhere in the app or its deps.
-CVE-2026-76642
-CVE-2026-78408
-CVE-2026-78409
 CVE-2026-78410
 
 # CVE-2026-86140 (libxml2 stack-based buffer overflow, HIGH, arbitrary code
@@ -135,7 +114,6 @@ CVE-2026-86140
 # user-supplied XML/SVG content ever reaches Chrome's parser, since the FFF
 # scraper only ever visits one fixed, trusted domain over HTTPS.
 CVE-2026-86138
-CVE-2026-86139
 CVE-2026-86142
 CVE-2026-86143
 CVE-2026-86144
@@ -151,20 +129,6 @@ CVE-2026-86144
 # XML/SVG parsing), so it's unreachable on top of the reachability argument
 # already covering the whole block above.
 CVE-2026-74860
-
-# CVE-2026-82049 (Python tarfile module: file modification/content
-# disclosure via crafted archives, HIGH) hits libpython3.11-minimal,
-# libpython3.11-stdlib, python3.11 and python3.11-minimal, all at the same
-# installed version 3.11.2-6+deb12u8, Status: affected, no Fixed Version —
-# re-verified `docker run --rm node:22-bookworm-slim dpkg -l | grep python`
-# returns nothing, so Python isn't part of the bare base image (unlike
-# source 2's util-linux/systemd above); it's pulled in by Chrome's own
-# .deb Recommends chain the same as source 1's whole block. This container
-# never invokes Python anywhere — the API is Node.js only, and the FFF
-# scraper never extracts tar archives (crafted or otherwise) via Python's
-# tarfile module or any other means — so the vulnerable code path is never
-# reached, same reachability argument as the rest of source 1.
-CVE-2026-82049
 
 # CVE-2026-88806 (libX11: heap-based buffer overflow via a malicious X server, HIGH) and
 # CVE-2026-88807 (libXrender: code injection via heap overflow in RenderQueryPictFormats,
@@ -231,29 +195,6 @@ CVE-2026-96889
 # by checking `apt-cache policy libcups2` against debian:bookworm-slim, or
 # just rebuilding the image, once Debian ships a patched version.
 CVE-2026-55453
-
-# undici@6.29.0 (CVE-2026-109869: Denial of Service via an unhandled stream
-# error on excessive content; CVE-2026-109383: certificate validation bypass via TLS
-# options dropped in Agent; CVE-2026-87018: Denial of Service via TLS renegotiation with a
-# mismatched certificate — all HIGH, all fixed at 6.29.1 / 7.30.1 / 8.12.2) — vendored INSIDE the globally-installed
-# npm binary (the Dockerfile's `npm install -g npm@latest`, which refreshes
-# npm's own bundled dependencies), unfixable by us, not our dependency
-# tree: `npm ls undici --omit=dev --workspace=api` is empty and nothing in apps/api
-# references undici. The container runs
-# `node dist/main.js`, never npm, so the vendored copy isn't loaded by the API
-# process. Verified 2026-10-24: the very latest npm release (12.2.1) still
-# vendors undici 6.29.0 — the fix (6.29.1 / 7.30.1 / 8.12.2) isn't shipped by
-# any npm release yet, so upgrading npm can't clear it. Revisit by re-packing
-# the newest npm (`npm pack npm@latest` and reading
-# node_modules/undici/package.json) and dropping this entry once it vendors
-# 6.29.1+. The undici TLS findings (109383, 87018) need an outbound TLS connection made
-# through that vendored copy — npm is never run at runtime and the API process never loads
-# it. The same scan's body-parser and multer findings were NOT ignored —
-# those are in our tree and were fixed by bumping them (body-parser 2.4.0,
-# multer 2.5.0 via the root package.json override).
-CVE-2026-109869
-CVE-2026-109383
-CVE-2026-87018
 
 # Debian 12 base packages, no fixed version shipped by Debian yet (status
 # affected / fix_deferred, verified 2026-11-04) — rebuilding the image picks the
