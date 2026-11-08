@@ -28,6 +28,11 @@ export class UserBadge {
   @Column({ type: 'int', default: 1 })
   count: number;
 
+  /** Granted by an admin (BadgesService.grantManually) — the automatic re-evaluation never
+   * revokes these, whatever the eligibility now says. */
+  @Column({ default: false })
+  manual: boolean;
+
   @CreateDateColumn({ name: 'earned_at' })
   earnedAt: Date;
 }

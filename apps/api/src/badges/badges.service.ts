@@ -68,12 +68,98 @@ function isNearBirthday(isoDate: string, birthDate: string): boolean {
  * to be meaningful — a month with just one session shouldn't count as a perfect month. */
 const MOIS_PARFAIT_MIN_OCCASIONS = 3;
 
-/** Badges that describe a standing (a comparative "currently true" title, e.g. "most
- * matches without X", or "voted on every match so far") rather than a one-off feat —
- * every other badge is kept forever once earned, but these get their row deleted the
- * moment they stop being true, so they stay evolutive instead of piling up on whoever
- * briefly held the record or skipping a single vote after having earned it once. */
-const REVOCABLE_BADGE_KEYS = new Set(['dernier_de_cordee', 'fair_play', 'metronome']);
+/** Badges taken back automatically once they stop being true. Two kinds:
+ * - standings (a comparative "currently true" title, or "voted on every match so far") —
+ *   deleted the moment they stop holding, so they don't pile up on whoever briefly held the
+ *   record or skipped a single vote after having earned it once;
+ * - feats computed purely from the recorded history (who played, results, scores, goals,
+ *   cards, votes, attendance), counted over the player's whole career — if that data is
+ *   corrected afterwards (a spectator entry, a forfeit, a changed score, a removed goal),
+ *   the badge it rested on goes away at the next re-evaluation instead of staying wrongly
+ *   forever.
+ * Deliberately NOT in here, and so kept forever once earned: the season-scoped badges
+ * (sniper, sharpshooter, goat, playmaker, elite_passer, postman, hot_head, card_collector,
+ * banned, aigle_des_surfaces, specialiste — their condition resets every season), the ones
+ * that can legitimately stop being true through normal play (presence streaks and
+ * terminator are a CURRENT run, silent_hero ends with the first goal, taulier is a ratio,
+ * survivant_hiver depends on today's date) and swiss_army, which is derived from the
+ * eligibility of all the others. A badge an admin granted by hand (UserBadge.manual) is
+ * never revoked here either way. */
+const REVOCABLE_BADGE_KEYS = new Set([
+  // standings
+  'dernier_de_cordee',
+  'fair_play',
+  'metronome',
+  // goals, assists, cards
+  'first_goal',
+  'hat_trick',
+  'poker',
+  'fox_in_the_box',
+  'double',
+  'cadeau_anniversaire',
+  'first_assist',
+  'traiteur',
+  'pere_noel',
+  'altruiste',
+  'freres_darmes',
+  'jekyll_hyde',
+  'braquage',
+  'box_to_box',
+  'first_yellow',
+  'first_red',
+  'sang_froid',
+  'panne_seche',
+  // recognition (votes)
+  'motm_first',
+  'motm_hero',
+  'motm_legend',
+  'diva',
+  'incompris',
+  'patron_first',
+  'patron_hero',
+  'patron_legend',
+  'patron_diva',
+  // attendance and career length
+  'pillar',
+  'lifetime_member',
+  'vest_forever',
+  'stakhanoviste',
+  'beau_parleur',
+  'invite_surprise',
+  'mois_parfait',
+  'veteran',
+  'road_captain',
+  'centurion',
+  'statue',
+  'historique',
+  // defence and goalkeeping
+  'clean_sheet',
+  'roc',
+  'forteresse',
+  'inebranlable',
+  'cadenas',
+  'verrou',
+  'portier',
+  'mains_or',
+  'mains_diamant',
+  'mains_legendaires',
+  'veteran_defense',
+  'cadre_defensif',
+  'legende_arriere_garde',
+  // match context
+  'super_sub',
+  'duo_magique',
+  'impact_immediat',
+  'garde_du_corps',
+  'porte_bonheur',
+  'chat_noir',
+  'routard',
+  'footballeur_dimanche',
+  'naufrage',
+  'equilibriste',
+  'interimaire',
+  'polyvalent',
+]);
 
 const RARITY_WEIGHT: Record<BadgeRarity, number> = {
   COMMON: 1,
@@ -892,7 +978,7 @@ export class BadgesService {
       }
 
       const toRevoke = [...existingByKey.entries()]
-        .filter(([key]) => REVOCABLE_BADGE_KEYS.has(key) && !eligibility[key])
+        .filter(([key, row]) => REVOCABLE_BADGE_KEYS.has(key) && !eligibility[key] && !row.manual)
         .map(([, row]) => row.id);
       if (toRevoke.length > 0) {
         await this.badgesRepository.delete(toRevoke);
@@ -1011,10 +1097,13 @@ export class BadgesService {
     const existing = await this.badgesRepository.findOne({ where: { userId, badgeKey } });
     if (existing) {
       existing.count += 1;
+      existing.manual = true;
       await this.badgesRepository.save(existing);
       return;
     }
-    await this.badgesRepository.save(this.badgesRepository.create({ userId, badgeKey, count: 1 }));
+    await this.badgesRepository.save(
+      this.badgesRepository.create({ userId, badgeKey, count: 1, manual: true }),
+    );
   }
 
   /** Admin override — removes a badge entirely (not a decrement), same "undo a mistake"
