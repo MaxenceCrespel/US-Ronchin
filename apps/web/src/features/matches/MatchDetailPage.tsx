@@ -1,5 +1,5 @@
 import { errorMessage } from '@/lib/error-message'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
@@ -464,6 +464,41 @@ function RatingSlider({
  * · pelouse" sentence — that used to wrap wherever the browser felt like mid-phrase, unreadable
  * once a scraped FFF venue address made the string long. Each fact now gets its own line and
  * wraps on its own terms, so a phone-width column stays scannable. */
+/** Slim score bar pinned to the top once `children` (the full score card) has scrolled out
+ * of view. Sits in the flow as a fixed-height sticky row that the card overlaps through a
+ * negative margin, so showing/hiding it never shifts the page. */
+function PinnedScore({ match, children }: { match: Match; children: ReactNode }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [pinned, setPinned] = useState(false)
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    // The top 56px (the bar's height) are cut off, so the card counts as gone once it is
+    // entirely behind where the bar sits.
+    const io = new IntersectionObserver(([e]) => setPinned(!e.isIntersecting), {
+      rootMargin: '-56px 0px 0px 0px',
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+  return (
+    <>
+      <div
+        aria-hidden={!pinned}
+        className={cn(
+          'bg-club-blue-dark sticky top-0 z-20 -mx-4 flex h-14 items-center justify-center rounded-b-2xl px-4 text-white shadow-lg transition-opacity duration-150',
+          !pinned && 'pointer-events-none opacity-0',
+        )}
+      >
+        <FinalScore match={match} tone="dark" compact />
+      </div>
+      <div ref={cardRef} className="-mt-[5.5rem]">
+        {children}
+      </div>
+    </>
+  )
+}
+
 function MatchMetaLines({ match, tone = 'light' }: { match: Match; tone?: 'light' | 'dark' }) {
   return (
     <CardDescription className={cn('flex flex-col gap-1.5', tone === 'dark' && 'text-white/80')}>
@@ -2855,7 +2890,7 @@ export function MatchDetailPage() {
   )
 
   const recapHeader = (
-    <Card className="bg-club-blue-dark gap-3 border-0 py-4 text-white shadow-lg">
+    <Card className="bg-club-blue-dark relative z-0 gap-3 border-0 py-4 text-white shadow-lg">
       <CardHeader className="gap-1 px-4">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
           <span>vs {match.opponent}</span>
@@ -3204,12 +3239,12 @@ export function MatchDetailPage() {
       ) : votesTabApplies ? (
         <div className="flex flex-col gap-8">
           <Tabs defaultValue="resume" className="flex flex-col gap-8">
-            {/* Pinned together so the score and the tab bar stay put while only the tab's
-                own content scrolls underneath — the score is what you keep checking back
-                against, not something to scroll past. */}
-            <div className="bg-background sticky top-0 z-20 flex flex-col gap-4 pb-1">
-              {recapHeader}
-              <TabsList className="mx-auto">
+            {/* The big score card scrolls away; a slim crest + score bar then stays pinned
+                with the tab bar under it, so the score is always in view without eating the
+                screen. */}
+            <PinnedScore match={match}>{recapHeader}</PinnedScore>
+            <div className="bg-background sticky top-14 z-20 -mx-4 -mt-4 flex justify-center px-4 py-2">
+              <TabsList>
                 <TabsTrigger value="resume">Résumé</TabsTrigger>
                 <TabsTrigger value="composition">Composition</TabsTrigger>
                 <TabsTrigger value="stats">Stats</TabsTrigger>

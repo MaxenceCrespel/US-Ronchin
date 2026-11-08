@@ -196,13 +196,29 @@ export function ScoreEditor({
 export function FinalScore({
   match,
   tone = 'light',
+  compact = false,
 }: {
   match: Pick<Match, 'homeAway' | 'opponent' | 'scoreHome' | 'scoreAway' | 'homeLogo' | 'awayLogo'>
   tone?: 'light' | 'dark'
+  /** Single slim row — crest, score, crest — for the pinned header while scrolling. */
+  compact?: boolean
 }) {
   const { left, right } = sides(match)
   const goals = (s: typeof left) =>
     (match.homeAway === 'HOME') === s.isUs ? match.scoreHome : match.scoreAway
+  if (compact) {
+    return (
+      <div className="font-display flex items-center justify-center gap-4">
+        <Crest name={left.name} isUs={left.isUs} logo={left.logo} className="size-9" />
+        <div className="flex items-center gap-2 italic">
+          <span className="text-4xl leading-none font-extrabold tabular-nums">{goals(left) ?? '-'}</span>
+          <span className="text-xl font-bold text-white/50">–</span>
+          <span className="text-4xl leading-none font-extrabold tabular-nums">{goals(right) ?? '-'}</span>
+        </div>
+        <Crest name={right.name} isUs={right.isUs} logo={right.logo} className="size-9" />
+      </div>
+    )
+  }
   const result = getMatchResult(match)
   const dark = tone === 'dark'
   const team = (s: typeof left) => (
