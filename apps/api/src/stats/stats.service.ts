@@ -411,7 +411,10 @@ export class StatsService {
     }
 
     const events = allEvents.filter((e) => matchInSeason(e.matchId));
-    const compositions = allCompositions.filter((c) => matchInSeason(c.matchId));
+    // A spectator was at the match without playing — not a match played, nor a starter.
+    const compositions = allCompositions.filter(
+      (c) => matchInSeason(c.matchId) && !c.isSpectator,
+    );
     const ratings = allRatings.filter((r) => matchInSeason(r.matchId));
     const attendances = allAttendances.filter((a) => sessionInSeason(a.trainingSessionId));
 

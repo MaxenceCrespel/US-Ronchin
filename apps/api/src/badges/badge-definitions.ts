@@ -667,7 +667,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'CONTEXT',
     rarity: 'COMMON',
     title: 'Le Porte-Bonheur',
-    description: 'Être sur la feuille de match lors de 3 victoires consécutives',
+    description: 'Être titulaire ou remplaçant lors de 3 victoires consécutives',
     emoji: '🍀',
   },
   {
@@ -675,7 +675,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'CONTEXT',
     rarity: 'RARE',
     title: 'Le Chat Noir',
-    description: 'Être sur la feuille de match lors de 3 défaites consécutives',
+    description: 'Être titulaire ou remplaçant lors de 3 défaites consécutives',
     emoji: '🐈‍⬛',
   },
   {
@@ -683,7 +683,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: 'CONTEXT',
     rarity: 'COMMON',
     title: 'Le Routard',
-    description: 'Être sur la feuille de match pour 5 déplacements à l’extérieur',
+    description: 'Jouer (titulaire ou remplaçant) 5 déplacements à l’extérieur',
     emoji: '🧳',
   },
   {
@@ -701,7 +701,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rarity: 'RARE',
     title: 'Le Naufragé',
     description:
-      'Être sur la feuille de match lors d’une défaite par au moins 4 buts d’écart — la fameuse valise de D6',
+      'Être titulaire ou remplaçant lors d’une défaite par au moins 4 buts d’écart — la fameuse valise de D6',
     emoji: '🤕',
   },
   {
@@ -710,7 +710,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     rarity: 'EPIC',
     title: "L'Équilibriste",
     description:
-      'Être sur la feuille de match pour 1 victoire, 1 nul et 1 défaite sur 3 matchs consécutifs',
+      'Être titulaire ou remplaçant pour 1 victoire, 1 nul et 1 défaite sur 3 matchs consécutifs',
     emoji: '⚖️',
   },
   {

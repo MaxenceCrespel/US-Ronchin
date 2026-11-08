@@ -194,7 +194,11 @@ export class BadgesService {
       ] = await Promise.all([
         this.eventsRepository.find({ where: { userId }, relations: { match: true } }),
         this.eventsRepository.find({ where: { assistUserId: userId }, relations: { match: true } }),
-        this.compositionsRepository.find({ where: { userId }, relations: { match: true } }),
+        // A spectator was at the match without playing — never counts toward a badge or streak.
+        this.compositionsRepository.find({
+          where: { userId, isSpectator: false },
+          relations: { match: true },
+        }),
         this.attendancesRepository.find({
           where: { userId },
           relations: { trainingSession: true },
