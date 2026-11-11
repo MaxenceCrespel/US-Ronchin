@@ -240,3 +240,21 @@ CVE-2026-119374
 CVE-2026-119379
 CVE-2026-76844
 CVE-2026-85091
+
+# Nov 2026 — 10 new MIT krb5 advisories on Debian 12 (krb5-locales, libgssapi-krb5-2,
+# libk5crypto3, libkrb5-3, libkrb5support0 at 1.20.1-2+deb12u5, 50 findings in all).
+# Debian's tracker lists every one as open for bookworm with no fixed version and no urgency
+# assigned yet, so there is nothing to upgrade to. All of them are denial-of-service bugs in
+# the Kerberos server daemons (kadmind / KDC); the image only carries the client libraries,
+# pulled in by libcurl/libldap, and runs neither daemon nor talks to a Kerberos realm.
+# Revisit once Debian ships a fixed krb5 and drop the entries then.
+CVE-2026-112315
+CVE-2026-112316
+CVE-2026-112317
+CVE-2026-112318
+CVE-2026-112319
+CVE-2026-112320
+CVE-2026-112321
+CVE-2026-112322
+CVE-2026-112323
+CVE-2026-119079
