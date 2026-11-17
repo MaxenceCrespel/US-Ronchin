@@ -640,6 +640,9 @@ export interface TrainingRankingEntry {
   wins: number
   draws: number
   losses: number
+  /** Places gained (positive) or lost (negative) since before the latest scored session;
+   * null when the player wasn't ranked yet. */
+  rankChange: number | null
 }
 
 /** The coach's pre-match starting XI — `slots` are user ids in formation order (index 0 = goalkeeper). */

@@ -799,7 +799,8 @@ export class TeamBalancingService {
 
   /** Cumulative "classement" from every scrimmage score entered so far — only real
    * accounts earn points (a guest has no profile to credit), and only sessions with both
-   * scores filled in count. */
+   * scores filled in count. `rankChange` compares each player's rank with the one they had
+   * before the most recent scored session (positive = places gained). */
   async getTrainingRanking(): Promise<TrainingRankingEntry[]> {
     const scoredSessions = await this.sessionsRepository
       .createQueryBuilder('session')
@@ -807,42 +808,29 @@ export class TeamBalancingService {
       .getMany();
     if (scoredSessions.length === 0) return [];
 
-    const pointsBySessionTeam = new Map<string, [number, number]>();
-    for (const session of scoredSessions) {
-      pointsBySessionTeam.set(session.id, pointsForResult(session.scoreTeam0!, session.scoreTeam1!));
-    }
-
     const assignments = await this.assignmentsRepository.find({
       where: { trainingSessionId: In(scoredSessions.map((s) => s.id)) },
       relations: { user: true },
     });
 
-    const entryByUserId = new Map<string, TrainingRankingEntry>();
-    for (const assignment of assignments) {
-      if (!assignment.userId || !assignment.user) continue; // guests earn nothing
-      const teamPoints = pointsBySessionTeam.get(assignment.trainingSessionId);
-      if (!teamPoints) continue;
-      const points = teamPoints[assignment.teamIndex] ?? 0;
+    const latest = scoredSessions.reduce((a, b) =>
+      `${b.date} ${b.startTime ?? ''}` > `${a.date} ${a.startTime ?? ''}` ? b : a,
+    );
+    const current = tallyTrainingRanking(scoredSessions, assignments);
+    const previous = tallyTrainingRanking(
+      scoredSessions.filter((s) => s.id !== latest.id),
+      assignments,
+    );
+    const previousRank = competitionRanks(previous);
+    const currentRank = competitionRanks(current);
 
-      const entry = entryByUserId.get(assignment.userId) ?? {
-        userId: assignment.userId,
-        firstName: assignment.user.firstName,
-        lastName: assignment.user.lastName,
-        points: 0,
-        sessionsPlayed: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
+    return current.map((entry) => {
+      const before = previousRank.get(entry.userId);
+      return {
+        ...entry,
+        rankChange: before === undefined ? null : before - currentRank.get(entry.userId)!,
       };
-      entry.sessionsPlayed += 1;
-      entry.points += points;
-      if (points >= 3) entry.wins += 1;
-      else if (points === 1) entry.draws += 1;
-      else entry.losses += 1;
-      entryByUserId.set(assignment.userId, entry);
-    }
-
-    return [...entryByUserId.values()].sort((a, b) => b.points - a.points);
+    });
   }
 
   /** Every training session a given player has any record of — attendance (declared vs.
@@ -907,6 +895,54 @@ export interface TrainingRankingEntry {
   wins: number;
   draws: number;
   losses: number;
+  /** Places gained (positive) or lost (negative) since before the latest scored session;
+   * null when the player wasn't ranked yet before it. */
+  rankChange: number | null;
+}
+
+type TallyEntry = Omit<TrainingRankingEntry, 'rankChange'>;
+
+/** Points/W/D/L per real player over the given scored sessions, best first. */
+function tallyTrainingRanking(
+  sessions: TrainingSession[],
+  assignments: TrainingTeamAssignment[],
+): TallyEntry[] {
+  const pointsBySessionTeam = new Map<string, [number, number]>();
+  for (const session of sessions) {
+    pointsBySessionTeam.set(session.id, pointsForResult(session.scoreTeam0!, session.scoreTeam1!));
+  }
+  const entryByUserId = new Map<string, TallyEntry>();
+  for (const assignment of assignments) {
+    if (!assignment.userId || !assignment.user) continue; // guests earn nothing
+    const teamPoints = pointsBySessionTeam.get(assignment.trainingSessionId);
+    if (!teamPoints) continue;
+    const points = teamPoints[assignment.teamIndex] ?? 0;
+    const entry = entryByUserId.get(assignment.userId) ?? {
+      userId: assignment.userId,
+      firstName: assignment.user.firstName,
+      lastName: assignment.user.lastName,
+      points: 0,
+      sessionsPlayed: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+    };
+    entry.sessionsPlayed += 1;
+    entry.points += points;
+    if (points >= 3) entry.wins += 1;
+    else if (points === 1) entry.draws += 1;
+    else entry.losses += 1;
+    entryByUserId.set(assignment.userId, entry);
+  }
+  return [...entryByUserId.values()].sort((a, b) => b.points - a.points);
+}
+
+/** Rank = 1 + number of players with strictly more points, so players tied on points share
+ * a rank and their arbitrary display order never shows up as a gained/lost place. */
+function competitionRanks(entries: TallyEntry[]): Map<string, number> {
+  return new Map(
+    entries.map((e) => [e.userId, 1 + entries.filter((o) => o.points > e.points).length]),
+  );
 }
 
 export interface PlayerTrainingHistoryEntry {

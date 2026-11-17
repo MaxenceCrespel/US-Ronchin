@@ -15,7 +15,9 @@ import {
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
+  ArrowDown,
   ArrowRightLeft,
+  ArrowUp,
   CalendarX2,
   Check,
   CheckCheck,
@@ -2287,7 +2289,10 @@ function TrainingRankingCard() {
                 <tbody>
                   {ranking.map((entry, index) => (
                     <tr key={entry.userId} className="border-t">
-                      <td className="text-muted-foreground py-1 pr-2">{index + 1}</td>
+                      <td className="text-muted-foreground py-1 pr-2 whitespace-nowrap tabular-nums">
+                        {index + 1}
+                        <RankChange change={entry.rankChange} />
+                      </td>
                       <td className="py-1 pr-2 font-medium">
                         {entry.firstName} {entry.lastName}
                       </td>
@@ -2306,6 +2311,27 @@ function TrainingRankingCard() {
           ))}
       </CardContent>
     </Card>
+  )
+}
+
+/** Green up / red down arrow next to a ranking position, with the number of places moved
+ * since the previous scored session. Nothing when the rank didn't change or is new. */
+function RankChange({ change }: { change: number | null }) {
+  if (!change) return null
+  const up = change > 0
+  const places = Math.abs(change)
+  return (
+    <span
+      className={cn(
+        'ml-1 inline-flex items-center text-[11px] font-semibold',
+        up ? 'text-emerald-600' : 'text-red-600',
+      )}
+      aria-label={`${up ? 'Gagne' : 'Perd'} ${places} place${places > 1 ? 's' : ''}`}
+      title={`${up ? '+' : '−'}${places} place${places > 1 ? 's' : ''} depuis la dernière séance`}
+    >
+      {up ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+      {places}
+    </span>
   )
 }
 
