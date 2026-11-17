@@ -258,3 +258,18 @@ CVE-2026-112321
 CVE-2026-112322
 CVE-2026-112323
 CVE-2026-119079
+# Same krb5 1.20.1-2+deb12u5 packages, 4 more advisories published since (all open for
+# bookworm, no fixed version, no urgency assigned): CVE-2026-107364 and CVE-2026-71200 are KDC
+# denial-of-service bugs, CVE-2026-118380 targets kadmind, CVE-2026-71199 alters authentication
+# indicators in KDC-issued CAMMAC tickets — all server-side, and the image runs no Kerberos
+# server nor authenticates against a realm.
+CVE-2026-107364
+CVE-2026-118380
+CVE-2026-71199
+CVE-2026-71200
+
+# CVE-2025-6020 (libpam-modules 1.5.2-6+deb12u2, pam_namespace path traversal leading to local
+# privilege escalation) — open for bookworm with no fixed version. It needs a local login
+# session going through pam_namespace; the container only runs `node` as its entrypoint, with
+# no sshd, login or su path invoking PAM. Revisit once Debian ships a fixed pam.
+CVE-2025-6020

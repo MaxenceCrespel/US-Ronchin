@@ -25,7 +25,18 @@ import sys
 # tooling, glob, rimraf under puppeteer-extra) cannot take. Every pattern those tools match is
 # hardcoded in the build/tooling configuration — no attacker-controlled glob ever reaches
 # minimatch at runtime. Revisit when those dependants move to minimatch 11.
-ACCEPTED_ADVISORIES: set[str] = {"GHSA-gcqx-w48m-w2h4", "GHSA-g3hv-75wg-m249"}
+#
+# picomatch (GHSA-fc5q-39xc-vjpf, high — ReDoS through single-branch repeated extglobs) has no
+# patched release: the advisory covers every version up to 4.0.7, the latest published. It is
+# reached through typeorm -> tinyglobby -> fdir, which TypeORM uses to resolve entity/migration
+# path globs from our own configuration at startup — no request or user input ever becomes a
+# glob pattern. npm's only suggested "fix" is downgrading typeorm 1.x to 0.3.31, a major
+# regression. Revisit when a fixed picomatch ships.
+ACCEPTED_ADVISORIES: set[str] = {
+    "GHSA-gcqx-w48m-w2h4",
+    "GHSA-g3hv-75wg-m249",
+    "GHSA-fc5q-39xc-vjpf",
+}
 
 
 # Only these block the pipeline; lower severities stay visible in the npm audit log.
