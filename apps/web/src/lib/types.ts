@@ -642,6 +642,8 @@ export interface TrainingRankingEntry {
   losses: number
   /** Places gained (positive) or lost (negative) since before the latest scored session;
    * null when the player wasn't ranked yet. */
+  /** Shared on ties — two players on the same points show the same rank. */
+  rank: number
   rankChange: number | null
 }
 

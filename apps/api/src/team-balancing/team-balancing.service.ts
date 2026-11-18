@@ -826,9 +826,11 @@ export class TeamBalancingService {
 
     return current.map((entry) => {
       const before = previousRank.get(entry.userId);
+      const rank = currentRank.get(entry.userId)!;
       return {
         ...entry,
-        rankChange: before === undefined ? null : before - currentRank.get(entry.userId)!,
+        rank,
+        rankChange: before === undefined ? null : before - rank,
       };
     });
   }
@@ -895,12 +897,16 @@ export interface TrainingRankingEntry {
   wins: number;
   draws: number;
   losses: number;
+  /** Points, then fewer sessions played; shared only on a true tie (same points and same
+   * sessions). The same rank rankChange is computed from — so the number shown and the
+   * arrow next to it always agree. */
+  rank: number;
   /** Places gained (positive) or lost (negative) since before the latest scored session;
    * null when the player wasn't ranked yet before it. */
   rankChange: number | null;
 }
 
-type TallyEntry = Omit<TrainingRankingEntry, 'rankChange'>;
+type TallyEntry = Omit<TrainingRankingEntry, 'rank' | 'rankChange'>;
 
 /** Points/W/D/L per real player over the given scored sessions, best first. */
 function tallyTrainingRanking(
@@ -934,14 +940,21 @@ function tallyTrainingRanking(
     else entry.losses += 1;
     entryByUserId.set(assignment.userId, entry);
   }
-  return [...entryByUserId.values()].sort((a, b) => b.points - a.points);
+  return [...entryByUserId.values()].sort(compareRanking);
 }
 
-/** Rank = 1 + number of players with strictly more points, so players tied on points share
- * a rank and their arbitrary display order never shows up as a gained/lost place. */
+/** More points first; on equal points, fewer sessions played wins (same total in fewer
+ * trainings = better average). Negative when `a` ranks ahead of `b`, 0 on a true tie. */
+function compareRanking(a: TallyEntry, b: TallyEntry): number {
+  return b.points - a.points || a.sessionsPlayed - b.sessionsPlayed;
+}
+
+/** Rank = 1 + number of players strictly ahead, so only true ties (same points AND same
+ * sessions played) share a rank and their arbitrary display order never shows up as a
+ * gained/lost place. */
 function competitionRanks(entries: TallyEntry[]): Map<string, number> {
   return new Map(
-    entries.map((e) => [e.userId, 1 + entries.filter((o) => o.points > e.points).length]),
+    entries.map((e) => [e.userId, 1 + entries.filter((o) => compareRanking(o, e) < 0).length]),
   );
 }
 

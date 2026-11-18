@@ -2287,10 +2287,10 @@ function TrainingRankingCard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ranking.map((entry, index) => (
+                  {ranking.map((entry) => (
                     <tr key={entry.userId} className="border-t">
                       <td className="text-muted-foreground py-1 pr-2 whitespace-nowrap tabular-nums">
-                        {index + 1}
+                        {entry.rank}
                         <RankChange change={entry.rankChange} />
                       </td>
                       <td className="py-1 pr-2 font-medium">

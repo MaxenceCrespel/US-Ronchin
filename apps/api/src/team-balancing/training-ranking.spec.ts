@@ -69,12 +69,35 @@ describe('TeamBalancingService.getTrainingRanking rankChange', () => {
   ];
 
   it('compares each rank with the one before the latest scored session', async () => {
-    // Before s2: a 4, b 4 (both 1st), c 0 (3rd). After: c 8 (1st), a 4, b 4 (2nd), d 0.
+    // Before s2: a 4, b 4 (1 session each → both 1st), c 0 (3rd).
+    // After: c 8 (1st), b 4 in 1 session (2nd), a 4 in 2 sessions (3rd), d 0 (4th).
     const r = await rankingFor(sessions, assignments);
+    expect([r.c.rank, r.b.rank, r.a.rank, r.d.rank]).toEqual([1, 2, 3, 4]);
     expect(r.c.rankChange).toBe(2);
-    expect(r.a.rankChange).toBe(-1);
+    expect(r.a.rankChange).toBe(-2);
     expect(r.b.rankChange).toBe(-1); // didn't play s2 but got overtaken
     expect(r.d.rankChange).toBeNull(); // wasn't ranked before s2
+  });
+
+  it('breaks a points tie by fewer sessions played', async () => {
+    // e wins once (4 pts in 1 session); f draws 4 times (4 pts in 4 sessions) → e ahead.
+    const draws = ['t1', 't2', 't3', 't4'].map((id, i) => ({
+      id,
+      date: `2026-10-0${i + 1}`,
+      startTime: '19:00:00',
+      scoreTeam0: 0,
+      scoreTeam1: 0,
+    }));
+    const win = { id: 'w', date: '2026-09-01', startTime: '19:00:00', scoreTeam0: 1, scoreTeam1: 0 };
+    const r = await rankingFor(
+      [win, ...draws],
+      [
+        { trainingSessionId: 'w', userId: 'e', teamIndex: 0 },
+        ...draws.map((s) => ({ trainingSessionId: s.id, userId: 'f', teamIndex: 0 })),
+      ],
+    );
+    expect([r.e.points, r.f.points]).toEqual([4, 4]);
+    expect([r.e.rank, r.f.rank]).toEqual([1, 2]);
   });
 
   it('has no movement when only one session is scored', async () => {
