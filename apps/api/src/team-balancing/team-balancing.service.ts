@@ -823,15 +823,19 @@ export class TeamBalancingService {
     );
     const previousRank = competitionRanks(previous);
     const currentRank = competitionRanks(current);
+    // A newcomer counts as having started just behind everyone already ranked, so overtaking
+    // anyone on their first session shows as places gained. Never as a loss though: with
+    // several newcomers the same night, one finishing below another isn't "losing" a place.
+    const newcomerStart = previous.length + 1;
 
     return current.map((entry) => {
       const before = previousRank.get(entry.userId);
       const rank = currentRank.get(entry.userId)!;
-      return {
-        ...entry,
-        rank,
-        rankChange: before === undefined ? null : before - rank,
-      };
+      let rankChange: number | null;
+      if (previous.length === 0) rankChange = null; // first scored session ever: nothing to compare
+      else if (before === undefined) rankChange = Math.max(0, newcomerStart - rank);
+      else rankChange = before - rank;
+      return { ...entry, rank, rankChange };
     });
   }
 
@@ -901,8 +905,9 @@ export interface TrainingRankingEntry {
    * sessions). The same rank rankChange is computed from — so the number shown and the
    * arrow next to it always agree. */
   rank: number;
-  /** Places gained (positive) or lost (negative) since before the latest scored session;
-   * null when the player wasn't ranked yet before it. */
+  /** Places gained (positive) or lost (negative) since before the latest scored session. A
+   * newcomer starts just behind the last ranked player (gains only, never a loss); null on
+   * the very first scored session. */
   rankChange: number | null;
 }
 

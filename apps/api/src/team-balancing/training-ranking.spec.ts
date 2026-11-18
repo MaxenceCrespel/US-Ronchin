@@ -76,7 +76,29 @@ describe('TeamBalancingService.getTrainingRanking rankChange', () => {
     expect(r.c.rankChange).toBe(2);
     expect(r.a.rankChange).toBe(-2);
     expect(r.b.rankChange).toBe(-1); // didn't play s2 but got overtaken
-    expect(r.d.rankChange).toBeNull(); // wasn't ranked before s2
+    // d wasn't ranked before s2: starts behind the 3 ranked players (4th) and finishes 4th.
+    expect(r.d.rankChange).toBe(0);
+  });
+
+  it('counts a newcomer who overtakes someone as gaining places', async () => {
+    // Newcomers e and f draw their first session and overtake c, who is still on 0.
+    const r = await rankingFor(
+      [
+        { id: 's1', date: '2026-11-01', startTime: '19:00:00', scoreTeam0: 1, scoreTeam1: 0 },
+        { id: 's2', date: '2026-11-08', startTime: '19:00:00', scoreTeam0: 0, scoreTeam1: 0 },
+      ],
+      [
+        { trainingSessionId: 's1', userId: 'a', teamIndex: 0 },
+        { trainingSessionId: 's1', userId: 'c', teamIndex: 1 },
+        { trainingSessionId: 's2', userId: 'e', teamIndex: 0 },
+        { trainingSessionId: 's2', userId: 'f', teamIndex: 1 },
+      ],
+    );
+    // Before: a 4 (1st), c 0 (2nd). After: a 4, e 1 (1 session), f 1 (1 session), c 0.
+    expect([r.a.rank, r.e.rank, r.f.rank, r.c.rank]).toEqual([1, 2, 2, 4]);
+    expect(r.e.rankChange).toBe(1); // started 3rd (behind a and c), now 2nd
+    expect(r.f.rankChange).toBe(1);
+    expect(r.c.rankChange).toBe(-2);
   });
 
   it('breaks a points tie by fewer sessions played', async () => {
