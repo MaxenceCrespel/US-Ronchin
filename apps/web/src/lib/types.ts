@@ -76,6 +76,8 @@ export interface TrainingSession {
   endTime: string
   location: string
   cancelled: boolean
+  /** Message du coach à l'annulation (« remplacé par un five… ») — null sinon. */
+  cancellationNote: string | null
   /** Score du match d'entraînement (équipe 0 vs équipe 1) — null tant que le coach ne l'a
    * pas saisi, alimente le classement (voir TrainingRankingEntry / /training-ranking). */
   scoreTeam0: number | null

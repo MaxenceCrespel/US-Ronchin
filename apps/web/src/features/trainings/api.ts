@@ -51,6 +51,7 @@ export async function updateSession(
     endTime: string
     location: string
     cancelled: boolean
+    cancellationNote: string
     scoreTeam0: number
     scoreTeam1: number
     maxPresentPlayersOverride: number | null

@@ -5,6 +5,16 @@ import { TrainingsService } from './trainings.service';
 import { Training, TrainingType } from './entities/training.entity';
 import { TrainingSession } from './entities/training-session.entity';
 import { AttendancesService } from '../attendances/attendances.service';
+import { Attendance } from '../attendances/entities/attendance.entity';
+import { User } from '../users/entities/user.entity';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+
+/** Collaborators only the cancellation push needs — inert for the other suites. */
+const unusedCancellationDeps = [
+  { provide: getRepositoryToken(Attendance), useValue: {} },
+  { provide: getRepositoryToken(User), useValue: {} },
+  { provide: PushNotificationsService, useValue: {} },
+];
 
 interface FakeSession {
   trainingId: string;
@@ -44,6 +54,7 @@ async function build(
       { provide: getRepositoryToken(Training), useValue: trainingsRepo },
       { provide: getRepositoryToken(TrainingSession), useValue: sessionsRepo },
       { provide: AttendancesService, useValue: {} },
+      ...unusedCancellationDeps,
     ],
   }).compile();
   return { service: moduleRef.get(TrainingsService), sessionsRepo, stored };
@@ -177,6 +188,7 @@ describe('TrainingsService.updateTraining — moving to another weekday', () => 
         },
         { provide: getRepositoryToken(TrainingSession), useValue: sessionsRepo },
         { provide: AttendancesService, useValue: attendancesService },
+        ...unusedCancellationDeps,
       ],
     }).compile();
     return { service: moduleRef.get(TrainingsService), sessionsRepo };
@@ -221,5 +233,93 @@ describe('TrainingsService.updateTraining — moving to another weekday', () => 
     const { service, sessionsRepo } = await buildUpdate(tuesdays);
     await service.updateTraining('t1', { location: 'Terrain B' });
     expect(sessionsRepo.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrainingsService.updateSession — cancelling', () => {
+  // Thursday 2026-11-19, 10:00 in Paris; tonight's session is 19:00–20:30.
+  beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-11-19T09:00:00Z')));
+  afterEach(() => jest.useRealTimers());
+
+  async function buildCancel(session: Partial<TrainingSession> = {}) {
+    const stored = {
+      id: 's1',
+      trainingId: 't1',
+      date: '2026-11-19',
+      startTime: '19:00:00',
+      endTime: '20:30:00',
+      location: 'Stade',
+      cancelled: false,
+      cancellationNote: null,
+      ...session,
+    };
+    const sessionsRepo = {
+      findOne: jest.fn().mockResolvedValue(stored),
+      save: jest.fn((s: unknown) => Promise.resolve(s)),
+    };
+    const push = { sendToUsers: jest.fn().mockResolvedValue(undefined) };
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        TrainingsService,
+        { provide: getRepositoryToken(Training), useValue: {} },
+        { provide: getRepositoryToken(TrainingSession), useValue: sessionsRepo },
+        { provide: AttendancesService, useValue: {} },
+        {
+          provide: getRepositoryToken(Attendance),
+          useValue: { find: jest.fn().mockResolvedValue([{ userId: 'absent' }]) },
+        },
+        {
+          provide: getRepositoryToken(User),
+          useValue: {
+            find: jest.fn().mockResolvedValue([{ id: 'coach' }, { id: 'p1' }, { id: 'absent' }, { id: 'p1' }]),
+          },
+        },
+        { provide: PushNotificationsService, useValue: push },
+      ],
+    }).compile();
+    return { service: moduleRef.get(TrainingsService), push };
+  }
+
+  it("pushes the roster (minus the coach and those who said they're absent) with the note", async () => {
+    const { service, push } = await buildCancel();
+    const saved = await service.updateSession(
+      's1',
+      { cancelled: true, cancellationNote: '  Five à 20h au Urban  ' },
+      'coach',
+    );
+    expect(saved.cancellationNote).toBe('Five à 20h au Urban');
+    expect(push.sendToUsers).toHaveBeenCalledWith(['p1'], {
+      title: 'Entraînement annulé',
+      body: "L'entraînement de ce soir (19h00) est annulé. Five à 20h au Urban",
+      url: '/trainings?session=s1',
+    });
+  });
+
+  it('clears the note and announces it when the session is reinstated', async () => {
+    const { service, push } = await buildCancel({ cancelled: true, cancellationNote: 'Five' });
+    const saved = await service.updateSession('s1', { cancelled: false }, 'coach');
+    expect(saved.cancellationNote).toBeNull();
+    expect(push.sendToUsers).toHaveBeenCalledWith(
+      ['p1'],
+      expect.objectContaining({ title: 'Entraînement maintenu' }),
+    );
+  });
+
+  it("doesn't push for a session that's already over, nor when nothing about cancellation changed", async () => {
+    const past = await buildCancel({ date: '2026-11-18' });
+    await past.service.updateSession('s1', { cancelled: true }, 'coach');
+    expect(past.push.sendToUsers).not.toHaveBeenCalled();
+
+    const unchanged = await buildCancel();
+    await unchanged.service.updateSession('s1', { location: 'Terrain B' }, 'coach');
+    expect(unchanged.push.sendToUsers).not.toHaveBeenCalled();
+  });
+
+  it('still cancels when the push fails', async () => {
+    const { service, push } = await buildCancel();
+    push.sendToUsers.mockRejectedValue(new Error('push down'));
+    await expect(service.updateSession('s1', { cancelled: true }, 'coach')).resolves.toMatchObject({
+      cancelled: true,
+    });
   });
 });

@@ -77,8 +77,12 @@ export class TrainingsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.COACH)
   @Patch('training-sessions/:id')
-  updateSession(@Param('id') id: string, @Body() dto: UpdateTrainingSessionDto) {
-    return this.trainingsService.updateSession(id, dto);
+  updateSession(
+    @Param('id') id: string,
+    @Body() dto: UpdateTrainingSessionDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.trainingsService.updateSession(id, dto, currentUser.id);
   }
 
   @UseGuards(RolesGuard)

@@ -4,7 +4,23 @@ import type { ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueries, useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
-import { UserCheck, AlertTriangle, ChevronRight, Trophy, Vote, Dumbbell, Clock, MapPin, X, ClipboardCheck, Cake, Gauge, Star, Shield } from 'lucide-react'
+import {
+  AlertTriangle,
+  Cake,
+  CalendarX2,
+  ChevronRight,
+  ClipboardCheck,
+  Clock,
+  Dumbbell,
+  Gauge,
+  MapPin,
+  Shield,
+  Star,
+  Trophy,
+  UserCheck,
+  Vote,
+  X,
+} from 'lucide-react'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -713,6 +729,10 @@ export function HomePage() {
       .slice(0, 3)
   }, [sessionsQuery.data])
 
+  // Today's cancelled sessions get a banner at the very top of the home screen — a player
+  // who only opens the app to check tonight's training must not miss that it's off.
+  const cancelledToday = (sessionsQuery.data ?? []).filter((s) => s.cancelled && s.date === todayKey)
+
   const upcomingMatches = useMemo(() => {
     const now = Date.now()
     return (matchesQuery.data ?? [])
@@ -912,6 +932,29 @@ export function HomePage() {
           {greeting()} {user?.firstName} 👋
         </h1>
       </div>
+
+      {cancelledToday.map((session) => (
+        <Link
+          key={session.id}
+          to={`/trainings?session=${session.id}`}
+          role="alert"
+          className="border-result-loss/40 bg-result-loss/10 hover:bg-result-loss/15 flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors"
+        >
+          <span className="bg-result-loss flex size-10 shrink-0 items-center justify-center rounded-xl text-white">
+            <CalendarX2 className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="text-result-loss block font-bold">
+              Entraînement {session.startTime >= '17:00' ? 'de ce soir' : "d'aujourd'hui"} annulé
+              <span className="font-normal"> · {session.startTime.slice(0, 5).replace(':', 'h')}</span>
+            </span>
+            {session.cancellationNote && (
+              <span className="block [overflow-wrap:anywhere] whitespace-pre-line">{session.cancellationNote}</span>
+            )}
+          </span>
+          <ChevronRight className="text-muted-foreground size-4 shrink-0" />
+        </Link>
+      ))}
 
       {actionItems.length > 0 && (
         <section className="flex flex-col gap-2" aria-label="À traiter">

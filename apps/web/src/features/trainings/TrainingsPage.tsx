@@ -47,6 +47,8 @@ import { MatchResultBadge } from '@/components/MatchResultBadge'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -1526,6 +1528,7 @@ export function SessionCard({
   endTime,
   location,
   cancelled,
+  cancellationNote = null,
   scoreTeam0 = null,
   scoreTeam1 = null,
   trainingType = null,
@@ -1538,6 +1541,7 @@ export function SessionCard({
   endTime: string
   location: string
   cancelled: boolean
+  cancellationNote?: string | null
   scoreTeam0?: number | null
   scoreTeam1?: number | null
   trainingType?: TrainingType | null
@@ -1602,6 +1606,14 @@ export function SessionCard({
   })
 
   const [confirmingDeleteSession, setConfirmingDeleteSession] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const cancelMutation = useMutation({
+    mutationFn: (vars: { cancelled: boolean; cancellationNote?: string }) => updateSession(sessionId, vars),
+    onSuccess: () => {
+      invalidateSessions()
+      setCancelling(false)
+    },
+  })
   const deleteSessionMutation = useMutation({
     mutationFn: () => deleteSession(sessionId),
     onSuccess: () => {
@@ -1788,6 +1800,25 @@ export function SessionCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {cancelled && (
+          <div className="border-result-loss/30 bg-result-loss/10 flex flex-col gap-1 rounded-xl border p-3 text-sm">
+            <p className="text-result-loss flex items-center gap-1.5 font-semibold">
+              <CalendarX2 className="size-4" /> Séance annulée
+            </p>
+            {cancellationNote && <p className="[overflow-wrap:anywhere] whitespace-pre-line">{cancellationNote}</p>}
+            {isCoach && !hasEnded && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1 self-start"
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate({ cancelled: false })}
+              >
+                {cancelMutation.isPending ? 'En cours…' : 'Rétablir la séance'}
+              </Button>
+            )}
+          </div>
+        )}
         {!cancelled && answered.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <div className="bg-muted flex h-2 overflow-hidden rounded-full" aria-hidden="true">
@@ -2014,6 +2045,16 @@ export function SessionCard({
               )}
               <AttendanceHistoryDialog sessionId={sessionId} />
             </div>
+            {!hasEnded && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive self-start"
+                onClick={() => setCancelling(true)}
+              >
+                <CalendarX2 className="size-4" /> Annuler la séance
+              </Button>
+            )}
           </div>
         )}
         {!cancelled && <TeamsSection sessionId={sessionId} scoreTeam0={scoreTeam0} scoreTeam1={scoreTeam1} />}
@@ -2028,7 +2069,71 @@ export function SessionCard({
       isPending={deleteSessionMutation.isPending}
       onConfirm={() => deleteSessionMutation.mutate()}
     />
+    <CancelSessionDialog
+      open={cancelling}
+      onOpenChange={setCancelling}
+      isPending={cancelMutation.isPending}
+      error={cancelMutation.isError ? errorMessage(cancelMutation.error, "Échec — réessaie.") : null}
+      onConfirm={(note) => cancelMutation.mutate({ cancelled: true, cancellationNote: note })}
+    />
     </>
+  )
+}
+
+/** Coach confirmation for calling off one session — with room for the "what instead"
+ * (a five, another time...), which every player sees on the card, in the home-screen banner
+ * and in the push the API sends (TrainingsService.notifyCancellationChange). */
+function CancelSessionDialog({
+  open,
+  onOpenChange,
+  isPending,
+  error,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  isPending: boolean
+  error: string | null
+  onConfirm: (note: string) => void
+}) {
+  const [note, setNote] = useState('')
+  useEffect(() => {
+    if (open) setNote('')
+  }, [open])
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Annuler cette séance ?</DialogTitle>
+          <DialogDescription>
+            Tous les joueurs reçoivent une notification, sauf ceux qui avaient répondu absent. Tu pourras la
+            rétablir tant qu'elle n'a pas eu lieu.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="cancellation-note">Message aux joueurs (facultatif)</Label>
+          <textarea
+            id="cancellation-note"
+            rows={3}
+            maxLength={200}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Ex. : remplacé par un five à 20h au Urban Soccer"
+            className="border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 w-full resize-none rounded-md border bg-transparent px-3 py-2 text-base shadow-xs outline-none focus-visible:ring-[3px] md:text-sm"
+          />
+          <p className="text-muted-foreground text-right text-xs tabular-nums">{note.length}/200</p>
+          {error && <p className="text-destructive text-sm">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+            Retour
+          </Button>
+          <Button type="button" variant="destructive" disabled={isPending} onClick={() => onConfirm(note)}>
+            {isPending ? 'En cours…' : 'Annuler la séance'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -2649,6 +2754,7 @@ export function TrainingsPage() {
                 endTime={session.endTime}
                 location={session.location}
                 cancelled={session.cancelled}
+                cancellationNote={session.cancellationNote}
                 scoreTeam0={session.scoreTeam0}
                 scoreTeam1={session.scoreTeam1}
                 trainingType={session.trainingType}
@@ -2682,6 +2788,7 @@ export function TrainingsPage() {
                 endTime={activeSession.endTime}
                 location={activeSession.location}
                 cancelled={activeSession.cancelled}
+                cancellationNote={activeSession.cancellationNote}
                 scoreTeam0={activeSession.scoreTeam0}
                 scoreTeam1={activeSession.scoreTeam1}
                 trainingType={activeSession.trainingType}

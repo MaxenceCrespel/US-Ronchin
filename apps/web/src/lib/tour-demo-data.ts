@@ -70,6 +70,7 @@ export function buildTourDemoData(currentUser: User): DemoEntry[] {
     endTime: '20:30:00',
     location: 'Stade Delory',
     cancelled: false,
+    cancellationNote: null,
     scoreTeam0: null,
     scoreTeam1: null,
     trainingType: null,

@@ -1,11 +1,17 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsBoolean, IsInt, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { CreateTrainingSessionDto } from './create-training-session.dto';
 
 export class UpdateTrainingSessionDto extends PartialType(CreateTrainingSessionDto) {
   @IsOptional()
   @IsBoolean()
   cancelled?: boolean;
+
+  /** Only kept alongside `cancelled: true` — see TrainingsService.updateSession. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  cancellationNote?: string | null;
 
   /** One-off exception to the training's cap for this session only — null clears it back
    * to inheriting the template's maxPresentPlayers. */

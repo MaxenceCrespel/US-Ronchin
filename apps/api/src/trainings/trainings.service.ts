@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Training, TrainingType } from './entities/training.entity';
@@ -8,7 +8,10 @@ import { UpdateTrainingDto } from './dto/update-training.dto';
 import { CreateTrainingSessionDto } from './dto/create-training-session.dto';
 import { UpdateTrainingSessionDto } from './dto/update-training-session.dto';
 import { AttendancesService } from '../attendances/attendances.service';
-import { parisDateOnly } from '../common/utils/paris-time';
+import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
+import { User, UserRole, UserStatus } from '../users/entities/user.entity';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
+import { parisDateOnly, parisToday, parisWallTimeToDate } from '../common/utils/paris-time';
 
 const GENERATION_WINDOW_WEEKS = 8;
 
@@ -19,6 +22,20 @@ function toDateOnly(date: Date): string {
   return parisDateOnly(date);
 }
 
+const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+/** "de ce soir" / "d'aujourd'hui" / "de demain" / "du mardi 25/11" — how the push names the
+ * session's day, relative to today in Paris. */
+function describeSessionDay(session: Pick<TrainingSession, 'date' | 'startTime'>): string {
+  const today = parisToday();
+  const tomorrow = parisDateOnly(new Date(new Date(`${today}T12:00:00Z`).getTime() + 86_400_000));
+  if (session.date === today) return session.startTime >= '17:00' ? 'de ce soir' : "d'aujourd'hui";
+  if (session.date === tomorrow) return 'de demain';
+  const [, month, day] = session.date.split('-');
+  const weekday = WEEKDAYS[new Date(`${session.date}T12:00:00Z`).getUTCDay()];
+  return `du ${weekday} ${day}/${month}`;
+}
+
 export interface TrainingSessionWithTraining extends Omit<TrainingSession, 'training'> {
   trainingType: TrainingType | null;
   maxPresentPlayers: number | null;
@@ -26,12 +43,19 @@ export interface TrainingSessionWithTraining extends Omit<TrainingSession, 'trai
 
 @Injectable()
 export class TrainingsService {
+  private readonly logger = new Logger(TrainingsService.name);
+
   constructor(
     @InjectRepository(Training)
     private readonly trainingsRepository: Repository<Training>,
     @InjectRepository(TrainingSession)
     private readonly sessionsRepository: Repository<TrainingSession>,
+    @InjectRepository(Attendance)
+    private readonly attendancesRepository: Repository<Attendance>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     private readonly attendancesService: AttendancesService,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   findAllTrainings(): Promise<Training[]> {
@@ -222,14 +246,65 @@ export class TrainingsService {
     return session;
   }
 
-  async updateSession(id: string, dto: UpdateTrainingSessionDto): Promise<TrainingSession> {
+  async updateSession(
+    id: string,
+    dto: UpdateTrainingSessionDto,
+    actorId?: string,
+  ): Promise<TrainingSession> {
     const session = await this.findSessionById(id);
+    const wasCancelled = session.cancelled;
     Object.assign(session, dto);
+    // The note only means something on a cancelled session: trimmed, empty → none, and
+    // wiped on reinstatement so a stale "remplacé par un five" never resurfaces.
+    session.cancellationNote = session.cancelled ? session.cancellationNote?.trim() || null : null;
     const saved = await this.sessionsRepository.save(session);
     if (dto.maxPresentPlayersOverride !== undefined) {
       await this.attendancesService.syncCapPromotions(saved.id);
     }
+    if (saved.cancelled !== wasCancelled) {
+      // A failed push must never undo or fail the cancellation itself.
+      await this.notifyCancellationChange(saved, actorId).catch((error: unknown) =>
+        this.logger.warn(
+          `Échec de la notification d'annulation pour la séance ${saved.id}: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
+    }
     return saved;
+  }
+
+  /** Cancelling (or reinstating) a session that hasn't finished yet pushes everyone on the
+   * roster — players and coaches — except whoever made the change and those who had already
+   * said they wouldn't come. Not muteable: a session that no longer happens is exactly the
+   * kind of news nobody should miss. */
+  private async notifyCancellationChange(session: TrainingSession, actorId?: string): Promise<void> {
+    if (parisWallTimeToDate(session.date, session.endTime).getTime() <= Date.now()) return;
+
+    const [roster, absents] = await Promise.all([
+      this.usersRepository.find({
+        where: [
+          { role: UserRole.PLAYER, status: UserStatus.ACTIVE },
+          { role: UserRole.COACH, status: UserStatus.ACTIVE },
+          { role: UserRole.SUPERADMIN, status: UserStatus.ACTIVE },
+          { isPlayingCoach: true, status: UserStatus.ACTIVE },
+        ],
+      }),
+      this.attendancesRepository.find({
+        where: { trainingSessionId: session.id, status: AttendanceStatus.ABSENT },
+      }),
+    ]);
+    const skip = new Set([...absents.map((a) => a.userId), actorId]);
+    const targets = [...new Set(roster.map((u) => u.id))].filter((userId) => !skip.has(userId));
+    if (targets.length === 0) return;
+
+    const when = describeSessionDay(session);
+    const time = session.startTime.slice(0, 5).replace(':', 'h');
+    await this.pushNotificationsService.sendToUsers(targets, {
+      title: session.cancelled ? 'Entraînement annulé' : 'Entraînement maintenu',
+      body: session.cancelled
+        ? `L'entraînement ${when} (${time}) est annulé.${session.cancellationNote ? ` ${session.cancellationNote}` : ''}`
+        : `Finalement l'entraînement ${when} (${time}) a bien lieu.`,
+      url: `/trainings?session=${session.id}`,
+    });
   }
 
   async deleteSession(id: string): Promise<void> {

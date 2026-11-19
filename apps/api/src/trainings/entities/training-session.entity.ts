@@ -37,6 +37,12 @@ export class TrainingSession {
   @Column({ default: false })
   cancelled: boolean;
 
+  /** Optional word from the coach when cancelling ("remplacé par un five à 20h…") — shown
+   * on the session card, in the home-screen banner and in the cancellation push. Cleared
+   * when the session is reinstated. */
+  @Column({ name: 'cancellation_note', type: 'varchar', length: 200, nullable: true })
+  cancellationNote: string | null;
+
   /** Set once a "pointage réel manquant" push reminder has been sent for this session —
    * never repeated, mirrors Match.resultReminderSentAt. */
   @Column({ name: 'attendance_reminder_sent_at', type: 'timestamp', nullable: true })
