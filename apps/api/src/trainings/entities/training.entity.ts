@@ -14,6 +14,14 @@ export enum TrainingType {
   ONE_OFF = 'ONE_OFF',
 }
 
+/** What a session actually is. A FIVE runs exactly like a training (presence, cap, teams,
+ * score, reminders) but is a separate, optional outing: it never counts toward the
+ * training ranking, attendance stats/streaks, stat trophies or presence badges. */
+export enum SessionKind {
+  TRAINING = 'TRAINING',
+  FIVE = 'FIVE',
+}
+
 @Entity('trainings')
 export class Training {
   @PrimaryGeneratedColumn('uuid')
@@ -24,6 +32,11 @@ export class Training {
 
   @Column({ type: 'enum', enum: TrainingType })
   type: TrainingType;
+
+  /** Copied onto every session it generates (and onto its upcoming ones when edited) —
+   * see TrainingSession.kind. */
+  @Column({ type: 'enum', enum: SessionKind, default: SessionKind.TRAINING })
+  kind: SessionKind;
 
   @Column()
   location: string;

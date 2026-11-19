@@ -29,9 +29,14 @@ async function rankingFor(sessions: S[], assignments: A[]) {
       {
         provide: getRepositoryToken(TrainingSession),
         useValue: {
-          createQueryBuilder: () => ({
-            where: () => ({ getMany: () => Promise.resolve(sessions) }),
-          }),
+          createQueryBuilder: () => {
+            const qb = {
+              where: () => qb,
+              andWhere: () => qb,
+              getMany: () => Promise.resolve(sessions),
+            };
+            return qb;
+          },
         },
       },
       { provide: getRepositoryToken(Attendance), useValue: {} },

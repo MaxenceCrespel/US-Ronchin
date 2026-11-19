@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import { TrainingTeamAssignment } from './entities/training-team-assignment.entity';
-import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { TrainingSession, sessionNoun } from '../trainings/entities/training-session.entity';
+import { SessionKind } from '../trainings/entities/training.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { AttendanceGuest } from '../attendances/entities/attendance-guest.entity';
 import { guestLabelFor, isEffectivelyPresent, orderedGuests } from '../attendances/attendance-cap';
@@ -352,7 +353,7 @@ export class TeamBalancingService {
       notification: {
         title: 'Équipes prêtes !',
         category: NotificationCategory.TRAINING_TEAMS,
-        body: `Les équipes sont faites pour l'entraînement du ${session.date} — viens voir la tienne.`,
+        body: `Les équipes sont faites pour ${sessionNoun(session.kind)} du ${session.date} — viens voir la tienne.`,
         url: `/trainings?session=${sessionId}`,
       },
     };
@@ -805,6 +806,8 @@ export class TeamBalancingService {
     const scoredSessions = await this.sessionsRepository
       .createQueryBuilder('session')
       .where('session.score_team0 IS NOT NULL AND session.score_team1 IS NOT NULL')
+      // A five's score is played for fun — it never earns ranking points.
+      .andWhere('session.kind = :kind', { kind: SessionKind.TRAINING })
       .getMany();
     if (scoredSessions.length === 0) return [];
 

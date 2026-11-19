@@ -9,7 +9,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { TrainingType } from '../entities/training.entity';
+import { SessionKind, TrainingType } from '../entities/training.entity';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -19,6 +19,11 @@ export class CreateTrainingDto {
 
   @IsEnum(TrainingType)
   type: TrainingType;
+
+  /** Entraînement (default) or Five. */
+  @IsOptional()
+  @IsEnum(SessionKind)
+  kind?: SessionKind;
 
   @IsString()
   location: string;

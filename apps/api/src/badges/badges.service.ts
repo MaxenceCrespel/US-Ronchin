@@ -18,6 +18,7 @@ import { PlayerRating } from '../matches/entities/player-rating.entity';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { PlayerPosition, User, UserStatus } from '../users/entities/user.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { SessionKind } from '../trainings/entities/training.entity';
 import { BADGE_DEFINITIONS, BadgeCategory, BadgeRarity } from './badge-definitions';
 import { StatsService } from '../stats/stats.service';
 import { PushNotificationsService } from '../push-notifications/push-notifications.service';
@@ -285,12 +286,13 @@ export class BadgesService {
           where: { userId, isSpectator: false },
           relations: { match: true },
         }),
+        // Fives never count toward a badge — presence, streak or guest ones (see SessionKind).
         this.attendancesRepository.find({
-          where: { userId },
+          where: { userId, trainingSession: { kind: SessionKind.TRAINING } },
           relations: { trainingSession: true },
         }),
         this.usersRepository.findOne({ where: { id: userId } }),
-        this.sessionsRepository.find(),
+        this.sessionsRepository.find({ where: { kind: SessionKind.TRAINING } }),
         this.matchAttendancesRepository.find({ where: { userId } }),
         this.ratingsRepository.find({ where: { ratedUserId: userId }, relations: { match: true } }),
         this.matchesRepository.find(),

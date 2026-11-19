@@ -7,7 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Training } from './training.entity';
+import { SessionKind, Training } from './training.entity';
 
 @Entity('training_sessions')
 @Index(['trainingId', 'date'], { unique: true, where: '"training_id" IS NOT NULL' })
@@ -33,6 +33,12 @@ export class TrainingSession {
 
   @Column()
   location: string;
+
+  /** Snapshotted from the parent Training like the hours/location — a column of its own
+   * (not just read through the join) so every stat/ranking query can filter fives out
+   * with a plain `kind = 'TRAINING'`. */
+  @Column({ type: 'enum', enum: SessionKind, default: SessionKind.TRAINING })
+  kind: SessionKind;
 
   @Column({ default: false })
   cancelled: boolean;
@@ -75,4 +81,14 @@ export class TrainingSession {
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+}
+
+/** "l'entraînement" / "le five" — for push texts that name the session. */
+export function sessionNoun(kind: SessionKind): string {
+  return kind === SessionKind.FIVE ? 'le five' : "l'entraînement";
+}
+
+/** "de l'entraînement" / "du five". */
+export function ofSession(kind: SessionKind): string {
+  return kind === SessionKind.FIVE ? 'du five' : "de l'entraînement";
 }

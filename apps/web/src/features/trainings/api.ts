@@ -4,6 +4,7 @@ import type {
   AttendanceStatus,
   AttendanceStatusChangeEntry,
   PlayerTrainingHistoryEntry,
+  SessionKind,
   Training,
   TrainingRankingEntry,
   TrainingSession,
@@ -25,6 +26,7 @@ export async function fetchTrainings(): Promise<Training[]> {
 export interface CreateTrainingInput {
   title: string
   type: TrainingType
+  kind: SessionKind
   location: string
   dayOfWeek?: number
   startTime: string

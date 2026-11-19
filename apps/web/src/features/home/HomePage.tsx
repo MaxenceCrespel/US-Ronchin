@@ -35,6 +35,8 @@ import { hasCoachAccess } from '@/lib/roles'
 import { cn, pluralize } from '@/lib/utils'
 import type { Attendance, AttendanceStatus, Match, MatchAttendance, MatchSource } from '@/lib/types'
 import { fetchSessions, fetchAttendances, setMyAttendance } from '@/features/trainings/api'
+import { SESSION_KIND, sessionKindOf } from '@/features/trainings/session-kind'
+import type { SessionKind } from '@/lib/types'
 import { AttendanceToggle } from '@/features/trainings/TrainingsPage'
 import {
   fetchComposition,
@@ -85,6 +87,7 @@ function UpcomingSessionCard({
   startTime,
   endTime,
   location,
+  kind,
   todayKey,
 }: {
   sessionId: string
@@ -92,6 +95,7 @@ function UpcomingSessionCard({
   startTime: string
   endTime: string
   location: string
+  kind: SessionKind
   todayKey: string
 }) {
   const queryClient = useQueryClient()
@@ -147,11 +151,19 @@ function UpcomingSessionCard({
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <span className="bg-club-blue/10 text-club-blue animate-net-wobble flex size-9 shrink-0 items-center justify-center rounded-full">
-              <Dumbbell className="size-4.5" />
+            <span
+              className={cn(
+                'animate-net-wobble flex size-9 shrink-0 items-center justify-center rounded-full',
+                SESSION_KIND[kind].bubbleClass,
+              )}
+            >
+              {(() => {
+                const KindIcon = SESSION_KIND[kind].Icon
+                return <KindIcon className="size-4.5" />
+              })()}
             </span>
             <div>
-              <p className="font-display text-xl leading-tight font-bold uppercase">Entraînement</p>
+              <p className="font-display text-xl leading-tight font-bold uppercase">{SESSION_KIND[kind].label}</p>
               <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs capitalize">
                 <span>{formatDate(date)}</span>
                 <span className="inline-flex items-center gap-1">
@@ -945,7 +957,8 @@ export function HomePage() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="text-result-loss block font-bold">
-              Entraînement {session.startTime >= '17:00' ? 'de ce soir' : "d'aujourd'hui"} annulé
+              {SESSION_KIND[sessionKindOf(session)].label}{' '}
+              {session.startTime >= '17:00' ? 'de ce soir' : "d'aujourd'hui"} annulé
               <span className="font-normal"> · {session.startTime.slice(0, 5).replace(':', 'h')}</span>
             </span>
             {session.cancellationNote && (
@@ -1070,6 +1083,7 @@ export function HomePage() {
                     startTime={session.startTime}
                     endTime={session.endTime}
                     location={session.location}
+                    kind={sessionKindOf(session)}
                     todayKey={todayKey}
                   />
                 ))}

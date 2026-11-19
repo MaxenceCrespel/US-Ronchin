@@ -16,6 +16,7 @@ import {
 } from '../matches/motm-utils';
 import { Attendance, AttendanceStatus } from '../attendances/entities/attendance.entity';
 import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { SessionKind } from '../trainings/entities/training.entity';
 import { TrainingTeamAssignment } from '../team-balancing/entities/training-team-assignment.entity';
 import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
 import { pointsForResult, MAX_POINTS_PER_SESSION } from '../team-balancing/points-for-result';
@@ -231,7 +232,7 @@ export class StatsService {
   private async getPresenceStreaks(bounds: SeasonBounds | null = null): Promise<Map<string, number>> {
     const now = Date.now();
     const [sessions, attendances] = await Promise.all([
-      this.sessionsRepository.find(),
+      this.sessionsRepository.find({ where: { kind: SessionKind.TRAINING } }),
       this.attendancesRepository.find(),
     ]);
 
@@ -373,7 +374,9 @@ export class StatsService {
         // which only need match dates for season filtering) — skillScore's clean-sheet
         // component needs the actual final score, all-time, regardless of season.
         this.matchesRepository.find(),
-        this.sessionsRepository.find(),
+        // Fives are left out of every training-derived number (presence, streak, ranking
+        // points) — see SessionKind.
+        this.sessionsRepository.find({ where: { kind: SessionKind.TRAINING } }),
         this.teamAssignmentsRepository.find(),
         this.coachRatingsRepository.find(),
         this.getMotmCounts(bounds),
@@ -416,7 +419,9 @@ export class StatsService {
       (c) => matchInSeason(c.matchId) && !c.isSpectator,
     );
     const ratings = allRatings.filter((r) => matchInSeason(r.matchId));
-    const attendances = allAttendances.filter((a) => sessionInSeason(a.trainingSessionId));
+    const attendances = allAttendances.filter(
+      (a) => sessionDateById.has(a.trainingSessionId) && sessionInSeason(a.trainingSessionId),
+    );
 
     // Every past, non-cancelled session counts toward a player's attendance record — a session
     // with no answer at all defaults to absent (effectiveAttendanceStatus), it isn't just excluded.
@@ -848,6 +853,7 @@ export class StatsService {
         status: AttendanceStatus.PRESENT,
       })
       .andWhere('session.date BETWEEN :start AND :end', { start: monthStart, end: monthEnd })
+      .andWhere('session.kind = :kind', { kind: SessionKind.TRAINING })
       // Falling back to the declared status must not count a session that hasn't actually
       // happened yet — a player who simply declared "présent" for tonight's session hasn't
       // attended anything yet, and there's no real pointage to override it with either. A
@@ -889,7 +895,10 @@ export class StatsService {
    * least one *match* instead — the two trophies are settled on different evidence, so they
    * get different minimums. Shared by both stat-trophy month-grouping methods below. */
   private async getMonthsWithEnoughTrainings(): Promise<Set<string>> {
-    const sessions = await this.sessionsRepository.find({ where: { cancelled: false }, select: { date: true } });
+    const sessions = await this.sessionsRepository.find({
+      where: { cancelled: false, kind: SessionKind.TRAINING },
+      select: { date: true },
+    });
     const countByMonth = new Map<string, number>();
     for (const session of sessions) {
       const month = session.date.slice(0, 7);
@@ -922,6 +931,7 @@ export class StatsService {
       // real, not provisional.
       .where('attendance.actual_status = :status', { status: AttendanceStatus.PRESENT })
       .andWhere('session.date <= :today', { today: parisToday() })
+      .andWhere('session.kind = :kind', { kind: SessionKind.TRAINING })
       .select('attendance.userId', 'userId')
       .addSelect('user.firstName', 'firstName')
       .addSelect('user.lastName', 'lastName')
@@ -978,6 +988,7 @@ export class StatsService {
       .createQueryBuilder('session')
       .where('session.score_team0 IS NOT NULL AND session.score_team1 IS NOT NULL')
       .andWhere("to_char(session.date::date, 'YYYY-MM') < :currentMonth", { currentMonth })
+      .andWhere('session.kind = :kind', { kind: SessionKind.TRAINING })
       .getMany();
     if (scoredSessions.length === 0) return new Map();
 

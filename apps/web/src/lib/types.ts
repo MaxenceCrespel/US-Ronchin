@@ -52,10 +52,15 @@ export interface User {
 
 export type TrainingType = 'RECURRING' | 'ONE_OFF'
 
+/** Entraînement or Five — a Five runs like a training but never counts toward the training
+ * ranking, attendance stats or badges. */
+export type SessionKind = 'TRAINING' | 'FIVE'
+
 export interface Training {
   id: string
   title: string
   type: TrainingType
+  kind: SessionKind
   location: string
   dayOfWeek: number | null
   startTime: string
@@ -75,6 +80,7 @@ export interface TrainingSession {
   startTime: string
   endTime: string
   location: string
+  kind: SessionKind
   cancelled: boolean
   /** Message du coach à l'annulation (« remplacé par un five… ») — null sinon. */
   cancellationNote: string | null

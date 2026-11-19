@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Training, TrainingType } from './entities/training.entity';
+import { SessionKind, Training, TrainingType } from './entities/training.entity';
 import { TrainingSession } from './entities/training-session.entity';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
@@ -76,6 +76,7 @@ export class TrainingsService {
       dayOfWeek: dto.dayOfWeek ?? null,
       endDate: dto.endDate ?? null,
       maxPresentPlayers: dto.maxPresentPlayers ?? null,
+      kind: dto.kind ?? SessionKind.TRAINING,
       createdBy,
     });
     const saved = await this.trainingsRepository.save(training);
@@ -148,7 +149,12 @@ export class TrainingsService {
     await this.sessionsRepository
       .createQueryBuilder()
       .update(TrainingSession)
-      .set({ startTime: training.startTime, endTime: training.endTime, location: training.location })
+      .set({
+        startTime: training.startTime,
+        endTime: training.endTime,
+        location: training.location,
+        kind: training.kind,
+      })
       .where('training_id = :trainingId', { trainingId: training.id })
       .andWhere('date >= :today', { today })
       .execute();
@@ -195,6 +201,7 @@ export class TrainingsService {
           startTime: training.startTime,
           endTime: training.endTime,
           location: training.location,
+          kind: training.kind,
         }),
       );
 
@@ -298,11 +305,13 @@ export class TrainingsService {
 
     const when = describeSessionDay(session);
     const time = session.startTime.slice(0, 5).replace(':', 'h');
+    const five = session.kind === SessionKind.FIVE;
+    const [title, subject] = five ? ['Five', 'Le five'] : ['Entraînement', "L'entraînement"];
     await this.pushNotificationsService.sendToUsers(targets, {
-      title: session.cancelled ? 'Entraînement annulé' : 'Entraînement maintenu',
+      title: `${title} ${session.cancelled ? 'annulé' : 'maintenu'}`,
       body: session.cancelled
-        ? `L'entraînement ${when} (${time}) est annulé.${session.cancellationNote ? ` ${session.cancellationNote}` : ''}`
-        : `Finalement l'entraînement ${when} (${time}) a bien lieu.`,
+        ? `${subject} ${when} (${time}) est annulé.${session.cancellationNote ? ` ${session.cancellationNote}` : ''}`
+        : `Finalement ${subject.charAt(0).toLowerCase()}${subject.slice(1)} ${when} (${time}) a bien lieu.`,
       url: `/trainings?session=${session.id}`,
     });
   }

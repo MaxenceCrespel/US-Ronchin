@@ -8,7 +8,7 @@ import { MatchComposition } from '../matches/entities/match-composition.entity';
 import { MatchMotmVote } from '../matches/entities/match-motm-vote.entity';
 import { MatchDefenseBossVote } from '../matches/entities/match-defense-boss-vote.entity';
 import { isMotmRevealed } from '../matches/motm-utils';
-import { TrainingSession } from '../trainings/entities/training-session.entity';
+import { TrainingSession, ofSession, sessionNoun } from '../trainings/entities/training-session.entity';
 import { Attendance } from '../attendances/entities/attendance.entity';
 import { User, UserRole, UserStatus } from '../users/entities/user.entity';
 import { CoachPlayerRating } from '../users/entities/coach-player-rating.entity';
@@ -109,7 +109,7 @@ export class PushNotificationsScheduler {
           await this.pushNotificationsService.sendToCoaches({
             title: 'Pointage à faire',
             category: NotificationCategory.COACH,
-            body: `Le pointage réel de l'entraînement du ${session.date} n'a pas encore été fait.`,
+            body: `Le pointage réel ${ofSession(session.kind)} du ${session.date} n'a pas encore été fait.`,
             url: '/trainings',
           });
         }
@@ -154,7 +154,7 @@ export class PushNotificationsScheduler {
           {
             title: 'Présence à confirmer',
             category: NotificationCategory.ATTENDANCE_REMINDERS,
-            body: `Tu n'as pas encore répondu pour l'entraînement du ${session.date} — les équipes vont bientôt être tirées.`,
+            body: `Tu n'as pas encore répondu pour ${sessionNoun(session.kind)} du ${session.date} — les équipes vont bientôt être tirées.`,
             url: `/trainings?session=${session.id}`,
           },
         );

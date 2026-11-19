@@ -68,6 +68,7 @@ import { fetchPlayerStats } from '@/features/stats/api'
 import { hasCoachAccess } from '@/lib/roles'
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_VARIANTS, SUB_POSITION_ABBR, SUB_POSITION_LABELS } from '@/lib/labels'
 import { describeAttendanceChange } from './attendance-history'
+import { SESSION_KIND, sessionKindOf } from './session-kind'
 import { optimisticAttendance } from '@/lib/optimistic-attendance'
 import { AttendanceMark } from '@/components/AttendanceMark'
 import { attendanceSegmentClass } from '@/lib/attendance-styles'
@@ -77,6 +78,7 @@ import type {
   AttendanceStatus,
   Match,
   PlayerSubPosition,
+  SessionKind,
   TrainingSession,
   TrainingType,
 } from '@/lib/types'
@@ -182,6 +184,7 @@ function ManageTrainingsDialog() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [type, setType] = useState<TrainingType>('RECURRING')
+  const [kind, setKind] = useState<SessionKind>('TRAINING')
   const [location, setLocation] = useState('')
   const [dayOfWeek, setDayOfWeek] = useState('2')
   const [startTime, setStartTime] = useState('19:00')
@@ -195,6 +198,7 @@ function ManageTrainingsDialog() {
     setEditingId(null)
     setTitle('')
     setType('RECURRING')
+    setKind('TRAINING')
     setLocation('')
     setDayOfWeek('2')
     setStartTime('19:00')
@@ -208,6 +212,7 @@ function ManageTrainingsDialog() {
     setEditingId(training.id)
     setTitle(training.title)
     setType(training.type)
+    setKind(sessionKindOf(training))
     setLocation(training.location)
     setDayOfWeek(String(training.dayOfWeek ?? 2))
     setStartTime(training.startTime.slice(0, 5))
@@ -220,6 +225,7 @@ function ManageTrainingsDialog() {
   const formInput = () => ({
     title,
     type,
+    kind,
     location,
     dayOfWeek: type === 'RECURRING' ? Number(dayOfWeek) : undefined,
     startTime,
@@ -303,6 +309,41 @@ function ManageTrainingsDialog() {
                 onChange={(e) => setTitle(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Label id="session-kind-label">Catégorie</Label>
+              <div
+                role="radiogroup"
+                aria-labelledby="session-kind-label"
+                className="bg-muted grid grid-cols-2 gap-1 rounded-xl p-1"
+              >
+                {(['TRAINING', 'FIVE'] as const).map((value) => {
+                  const { label, Icon } = SESSION_KIND[value]
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={kind === value}
+                      onClick={() => setKind(value)}
+                      className={cn(
+                        'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors',
+                        kind === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                      )}
+                    >
+                      <Icon className="size-4" />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+              {kind === 'FIVE' && (
+                <p className="text-muted-foreground text-xs">
+                  Présences, équipes et score comme un entraînement, mais ne compte ni dans le classement ni
+                  dans l'assiduité.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -483,9 +524,14 @@ function ManageTrainingsDialog() {
                 )}
               >
                 <div className="flex items-center gap-3">
-                  <span className="bg-club-blue/10 text-club-blue flex size-9 shrink-0 items-center justify-center rounded-full">
-                    <Dumbbell className="size-4" />
-                  </span>
+                  {(() => {
+                    const { Icon, bubbleClass } = SESSION_KIND[sessionKindOf(training)]
+                    return (
+                      <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-full', bubbleClass)}>
+                        <Icon className="size-4" />
+                      </span>
+                    )
+                  })()}
                   <div className="flex flex-col">
                     <span className="text-sm font-semibold">{training.title}</span>
                     <span className="text-muted-foreground flex flex-wrap items-center gap-x-3 text-xs">
@@ -1530,6 +1576,7 @@ export function SessionCard({
   location,
   cancelled,
   cancellationNote = null,
+  kind = 'TRAINING',
   scoreTeam0 = null,
   scoreTeam1 = null,
   trainingType = null,
@@ -1543,6 +1590,7 @@ export function SessionCard({
   location: string
   cancelled: boolean
   cancellationNote?: string | null
+  kind?: SessionKind
   scoreTeam0?: number | null
   scoreTeam1?: number | null
   trainingType?: TrainingType | null
@@ -1653,6 +1701,7 @@ export function SessionCard({
   }, [myAttendance?.guests])
 
   const dimmed = cancelled || isPast
+  const KindIcon = SESSION_KIND[kind].Icon
 
   return (
     <>
@@ -1670,12 +1719,12 @@ export function SessionCard({
                 'flex size-9 shrink-0 items-center justify-center rounded-full',
                 dimmed
                   ? 'bg-background text-muted-foreground'
-                  : 'bg-club-blue/10 text-club-blue animate-net-wobble',
+                  : cn(SESSION_KIND[kind].bubbleClass, 'animate-net-wobble'),
               )}
             >
-              <Dumbbell className="size-4.5" />
+              <KindIcon className="size-4.5" />
             </span>
-            <span className={cn('text-xl', dimmed && 'text-muted-foreground')}>Entraînement</span>
+            <span className={cn('text-xl', dimmed && 'text-muted-foreground')}>{SESSION_KIND[kind].label}</span>
           </div>
           <div className={cn('flex items-center gap-1.5', inDialog && 'mr-5')}>
             {cancelled ? (
@@ -2673,12 +2722,24 @@ export function TrainingsPage() {
                   </span>
                   </button>
                   {/* On a phone the day is just a tappable date with a dot per event (blue =
-                      training, gold = match); the selected day's cards below carry the detail. */}
+                      training, green = five, gold = match); the selected day's cards below carry
+                      the detail. */}
                   <div className="flex justify-center gap-1 sm:hidden" aria-hidden="true">
                     {daySessions.map((s) => (
                       <span
                         key={s.id}
-                        className={cn('size-1.5 rounded-full', s.cancelled ? 'bg-muted-foreground/40' : selected ? 'bg-white' : 'bg-club-blue')}
+                        className={cn(
+                          'size-1.5 rounded-full',
+                          s.cancelled
+                            ? 'bg-muted-foreground/40'
+                            : sessionKindOf(s) === 'FIVE'
+                              ? selected
+                                ? 'bg-emerald-300'
+                                : SESSION_KIND.FIVE.dotClass
+                              : selected
+                                ? 'bg-white'
+                                : SESSION_KIND.TRAINING.dotClass,
+                        )}
                       />
                     ))}
                     {dayMatches.map((m) => (
@@ -2700,10 +2761,13 @@ export function TrainingsPage() {
                             ? 'bg-muted text-muted-foreground line-through'
                             : selected
                               ? 'bg-white/20 text-white hover:bg-white/30'
-                              : 'bg-club-blue/15 text-club-blue-dark hover:bg-club-blue/25',
+                              : SESSION_KIND[sessionKindOf(s)].chipClass,
                         )}
                       >
-                        <Dumbbell className="size-2.5 shrink-0" />
+                        {(() => {
+                          const ChipIcon = SESSION_KIND[sessionKindOf(s)].Icon
+                          return <ChipIcon className="size-2.5 shrink-0" />
+                        })()}
                         {s.startTime.slice(0, 5)}
                       </button>
                     ))}
@@ -2761,6 +2825,7 @@ export function TrainingsPage() {
                 location={session.location}
                 cancelled={session.cancelled}
                 cancellationNote={session.cancellationNote}
+                kind={sessionKindOf(session)}
                 scoreTeam0={session.scoreTeam0}
                 scoreTeam1={session.scoreTeam1}
                 trainingType={session.trainingType}
@@ -2783,7 +2848,7 @@ export function TrainingsPage() {
       <Dialog open={activeSessionId !== null} onOpenChange={(open) => !open && setActiveSessionId(null)}>
         <DialogContent className="max-h-[85vh] max-w-md overflow-hidden border-0 bg-transparent p-0 shadow-none">
           <DialogHeader className="sr-only">
-            <DialogTitle>Entraînement</DialogTitle>
+            <DialogTitle>{activeSession ? SESSION_KIND[sessionKindOf(activeSession)].label : 'Entraînement'}</DialogTitle>
           </DialogHeader>
           <div className="max-h-[85vh] overflow-y-auto">
             {activeSession && (
@@ -2795,6 +2860,7 @@ export function TrainingsPage() {
                 location={activeSession.location}
                 cancelled={activeSession.cancelled}
                 cancellationNote={activeSession.cancellationNote}
+                kind={sessionKindOf(activeSession)}
                 scoreTeam0={activeSession.scoreTeam0}
                 scoreTeam1={activeSession.scoreTeam1}
                 trainingType={activeSession.trainingType}
