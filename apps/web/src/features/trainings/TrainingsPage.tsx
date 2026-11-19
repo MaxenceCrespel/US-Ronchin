@@ -77,6 +77,7 @@ import type {
   AttendanceStatus,
   Match,
   PlayerSubPosition,
+  TrainingSession,
   TrainingType,
 } from '@/lib/types'
 import { isRosterPlayer } from '@/lib/roster'
@@ -2516,7 +2517,12 @@ export function TrainingsPage() {
     return map
   }, [weekMatches])
 
-  const selectedDaySessions = sessionsByDate.get(selectedDate) ?? []
+  // Within a day, a cancelled session always sinks below the ones still happening — when a
+  // training is called off and replaced (a five the same evening), the replacement is what
+  // players need to see first, whatever the two start times.
+  const bySessionOrder = (a: TrainingSession, b: TrainingSession) =>
+    a.date.localeCompare(b.date) || Number(a.cancelled) - Number(b.cancelled) || a.startTime.localeCompare(b.startTime)
+  const selectedDaySessions = [...(sessionsByDate.get(selectedDate) ?? [])].sort(bySessionOrder)
   const selectedDayMatches = matchesByDate.get(selectedDate) ?? []
   // A day with nothing on it shows what's left of the week instead of an empty box — on a
   // phone the strip above no longer lists the sessions, so this is where they're found.
@@ -2524,7 +2530,7 @@ export function TrainingsPage() {
   const selectedSessions = showRestOfWeek
     ? (sessionsQuery.data ?? [])
         .filter((s) => s.date > selectedDate)
-        .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+        .sort(bySessionOrder)
     : selectedDaySessions
   const selectedMatches = showRestOfWeek ? weekMatches.filter((m) => m.date > selectedDate) : selectedDayMatches
 
