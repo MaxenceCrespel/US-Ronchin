@@ -273,3 +273,10 @@ CVE-2026-71200
 # session going through pam_namespace; the container only runs `node` as its entrypoint, with
 # no sshd, login or su path invoking PAM. Revisit once Debian ships a fixed pam.
 CVE-2025-6020
+
+# CVE-2026-109908 (libfontenc1 1:1.1.4-1, heap overflow while reading X font encoding files) —
+# open for bookworm (and trixie) with no fixed version; only sid has 1:1.1.10-1. It needs a
+# local attacker able to feed .enc files to an X server; the image runs no X server (Chrome is
+# only ever launched headless by the FFF scraper) and loads no user-supplied font files.
+# Revisit once Debian ships a fixed libfontenc for bookworm.
+CVE-2026-109908
