@@ -280,3 +280,11 @@ CVE-2025-6020
 # only ever launched headless by the FFF scraper) and loads no user-supplied font files.
 # Revisit once Debian ships a fixed libfontenc for bookworm.
 CVE-2026-109908
+
+# CVE-2026-107494 (libssl3 3.0.22-1~deb12u2, remote QUIC peer exhausting memory with endless
+# RETIRE_CONNECTION_ID frames) — unfixed everywhere in Debian (bookworm through sid). It only
+# concerns OpenSSL's QUIC stack, which the 3.0 branch shipped in bookworm doesn't even contain
+# (QUIC landed in OpenSSL 3.2), and nothing in the image speaks QUIC: Node uses its own bundled
+# OpenSSL and the API serves plain HTTP behind the reverse proxy. Revisit once Debian ships a
+# fixed openssl.
+CVE-2026-107494
