@@ -2,6 +2,7 @@ import { bearer, createTestApp, TestApp, TestUser } from './test-utils/test-app'
 import { UserRole } from './users/entities/user.entity';
 import { FffScraperService } from './fff-sync/fff-scraper.service';
 import { Match } from './matches/entities/match.entity';
+import { PushNotificationsService } from './push-notifications/push-notifications.service';
 
 const scraped = (over: Record<string, unknown> = {}) => ({
   fffMatchId: 'F1',
@@ -28,13 +29,14 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     scrapeMatches: jest.fn(),
     scrapeVenue: jest.fn(),
     scrapeStandings: jest.fn(),
+    scrapeChampionship: jest.fn(),
     scrapeChampionshipCalendar: jest.fn(),
     scrapeCupResults: jest.fn(),
   };
   const KEY = { 'x-sync-api-key': 'test-sync-api-key' };
   const TEAM_URL = 'https://epreuves.fff.fr/competition/club/12345-us-ronchin/equipe/abc';
-  const CHAMPIONSHIP_URL = 'https://flandres.fff.fr/competitions?id=455070&poule=1&phase=1&type=ch';
-  const CUP_URL = 'https://flandres.fff.fr/competitions?id=459041&poule=1&phase=1&type=cp';
+  const CHAMPIONSHIP_URL = 'https://epreuves.fff.fr/competition/engagement/455070-seniors-reserve-niv1/phase/1/1/accueil';
+  const CUP_URL = 'https://epreuves.fff.fr/competition/engagement/459041-coupe-des-flandres-reserve/phase/1/1/accueil';
 
   beforeAll(async () => {
     t = await createTestApp([{ provide: FffScraperService, useValue: scraper }]);
@@ -107,7 +109,8 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
 
   it('standings: sync, import, read and logs', async () => {
     const row = (rank: number, teamName: string) => ({ rank, teamName, points: 30 - rank, played: 10, won: 6, drawn: 2, lost: 2, goalsFor: 20, goalsAgainst: 10, goalDifference: 10 });
-    scraper.scrapeStandings.mockResolvedValue([row(1, 'FC Leader'), row(2, 'US RONCHIN')]);
+    // With a championship link configured, the standings come from the championship page.
+    scraper.scrapeChampionship.mockResolvedValue({ standings: [row(1, 'FC Leader'), row(2, 'US RONCHIN')], matches: [] });
     const sync = await t.http().post('/api/standings/sync').set(bearer(coach.token));
     expect(sync.status).toBe(201);
     expect(sync.body).toMatchObject({ status: 'SUCCESS', teamsFound: 2 });
@@ -116,7 +119,9 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
     expect(table.body[1].isUs).toBe(true);
     expect(table.body[0].isUs).toBe(false);
 
-    scraper.scrapeStandings.mockRejectedValue(new Error('blocked'));
+    expect(scraper.scrapeStandings).not.toHaveBeenCalled();
+
+    scraper.scrapeChampionship.mockRejectedValue(new Error('blocked'));
     expect((await t.http().post('/api/standings/sync').set(bearer(coach.token))).body).toMatchObject({ status: 'ERROR', errorMessage: 'blocked' });
 
     const imp = await t.http().post('/api/standings/import').set(KEY).send({ standings: [row(1, 'A'), row(2, 'B'), row(3, 'C')] });
@@ -235,5 +240,42 @@ describe('FFF sync & standings (real stack, scraper faked)', () => {
       .send({ matches: [row({ fffMatchId: 'C3', homeTeam: 'FC Quatre', awayTeam: 'FC Cinq' })] });
     expect(imp.body).toMatchObject({ importedCount: 1 });
     expect((await t.http().get('/api/standings/cup-matches').set(bearer(player.token))).body).toHaveLength(1);
+  });
+
+  it('cup matches: notifies the squad once when our next round is drawn', async () => {
+    const push = jest.spyOn(t.get<PushNotificationsService>(PushNotificationsService), 'sendToUsers');
+    const cup = (fffMatchId: string, round: string, date: string, homeTeam: string, awayTeam: string) => ({
+      fffMatchId, date, round, homeTeam, awayTeam, scoreHome: null, scoreAway: null, played: false,
+    });
+    const firstRound = [cup('R1', '1er tour', '2026-10-18', 'LILLE AFS GUINEE', 'RONCHIN US'), cup('R1B', '1er tour', '2026-10-18', 'FC Deux', 'FC Trois')];
+    const importCup = (matches: unknown[]) => t.http().post('/api/standings/cup-matches/import').set(KEY).send({ matches });
+
+    await importCup(firstRound);
+    push.mockClear();
+    await importCup(firstRound);
+    expect(push).not.toHaveBeenCalled();
+
+    // Other clubs' pairings of the new round don't count, only ours.
+    const secondRound = [...firstRound, cup('R2', '2eme tour', '2027-02-21', 'RONCHIN US', 'FC Six'), cup('R2B', '2eme tour', '2027-02-21', 'FC Deux', 'FC Sept')];
+    expect((await importCup(secondRound)).body).toMatchObject({ importedCount: 4 });
+    expect(push).toHaveBeenCalledTimes(1);
+    const [targets, payload] = push.mock.calls[0];
+    expect(targets).toEqual(expect.arrayContaining([player.user.id, coach.user.id]));
+    expect(payload).toEqual({
+      title: 'Coupe : 2eme tour',
+      body: 'Tirage connu : on reçoit FC Six le dimanche 21/02.',
+      url: '/coupe',
+    });
+
+    push.mockClear();
+    await importCup(secondRound);
+    expect(push).not.toHaveBeenCalled();
+
+    // A push failure never blocks the import.
+    push.mockRejectedValueOnce(new Error('push down'));
+    const thirdRound = [...secondRound, cup('R3', '3eme tour', '2027-03-21', 'FC Huit', 'RONCHIN US')];
+    expect((await importCup(thirdRound)).body).toMatchObject({ importedCount: 5 });
+    expect(push).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ body: 'Tirage connu : on va chez FC Huit le dimanche 21/03.' }));
+    push.mockRestore();
   });
 });

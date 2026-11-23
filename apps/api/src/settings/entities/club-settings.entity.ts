@@ -9,14 +9,13 @@ export class ClubSettings {
   @Column({ name: 'fff_team_url', type: 'varchar', nullable: true })
   fffTeamUrl: string | null;
 
-  /** The district's own competition page (e.g. flandres.fff.fr/competitions?...&type=ch) —
-   * unlike fffTeamUrl's per-team calendar, this lists every pairing of the poule grouped by
-   * journée directly, which is what "Résultats de la poule" actually needs. */
+  /** The championship's page on epreuves.fff.fr (".../competition/engagement/{id}-{slug}/phase/
+   * {phase}/{poule}/...") — unlike fffTeamUrl's per-team calendar, it covers every match of the
+   * poule and the standings (see fff-competition.ts). */
   @Column({ name: 'fff_championship_url', type: 'varchar', nullable: true })
   fffChampionshipUrl: string | null;
 
-  /** Same district competition page, but the cup draw (...&type=cp) — one round at a time,
-   * walked backward to "1er tour" since the next round doesn't exist until it's drawn. */
+  /** Same kind of page for the cup — every round drawn so far. */
   @Column({ name: 'fff_cup_url', type: 'varchar', nullable: true })
   fffCupUrl: string | null;
 

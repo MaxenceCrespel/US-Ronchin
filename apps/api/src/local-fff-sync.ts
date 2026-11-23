@@ -127,8 +127,11 @@ async function main() {
   }
 
   if (doStandings) {
+    // The championship page gives both the standings and every pool match in one load; the
+    // team page's own standings tab is only the fallback when no championship link is set.
     console.log('Scraping du classement...');
-    const standings = await scraper.scrapeStandings(teamUrl);
+    const championship = championshipUrl ? await scraper.scrapeChampionship(championshipUrl) : null;
+    const standings = championship?.standings ?? (await scraper.scrapeStandings(teamUrl));
     console.log(`${standings.length} équipe(s) trouvée(s).`);
 
     console.log('Envoi du classement vers la prod...');
@@ -140,9 +143,8 @@ async function main() {
     );
     console.log(`Classement : ${standingsLog.status} — ${standingsLog.teamsFound} équipe(s).`);
 
-    if (championshipUrl) {
-      console.log('Scraping des résultats de la poule...');
-      const poolMatches = await scraper.scrapeChampionshipCalendar(championshipUrl);
+    if (championship) {
+      const poolMatches = championship.matches;
       console.log(`${poolMatches.length} match(s) de poule trouvé(s).`);
 
       console.log('Envoi des résultats de la poule vers la prod...');

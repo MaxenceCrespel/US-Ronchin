@@ -1,4 +1,5 @@
 import { IsOptional, IsUrl, Matches } from 'class-validator';
+import { COMPETITION_URL_EXAMPLE, COMPETITION_URL_PATTERN } from '../../fff-sync/fff-competition';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -16,21 +17,18 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @IsUrl({ protocols: ['https'], require_protocol: true })
-  // The district's own competition page — ".fff.fr" since each district has its own
-  // subdomain (flandres.fff.fr for us, something else elsewhere), "/competitions" with a
-  // "type=ch" (championnat) query param; poule/phase/tab vary and don't matter here, the
-  // scraper forces tab=calendar itself.
-  @Matches(/^https:\/\/[a-z0-9-]+\.fff\.fr\/competitions\?.*[?&]type=ch(&|$)/, {
-    message:
-      "L'URL doit être celle de la compétition championnat sur le site du district (ex: https://flandres.fff.fr/competitions?id=...&type=ch).",
+  // The championship's page on epreuves.fff.fr — competition, phase and poule are read from the
+  // path, whatever tab follows (see parseCompetitionUrl).
+  @Matches(COMPETITION_URL_PATTERN, {
+    message: `Le lien doit être celui de la page du championnat sur epreuves.fff.fr (ex : ${COMPETITION_URL_EXAMPLE}).`,
   })
   fffChampionshipUrl?: string;
 
   @IsOptional()
   @IsUrl({ protocols: ['https'], require_protocol: true })
-  @Matches(/^https:\/\/[a-z0-9-]+\.fff\.fr\/competitions\?.*[?&]type=cp(&|$)/, {
+  @Matches(COMPETITION_URL_PATTERN, {
     message:
-      "L'URL doit être celle de la compétition coupe sur le site du district (ex: https://flandres.fff.fr/competitions?id=...&type=cp).",
+      'Le lien doit être celui de la page de la coupe sur epreuves.fff.fr (ex : https://epreuves.fff.fr/competition/engagement/459041-coupe-des-flandres-reserve/phase/1/1/accueil).',
   })
   fffCupUrl?: string;
 }

@@ -63,31 +63,36 @@ export function ClubSettingsCard() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="fffChampionshipUrl">URL du championnat sur le site du district</Label>
+            <Label htmlFor="fffChampionshipUrl">Lien du championnat</Label>
             <Input
               id="fffChampionshipUrl"
               type="url"
-              placeholder="https://flandres.fff.fr/competitions?id=...&type=ch"
+              placeholder="https://epreuves.fff.fr/competition/engagement/..."
               value={fffChampionshipUrl}
               onChange={(e) => setFffChampionshipUrl(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
-              La page "Résultats" ou "Calendrier" de notre poule sur le site du district (ex: flandres.fff.fr) —
-              utilisée pour afficher les matchs de toutes les équipes, journée par journée.
+              Exemple :{' '}
+              <code className="break-all text-xs">
+                https://epreuves.fff.fr/competition/engagement/455070-seniors-reserve-niv1/phase/1/1/accueil
+              </code>
             </p>
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="fffCupUrl">URL de la coupe sur le site du district</Label>
+            <Label htmlFor="fffCupUrl">Lien de la coupe</Label>
             <Input
               id="fffCupUrl"
               type="url"
-              placeholder="https://flandres.fff.fr/competitions?id=...&type=cp"
+              placeholder="https://epreuves.fff.fr/competition/engagement/..."
               value={fffCupUrl}
               onChange={(e) => setFffCupUrl(e.target.value)}
             />
             <p className="text-muted-foreground text-xs">
-              Même principe pour notre coupe — le parcours se complète tour par tour au fil des matchs tirés au sort.
+              Exemple :{' '}
+              <code className="break-all text-xs">
+                https://epreuves.fff.fr/competition/engagement/459041-coupe-des-flandres-reserve/phase/1/1/accueil
+              </code>
             </p>
           </div>
 

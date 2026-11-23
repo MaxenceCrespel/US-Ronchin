@@ -7,6 +7,24 @@ import type { ScrapedMatch } from './scraped-match';
 import type { ScrapedStanding } from './scraped-standing';
 import type { ScrapedPoolMatch } from './scraped-pool-match';
 import type { ScrapedCupMatch } from './scraped-cup-match';
+import {
+  COMPETITION_URL_EXAMPLE,
+  type CompetitionTarget,
+  competitionType,
+  dedupeMatches,
+  type FffMatchDetail,
+  type Journee,
+  journeesFromState,
+  matchesApiPath,
+  matchesFromBody,
+  matchesFromState,
+  parseCompetitionUrl,
+  standingsApiPath,
+  standingsBodyFromState,
+  toCupMatches,
+  toPoolMatches,
+  toStandings,
+} from './fff-competition';
 
 chromium.use(StealthPlugin());
 
@@ -56,6 +74,10 @@ const COOKIE_AGREE_SELECTOR = '#didomi-notice-agree-button';
 // default position (confirmed live: default = "juin", prev enabled, next
 // disabled — going forward alone misses the ~17 earlier matches entirely).
 const MAX_MONTHS_TO_PAGINATE = 12;
+// Week arrows on the championship/cup results page (see loadCompetition).
+const COMPETITION_PREV_SELECTOR = 'button.prev-button';
+const COMPETITION_NEXT_SELECTOR = 'button.next-button';
+const MAX_WEEKS_TO_PAGINATE = 45;
 
 // Angular's fr-FR abbreviated month names, as rendered by epreuves.fff.fr.
 // Confirmed against a real page: the date line reads e.g. "dim 21 jun 2026 -
@@ -88,86 +110,6 @@ const MONTH_PREFIXES: Record<string, number> = {
   déc: 12,
 };
 const DATE_TEXT_PATTERN = /(\d{1,2})\s+([a-zéû]{3,9})\.?\s+(\d{4})(?:\s*-\s*(\d{1,2})h(\d{2}))?/i;
-
-// Real DOM structure confirmed live against flandres.fff.fr (Coupe des Flandres Réserve,
-// Seniors Réserve Niv1):
-//   app-confrontation .confrontation  -> one match
-//     .date                           -> "dimanche 18 octobre 2026 - 09H15"
-//     .equipe1 / .equipe2             -> `.logo img[src]` (club crest, e.g.
-//                                        ".../phlogos/BC501341.jpg") and `.name` -> "TEAM
-//                                        NAME  3" — a team name AND a trailing number that is
-//                                        NOT the score (confirmed on both pages, including via
-//                                        a match's own detail page, where the exact same
-//                                        number sits next to the team name while the page's
-//                                        real score element, `.result-numbers`, is empty for
-//                                        an unplayed match — this number is some other
-//                                        per-team badge, unrelated to any single match). The
-//                                        real score is `.score_match img.number[src]`, one
-//                                        <img> per side in home-then-away order, filename
-//                                        ".../origin/{digit}.png" — present only once a result
-//                                        exists; both `.score_match` and this image are
-//                                        structurally present on the cup page too (confirmed
-//                                        via its match-detail page), it just hadn't shown a
-//                                        played match yet when this was first built, which is
-//                                        what led to the wrong assumption that the name's
-//                                        trailing number was the cup's score.
-//     ancestor <a href>               -> "/competitions?...&match_id=79686894"
-// Championship (tab=calendar): `.results-content` wraps one journée each, `h3` holds "Journée
-// N", lazy-loaded via infinite scroll (confirmed: 6 confrontations on first paint, stable at
-// 90 across 18 journées only after repeated scrollTo(bottom)).
-// Cup (tab=resultat): one round visible at a time, `.date_tour` holds its label (e.g. "1er
-// tour"), `.text-center > a:first-child`/`:last-child` are the prev/next round arrows —
-// `hidden` (not `disabled`) marks an end, e.g. both hidden when only the first round exists
-// yet (confirmed live: this club's cup run had just started).
-const CONFRONTATION_SELECTOR = 'app-confrontation .confrontation';
-const JOURNEE_GROUP_SELECTOR = '.results-content';
-const ROUND_LABEL_SELECTOR = '.date_tour';
-const ROUND_PREV_SELECTOR = '.text-center > a:first-child';
-const MAX_ROUNDS_TO_PAGINATE = 15;
-const MAX_SCROLL_ATTEMPTS = 40;
-
-function assertDistrictCompetitionUrl(url: string): void {
-  if (!/^https:\/\/[a-z0-9-]+\.fff\.fr\/competitions\?/i.test(url)) {
-    throw new Error(
-      "URL de compétition FFF invalide — elle doit ressembler à https://<district>.fff.fr/competitions?id=....",
-    );
-  }
-}
-
-function withTab(configuredUrl: string, tab: string): string {
-  const url = new URL(configuredUrl);
-  url.searchParams.set('tab', tab);
-  return url.toString();
-}
-
-interface RawConfrontation {
-  dateText: string;
-  homeText: string;
-  awayText: string;
-  homeLogoSrc: string | null;
-  awayLogoSrc: string | null;
-  matchHref: string | null;
-  /** `.score_match img.number[src]`, split into home/away groups at the " - " text node
-   * between them — see the big doc comment above CONFRONTATION_SELECTOR for why this, not the
-   * `.name` text, is the real score. A score can be multi-digit (e.g. "10 - 1"): grouping by
-   * that text-node split rather than assuming exactly one image per side is the fix for a real
-   * bug confirmed live (Bondues 10-1 over Marquette, journée 2) — the old "exactly 2 images
-   * total" assumption silently dropped it as unplayed since 3 digit images isn't 2. */
-  scoreHomeDigitSrcs: string[];
-  scoreAwayDigitSrcs: string[];
-}
-
-interface ParsedConfrontation {
-  fffMatchId: string | null;
-  date: string;
-  homeTeam: string;
-  awayTeam: string;
-  homeLogo: string | null;
-  awayLogo: string | null;
-  scoreHome: number | null;
-  scoreAway: number | null;
-  played: boolean;
-}
 
 interface RawMatchBlock {
   dateText: string;
@@ -326,13 +268,44 @@ export class FffScraperService {
     return [...blocksByKey.values()];
   }
 
-  /** Every match of the poule for the season, grouped by journée — straight from the
-   * district's own competition page (see the big doc comment above CONFRONTATION_SELECTOR),
-   * not derived from our own team's calendar. Own browser/page session, same setup as
-   * scrapeMatches, so a failure or a slow run in one never affects the other. */
+  /** Every match of our poule for the season plus the latest standings table, from the
+   * championship's page on epreuves.fff.fr (see fff-competition.ts). */
+  async scrapeChampionship(
+    configuredUrl: string,
+  ): Promise<{ standings: ScrapedStanding[]; matches: ScrapedPoolMatch[] }> {
+    const loaded = await this.loadCompetition(configuredUrl, 'Championnat');
+    return { standings: toStandings(loaded.standingsBody), matches: toPoolMatches(loaded.matches) };
+  }
+
   async scrapeChampionshipCalendar(configuredUrl: string): Promise<ScrapedPoolMatch[]> {
-    assertDistrictCompetitionUrl(configuredUrl);
-    const url = withTab(configuredUrl, 'calendar');
+    return (await this.scrapeChampionship(configuredUrl)).matches;
+  }
+
+  /** Every round of the cup drawn so far — a round that isn't drawn yet simply has no match. */
+  async scrapeCupResults(configuredUrl: string): Promise<ScrapedCupMatch[]> {
+    const loaded = await this.loadCompetition(configuredUrl, 'Coupe');
+    return toCupMatches(loaded.matches);
+  }
+
+  /**
+   * Loads the competition page once (same browser setup as the other scrapers, so it gets past
+   * the site's protection the same way), reads what the page itself embedded, then asks the
+   * site's own `/api/data/matches` route for each journée/round from inside that page. If
+   * those calls are refused, falls back to clicking through the weeks with the page's own
+   * arrows and keeping the responses the page receives.
+   */
+  private async loadCompetition(
+    configuredUrl: string,
+    expectedType: 'Championnat' | 'Coupe',
+  ): Promise<{ matches: FffMatchDetail[]; standingsBody: unknown }> {
+    const what = expectedType === 'Coupe' ? 'de la coupe' : 'du championnat';
+    const target = parseCompetitionUrl(configuredUrl);
+    if (!target) {
+      throw new Error(
+        `Lien ${what} invalide — colle l'adresse de la page sur epreuves.fff.fr, du genre ${COMPETITION_URL_EXAMPLE}.`,
+      );
+    }
+
     const browser = await chromium.launch({
       channel: 'chrome',
       args: ['--disable-blink-features=AutomationControlled'],
@@ -348,133 +321,127 @@ export class FffScraperService {
       });
       const page = await context.newPage();
 
-      const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      const capturedMatchBodies: unknown[] = [];
+      page.on('response', (res) => {
+        if (!res.ok() || !res.url().includes('/api/data/matches?')) return;
+        res
+          .json()
+          .then((body) => capturedMatchBodies.push(body))
+          .catch(() => undefined);
+      });
+
+      const response = await page.goto(configuredUrl, { waitUntil: 'networkidle', timeout: 30000 });
       if (response && !response.ok()) {
         throw new Error(
-          `La page du championnat a répondu avec le code ${response.status()} — probablement un blocage anti-bot.`,
+          `La page ${what} a répondu avec le code ${response.status()} — probablement un blocage anti-bot.`,
         );
       }
       await this.dismissCookieBanner(page);
-      await page.waitForSelector(CONFRONTATION_SELECTOR, { timeout: 15000 }).catch(() => undefined);
 
-      // Journées lazy-load as the page scrolls ("infinitescroll") — keep scrolling to the
-      // bottom until the confrontation count stops growing (confirmed live: 6 on first
-      // paint, stable at 90 across a full 18-journée season only once fully scrolled).
-      let lastCount = -1;
-      for (let i = 0; i < MAX_SCROLL_ATTEMPTS; i++) {
-        const count = await page.locator(CONFRONTATION_SELECTOR).count();
-        if (count === lastCount) break;
-        lastCount = count;
-        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-        await page.waitForTimeout(1000);
+      const rawState = await page.$eval('#ng-state', (el) => el.textContent ?? '').catch(() => null);
+      let state: Record<string, unknown>;
+      try {
+        state = JSON.parse(rawState ?? '');
+      } catch {
+        throw new Error(`La page ${what} n'expose plus ses données (ng-state) — sa structure a peut-être changé.`);
       }
 
-      const groups = await page.$$eval(JOURNEE_GROUP_SELECTOR, (sections) =>
-        sections.map((section) => ({
-          label: section.querySelector('h3')?.textContent?.trim() || null,
-          confrontations: Array.from(section.querySelectorAll('app-confrontation .confrontation')).map(
-            (block) => {
-              const anchor = block.closest('a');
-              // A score can be multi-digit ("10 - 1"): group the `.score_match img.number`
-              // elements by which side of the " - " text node they fall on, rather than
-              // assuming exactly one image per side.
-              const scoreHomeDigitSrcs: string[] = [];
-              const scoreAwayDigitSrcs: string[] = [];
-              const scoreContainer = block.querySelector('.score_match');
-              let side: 'home' | 'away' = 'home';
-              for (const child of Array.from(scoreContainer?.childNodes ?? [])) {
-                if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).matches('img.number')) {
-                  (side === 'home' ? scoreHomeDigitSrcs : scoreAwayDigitSrcs).push(
-                    (child as HTMLImageElement).src,
-                  );
-                } else if (child.nodeType === Node.TEXT_NODE && child.textContent?.includes('-')) {
-                  side = 'away';
-                }
-              }
-              return {
-                dateText: block.querySelector('.date')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-                homeText: block.querySelector('.equipe1 .name')?.textContent ?? '',
-                awayText: block.querySelector('.equipe2 .name')?.textContent ?? '',
-                homeLogoSrc: block.querySelector<HTMLImageElement>('.equipe1 .logo img')?.src ?? null,
-                awayLogoSrc: block.querySelector<HTMLImageElement>('.equipe2 .logo img')?.src ?? null,
-                matchHref: anchor?.getAttribute('href') ?? null,
-                scoreHomeDigitSrcs,
-                scoreAwayDigitSrcs,
-              };
-            },
-          ),
-        })),
+      const type = competitionType(state, target);
+      if (type && type !== expectedType) {
+        throw new Error(
+          `Le lien ${what} pointe vers une compétition de type « ${type} » — vérifie les liens dans Paramètres.`,
+        );
+      }
+
+      const journees = journeesFromState(state, target);
+      if (journees.length === 0) {
+        throw new Error(`Aucune journée trouvée sur la page ${what} — vérifie la poule dans le lien.`);
+      }
+
+      const collected: FffMatchDetail[] = matchesFromState(state);
+      const failed: Journee[] = [];
+      for (const journee of journees) {
+        const matches = await this.fetchJourneeMatches(page, target, journee.pjNo);
+        if (matches === null) failed.push(journee);
+        else collected.push(...matches);
+      }
+
+      if (failed.length > 0) {
+        this.logger.warn(
+          `${failed.length} journée(s) ${what} non récupérée(s) directement — parcours semaine par semaine.`,
+        );
+        await this.walkCompetitionWeeks(page);
+        collected.push(...capturedMatchBodies.flatMap(matchesFromBody));
+      }
+
+      const matches = dedupeMatches(collected, target);
+      const covered = new Set(matches.map((m) => String(m.journee?.pjNo ?? '')));
+      const today = new Date().toISOString().slice(0, 10);
+      // A cup round that isn't drawn yet legitimately has no match; a championship journée
+      // always does, so a missing one there means the data is incomplete. Better to fail the
+      // run than replace the stored calendar with a partial one.
+      const missing = failed.filter(
+        (j) => !covered.has(j.pjNo) && (expectedType === 'Championnat' || (j.date !== null && j.date <= today)),
       );
-
-      const matches = new Map<string, ScrapedPoolMatch>();
-      for (const group of groups) {
-        for (const raw of group.confrontations) {
-          const parsed = this.parseRawConfrontation(raw);
-          if (!parsed) continue;
-          const key = parsed.fffMatchId ?? `${parsed.date}-${parsed.homeTeam}-${parsed.awayTeam}`;
-          matches.set(key, { ...parsed, matchday: group.label });
-        }
+      if (missing.length > 0) {
+        throw new Error(
+          `Données ${what} incomplètes : ${missing.map((j) => j.label).join(', ')} non récupérée(s).`,
+        );
       }
-      return [...matches.values()];
+
+      const standingsBody =
+        standingsBodyFromState(state) ??
+        (expectedType === 'Championnat' ? await this.fetchJson(page, standingsApiPath(target)) : null);
+
+      return { matches, standingsBody };
     } finally {
       await browser.close();
     }
   }
 
-  /** The cup's own elimination path, one round at a time — the next round doesn't exist on the
-   * site until it's actually drawn, so this starts at whatever round is currently shown and
-   * walks backward to "1er tour" rather than assuming a fixed number of rounds up front. */
-  async scrapeCupResults(configuredUrl: string): Promise<ScrapedCupMatch[]> {
-    assertDistrictCompetitionUrl(configuredUrl);
-    const url = withTab(configuredUrl, 'resultat');
-    const browser = await chromium.launch({
-      channel: 'chrome',
-      args: ['--disable-blink-features=AutomationControlled'],
-    });
-    try {
-      const context = await browser.newContext({
-        locale: 'fr-FR',
-        timezoneId: 'Europe/Paris',
-        viewport: { width: 1366, height: 900 },
-        extraHTTPHeaders: {
-          'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        },
-      });
-      const page = await context.newPage();
+  /** All matches of one journée, following the API's pagination; null when the call fails. */
+  private async fetchJourneeMatches(
+    page: Page,
+    target: CompetitionTarget,
+    pjNo: string,
+  ): Promise<FffMatchDetail[] | null> {
+    const matches: FffMatchDetail[] = [];
+    for (let pageNumber = 1; pageNumber <= 10; pageNumber++) {
+      const body = await this.fetchJson(page, matchesApiPath(target, pjNo, pageNumber));
+      if (body === null) return null;
+      const items = matchesFromBody(body);
+      matches.push(...items);
+      const total = Number((body as Record<string, unknown>)['hydra:totalItems']);
+      if (items.length === 0 || !(total > matches.length)) break;
+    }
+    return matches;
+  }
 
-      const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-      if (response && !response.ok()) {
-        throw new Error(
-          `La page de la coupe a répondu avec le code ${response.status()} — probablement un blocage anti-bot.`,
-        );
+  /** Same-origin call made from inside the loaded page, exactly like the site's own code. */
+  private fetchJson(page: Page, path: string): Promise<unknown> {
+    return page.evaluate(async (url) => {
+      try {
+        const res = await fetch(url, {
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json, text/plain, */*' },
+        });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
       }
-      await this.dismissCookieBanner(page);
-      await page.waitForSelector(CONFRONTATION_SELECTOR, { timeout: 15000 }).catch(() => undefined);
+    }, path);
+  }
 
-      const matches = new Map<string, ScrapedCupMatch>();
-      const collectCurrentRound = async () => {
-        const roundLabel =
-          (await page.locator(ROUND_LABEL_SELECTOR).first().textContent().catch(() => null))?.trim() || 'Tour';
-        const raws = await this.readConfrontations(page);
-        for (const raw of raws) {
-          const parsed = this.parseRawConfrontation(raw);
-          if (!parsed) continue;
-          const key = parsed.fffMatchId ?? `${roundLabel}-${parsed.date}-${parsed.homeTeam}-${parsed.awayTeam}`;
-          matches.set(key, { ...parsed, round: roundLabel });
-        }
-      };
-
-      await collectCurrentRound();
-      for (let round = 0; round < MAX_ROUNDS_TO_PAGINATE; round++) {
-        const moved = await this.goToPreviousRound(page);
+  /** The results page shows one week at a time with "navigation précédente/suivante" arrows:
+   * walk back to the first week, then forward to the last, so the page loads every week. */
+  private async walkCompetitionWeeks(page: Page): Promise<void> {
+    for (const selector of [COMPETITION_PREV_SELECTOR, COMPETITION_NEXT_SELECTOR]) {
+      for (let step = 0; step < MAX_WEEKS_TO_PAGINATE; step++) {
+        const moved = await this.clickIfEnabled(page, selector);
         if (!moved) break;
         await page.waitForTimeout(1200);
-        await collectCurrentRound();
       }
-
-      return [...matches.values()];
-    } finally {
-      await browser.close();
     }
   }
 
@@ -672,25 +639,23 @@ export class FffScraperService {
     }
   }
 
-  private async goToNextMonth(page: Page): Promise<boolean> {
-    const button = await page.$(NEXT_BUTTON_SELECTOR);
-    if (!button) return false;
-
-    const disabled = await button.evaluate((el) => (el as HTMLButtonElement).disabled).catch(() => true);
-    if (disabled) return false;
-
-    await this.clickNavButton(page, NEXT_BUTTON_SELECTOR);
-    return true;
+  private goToNextMonth(page: Page): Promise<boolean> {
+    return this.clickIfEnabled(page, NEXT_BUTTON_SELECTOR);
   }
 
-  private async goToPreviousMonth(page: Page): Promise<boolean> {
-    const button = await page.$(PREV_BUTTON_SELECTOR);
+  private goToPreviousMonth(page: Page): Promise<boolean> {
+    return this.clickIfEnabled(page, PREV_BUTTON_SELECTOR);
+  }
+
+  /** Clicks a navigation arrow unless it's missing or disabled; false when it can't move. */
+  private async clickIfEnabled(page: Page, selector: string): Promise<boolean> {
+    const button = await page.$(selector);
     if (!button) return false;
 
     const disabled = await button.evaluate((el) => (el as HTMLButtonElement).disabled).catch(() => true);
     if (disabled) return false;
 
-    await this.clickNavButton(page, PREV_BUTTON_SELECTOR);
+    await this.clickNavButton(page, selector);
     return true;
   }
 
@@ -776,91 +741,6 @@ export class FffScraperService {
       matchDetailUrl: block.matchHref ? `https://epreuves.fff.fr${block.matchHref}/match` : null,
       surface: null,
     };
-  }
-
-  private async readConfrontations(page: Page): Promise<RawConfrontation[]> {
-    return page.$$eval(CONFRONTATION_SELECTOR, (blocks) =>
-      blocks.map((block) => {
-        const anchor = block.closest('a');
-        const scoreHomeDigitSrcs: string[] = [];
-        const scoreAwayDigitSrcs: string[] = [];
-        const scoreContainer = block.querySelector('.score_match');
-        let side: 'home' | 'away' = 'home';
-        for (const child of Array.from(scoreContainer?.childNodes ?? [])) {
-          if (child.nodeType === Node.ELEMENT_NODE && (child as HTMLElement).matches('img.number')) {
-            (side === 'home' ? scoreHomeDigitSrcs : scoreAwayDigitSrcs).push((child as HTMLImageElement).src);
-          } else if (child.nodeType === Node.TEXT_NODE && child.textContent?.includes('-')) {
-            side = 'away';
-          }
-        }
-        return {
-          dateText: block.querySelector('.date')?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
-          homeText: block.querySelector('.equipe1 .name')?.textContent ?? '',
-          awayText: block.querySelector('.equipe2 .name')?.textContent ?? '',
-          homeLogoSrc: block.querySelector<HTMLImageElement>('.equipe1 .logo img')?.src ?? null,
-          awayLogoSrc: block.querySelector<HTMLImageElement>('.equipe2 .logo img')?.src ?? null,
-          matchHref: anchor?.getAttribute('href') ?? null,
-          scoreHomeDigitSrcs,
-          scoreAwayDigitSrcs,
-        };
-      }),
-    );
-  }
-
-  /** Just the team name — the trailing number in this same text is NOT the score (see the big
-   * doc comment above CONFRONTATION_SELECTOR) and is discarded entirely. */
-  private parseConfrontationName(raw: string): string {
-    const text = raw.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-    const match = /^(.*\S)\s+\d+$/.exec(text);
-    return match ? match[1] : text;
-  }
-
-  /** Shared by the championship-calendar and cup-results scrapers — both render the exact same
-   * `.confrontation` markup, just grouped differently (journée vs round, added by the caller).
-   * `played` requires both score images to resolve — a single one (a forfeit?) isn't a result
-   * worth trusting either way. */
-  private parseRawConfrontation(raw: RawConfrontation): ParsedConfrontation | null {
-    const dateMatch = this.parseDateText(raw.dateText);
-    if (!dateMatch) return null;
-    const homeTeam = this.parseConfrontationName(raw.homeText);
-    const awayTeam = this.parseConfrontationName(raw.awayText);
-    if (!homeTeam || !awayTeam) return null;
-
-    // Each side's digit images concatenate into a (possibly multi-digit) number — "10 - 1"
-    // renders as two <img> on the home side, one on the away side, not one each.
-    const parseDigits = (srcs: string[]): number | null => {
-      if (srcs.length === 0) return null;
-      const digits = srcs.map((src) => /origin\/(\d+)\.png/.exec(src)?.[1]);
-      if (digits.some((d) => d === undefined)) return null;
-      return Number(digits.join(''));
-    };
-    const scoreHome = parseDigits(raw.scoreHomeDigitSrcs);
-    const scoreAway = parseDigits(raw.scoreAwayDigitSrcs);
-    const played = scoreHome !== null && scoreAway !== null;
-    const fffMatchId = /match_id=(\d+)/.exec(raw.matchHref ?? '')?.[1] ?? null;
-
-    return {
-      fffMatchId,
-      date: dateMatch.date,
-      homeTeam,
-      awayTeam,
-      homeLogo: raw.homeLogoSrc,
-      awayLogo: raw.awayLogoSrc,
-      scoreHome: played ? scoreHome : null,
-      scoreAway: played ? scoreAway : null,
-      played,
-    };
-  }
-
-  private async goToPreviousRound(page: Page): Promise<boolean> {
-    const button = await page.$(ROUND_PREV_SELECTOR);
-    if (!button) return false;
-
-    const hidden = await button.evaluate((el) => el.hasAttribute('hidden')).catch(() => true);
-    if (hidden) return false;
-
-    await this.clickNavButton(page, ROUND_PREV_SELECTOR);
-    return true;
   }
 
   private parseDateText(text: string): { date: string; time: string | null } | null {

@@ -7,6 +7,8 @@ import { PoolMatch } from './entities/pool-match.entity';
 import { CupMatch } from './entities/cup-match.entity';
 import { StandingsSyncLog, StandingsSyncStatus } from './entities/standings-sync-log.entity';
 import { Match } from '../matches/entities/match.entity';
+import { User, UserRole, UserStatus } from '../users/entities/user.entity';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { FffScraperService } from '../fff-sync/fff-scraper.service';
 import { normalize, teamNameMatches } from '../pdf-import/player-matching';
@@ -29,9 +31,12 @@ export class StandingsService {
     private readonly logsRepository: Repository<StandingsSyncLog>,
     @InjectRepository(Match)
     private readonly matchesRepository: Repository<Match>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
     private readonly settingsService: SettingsService,
     private readonly scraperService: FffScraperService,
     private readonly configService: ConfigService,
+    private readonly pushNotificationsService: PushNotificationsService,
   ) {}
 
   /** The standings table itself never carries a logo — it's scraped from epreuves.fff.fr's
@@ -61,30 +66,34 @@ export class StandingsService {
 
   /** Lets the frontend link a pool-match row straight to its own match-detail page — only
    * meaningful for our own matches (isUs), since a pool match between two other clubs has no
-   * fiche of ours to point to. PoolMatch and Match come from two different scrapes
-   * (district site vs epreuves.fff.fr) with unrelated fffMatchId schemes, so there's nothing
-   * to join on directly; matched instead by date + opponent name, the same fuzzy
-   * teamNameMatches() already used for guest/player matching (a pool match's team name
-   * sometimes carries a trailing squad number our own `opponent` field doesn't, or vice
-   * versa — an exact string match would miss those). */
+   * fiche of ours to point to. Joined on the FFF match id (both now come from epreuves.fff.fr);
+   * rows imported from the old district pages had another id scheme, so those still fall back
+   * to date + opponent name, with the same fuzzy teamNameMatches() used for guest/player
+   * matching (a trailing squad number may be on one side only). */
   async findAllPoolMatches(): Promise<(PoolMatch & { matchId: string | null })[]> {
     const matches = await this.poolMatchesRepository.find({ order: { date: 'ASC' } });
     return this.enrichWithMatchId(matches);
   }
 
-  private async enrichWithMatchId<T extends { date: string; homeTeam: string; awayTeam: string; isUs: boolean }>(
+  private async enrichWithMatchId<
+    T extends { fffMatchId: string | null; date: string; homeTeam: string; awayTeam: string; isUs: boolean },
+  >(
     rows: T[],
   ): Promise<(T & { matchId: string | null })[]> {
     if (!rows.some((r) => r.isUs)) return rows.map((r) => ({ ...r, matchId: null }));
 
     const clubName = this.configService.get<string>('CLUB_NAME', 'Ronchin');
     const normalizedClub = normalize(clubName);
-    const ourMatches = await this.matchesRepository.find({ select: { id: true, date: true, opponent: true } });
+    const ourMatches = await this.matchesRepository.find({
+      select: { id: true, fffMatchId: true, date: true, opponent: true },
+    });
 
     return rows.map((r) => {
       if (!r.isUs) return { ...r, matchId: null };
       const opponentName = normalize(r.homeTeam).includes(normalizedClub) ? r.awayTeam : r.homeTeam;
-      const match = ourMatches.find((m) => m.date === r.date && teamNameMatches(m.opponent, opponentName));
+      const match =
+        (r.fffMatchId ? ourMatches.find((m) => m.fffMatchId === r.fffMatchId) : undefined) ??
+        ourMatches.find((m) => m.date === r.date && teamNameMatches(m.opponent, opponentName));
       return { ...r, matchId: match?.id ?? null };
     });
   }
@@ -95,14 +104,17 @@ export class StandingsService {
    * used there. */
   async sync(triggeredBy: string | null = null): Promise<StandingsSyncLog> {
     const settings = await this.settingsService.get();
-    if (!settings.fffTeamUrl) {
+    if (!settings.fffChampionshipUrl && !settings.fffTeamUrl) {
       throw new BadRequestException(
-        "Aucune URL d'équipe FFF configurée — renseigne-la dans Paramètres avant de synchroniser.",
+        "Aucune URL FFF configurée — renseigne le lien du championnat dans Paramètres avant de synchroniser.",
       );
     }
 
     try {
-      const scraped = await this.scraperService.scrapeStandings(settings.fffTeamUrl);
+      // The championship page carries the standings itself; the team page is the older source.
+      const scraped = settings.fffChampionshipUrl
+        ? (await this.scraperService.scrapeChampionship(settings.fffChampionshipUrl)).standings
+        : await this.scraperService.scrapeStandings(settings.fffTeamUrl!);
       return this.applyScraped(scraped, triggeredBy);
     } catch (error) {
       return this.logError(error, triggeredBy);
@@ -228,6 +240,7 @@ export class StandingsService {
     // Same guard as applyScraped/applyScrapedPoolMatches above — don't wipe a real cup draw
     // over a transient empty scrape.
     if (scraped.length > 0) {
+      const previous = await this.cupMatchesRepository.find({ select: { round: true, isUs: true } });
       await this.cupMatchesRepository.clear();
       const entities = scraped.map((m) =>
         this.cupMatchesRepository.create({
@@ -236,10 +249,58 @@ export class StandingsService {
         }),
       );
       await this.cupMatchesRepository.save(entities);
+      await this.notifyNewCupRounds(previous, entities, normalizedClub).catch((error) =>
+        this.logger.error('Échec de la notification du nouveau tour de coupe', error),
+      );
     } else {
       this.logger.warn('Scraping du parcours en coupe : 0 match trouvé — table laissée inchangée');
     }
     return { importedCount: scraped.length };
+  }
+
+  /** Tells the squad as soon as one of our cup matches shows up in a round we didn't have yet
+   * (the draw for the next round is out). Skipped on the very first import, when every round
+   * would look new. */
+  private async notifyNewCupRounds(
+    previous: Pick<CupMatch, 'round' | 'isUs'>[],
+    current: CupMatch[],
+    normalizedClub: string,
+  ): Promise<void> {
+    if (previous.length === 0) return;
+    const knownRounds = new Set(previous.filter((m) => m.isUs).map((m) => m.round));
+    const drawn = current.filter((m) => m.isUs && !knownRounds.has(m.round));
+    if (drawn.length === 0) return;
+
+    const roster = await this.usersRepository.find({
+      select: { id: true },
+      where: [
+        { role: UserRole.PLAYER, status: UserStatus.ACTIVE },
+        { role: UserRole.COACH, status: UserStatus.ACTIVE },
+        { role: UserRole.SUPERADMIN, status: UserStatus.ACTIVE },
+        { isPlayingCoach: true, status: UserStatus.ACTIVE },
+      ],
+    });
+    const targets = [...new Set(roster.map((u) => u.id))];
+    if (targets.length === 0) return;
+
+    for (const cupMatch of drawn) {
+      const home = normalize(cupMatch.homeTeam).includes(normalizedClub);
+      const opponent = home ? cupMatch.awayTeam : cupMatch.homeTeam;
+      const day = new Date(`${cupMatch.date}T12:00:00Z`).toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        timeZone: 'Europe/Paris',
+      });
+      const ours = cupMatch.fffMatchId
+        ? await this.matchesRepository.findOne({ select: { id: true }, where: { fffMatchId: cupMatch.fffMatchId } })
+        : null;
+      await this.pushNotificationsService.sendToUsers(targets, {
+        title: `Coupe : ${cupMatch.round}`,
+        body: `Tirage connu : ${home ? 'on reçoit' : 'on va chez'} ${opponent} le ${day}.`,
+        url: ours ? `/matches/${ours.id}` : '/coupe',
+      });
+    }
   }
 
   /** A failure reported by the local sync script (see StandingsController.reportSyncFailure). */
