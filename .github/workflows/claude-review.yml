@@ -58,7 +58,13 @@ jobs:
                rôle, données d'un autre utilisateur exposées, entrée non validée.
             3. Données : requêtes TypeORM N+1 ou non bornées, migrations dangereuses,
                concurrence (deux écritures simultanées sur la même ressource).
-            4. Tests manquants pour une règle métier modifiée.
+            4. Tests manquants : pour chaque règle métier, endpoint ou parcours ajouté
+               ou modifié sans test qui le couvre, indique le niveau adapté (unitaire
+               `*.spec.ts` ou intégration `*.integration.spec.ts` dans apps/api/src,
+               logique web `*.test.ts` avec Vitest, parcours Cypress dans
+               `apps/web/cypress/e2e`), le fichier
+               où l'ajouter et les cas précis à tester (nominal, limite, refus).
+               Vérifie dans le code que le test n'existe pas déjà avant de le signaler.
             5. Textes affichés en français : fautes ou incohérences.
 
             Règles de sortie :
