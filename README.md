@@ -40,6 +40,13 @@ Sur chaque push/PR vers `main`, `.github/workflows/main.yml` orchestre :
 - **Load Testing** (Siege), **DAST** (OWASP ZAP), **E2E** (Cypress — smoke test golden path : connexion, accueil, navigation Entraînements/Matchs)
 - **Deploy Staging** — déploiement SSH sur le VPS (voir checklist ci-dessous)
 
+Hors de ce DAG, sur les pull requests :
+
+- **Relecture IA** (`claude-review.yml`) — Claude relit chaque PR (hors brouillons et forks) et commente le diff : bugs de logique, contrôle d'accès, requêtes, tests manquants.
+- **@claude** (`claude.yml`) — mentionner `@claude` dans une PR ou une issue pour poser une question ou demander une modification. Réservé au propriétaire et aux collaborateurs.
+
+Mise en place (une fois) : installer l'application GitHub [Claude](https://github.com/apps/claude) sur le repo, lancer `claude setup-token` en local, puis enregistrer le jeton dans le secret `CLAUDE_CODE_OAUTH_TOKEN` (`gh secret set CLAUDE_CODE_OAUTH_TOKEN`). La consommation est décomptée de l'abonnement Claude, sans clé API facturée à l'usage.
+
 ### Exceptions de sécurité documentées
 
 - **~48 CVE Debian** dans l'image `api` — dépendances (perl, glib, ncurses, util-linux, python3, curl, libtiff, libldap, libssh2...) que le paquet `.deb` de Google Chrome installe lui-même via ses propres `Recommends:`, indépendamment de ce que le Dockerfile installe explicitement. Aucune n'est un chemin d'attaque atteignable : le scraper FFF ne visite qu'un seul domaine fixe et de confiance, en headless pur, sans jamais traiter de fichier, de connexion LDAP/SSH ni d'image TIFF fournis par un tiers. Documentées et ignorées dans `.trivyignore`.

@@ -1,0 +1,81 @@
+name: Relecture IA des PR (Claude)
+
+# Relit automatiquement chaque pull request et laisse des commentaires sur le diff.
+# Authentification : secret CLAUDE_CODE_OAUTH_TOKEN (abonnement Claude, généré par
+# `claude setup-token`) + application GitHub Claude installée sur le repo.
+# L'action exige que ce fichier soit identique à celui de `main` : la PR qui
+# l'introduit ne sera donc pas relue, les suivantes oui.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# Un nouveau push sur la PR annule la relecture en cours : une seule relecture
+# utile par état de la PR, et pas de quota d'abonnement gaspillé.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Pas de brouillon, pas de bot, et pas de PR venant d'un fork : le repo est
+    # public et les forks n'ont de toute façon pas accès aux secrets.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.sender.type != 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Relecture par Claude
+        uses: anthropics/claude-code-action@4411a9e9b0283becf4b924f7bce360fd7756c78c # v1.0.290
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            Tu relis une pull request de Ronchin US App : monorepo npm workspaces,
+            `apps/api` (NestJS + TypeORM + PostgreSQL) et `apps/web` (React 19 + Vite, PWA).
+            Le README décrit l'architecture et la CI. Le lint, le typecheck, les tests,
+            Semgrep, l'audit npm, Trivy, ZAP et Cypress tournent déjà dans la CI :
+            ne refais pas leur travail, concentre-toi sur ce qu'ils ne voient pas.
+
+            Cherche en priorité, par ordre d'importance :
+            1. Bugs de logique et règles métier fausses (présences, matchs, stats, badges,
+               rôles, synchro FFF), cas limites oubliés (ex æquo, valeurs vides, fuseau
+               horaire Europe/Paris).
+            2. Sécurité : contrôle d'accès manquant sur un endpoint ou une action selon le
+               rôle, données d'un autre utilisateur exposées, entrée non validée.
+            3. Données : requêtes TypeORM N+1 ou non bornées, migrations dangereuses,
+               concurrence (deux écritures simultanées sur la même ressource).
+            4. Tests manquants : pour chaque règle métier, endpoint ou parcours ajouté
+               ou modifié sans test qui le couvre, indique le niveau adapté (unitaire
+               `*.spec.ts` ou intégration `*.integration.spec.ts` dans apps/api/src,
+               logique web `*.test.ts` avec Vitest, parcours Cypress dans
+               `apps/web/cypress/e2e`), le fichier
+               où l'ajouter et les cas précis à tester (nominal, limite, refus).
+               Vérifie dans le code que le test n'existe pas déjà avant de le signaler.
+            5. Textes affichés en français : fautes ou incohérences.
+
+            Règles de sortie :
+            - Un commentaire inline (mcp__github_inline_comment__create_inline_comment)
+              par problème réel, sur la ligne concernée, avec le scénario concret qui
+              casse et une correction proposée.
+            - Pas de remarques de style ou de goût, pas de compliments, pas de
+              suppositions non vérifiées dans le code.
+            - Termine par un seul commentaire de synthèse court (`gh pr comment`) :
+              verdict en une ligne puis la liste des points bloquants. S'il n'y a rien
+              de notable, dis-le en une ligne.
+            - Écris en français.
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
