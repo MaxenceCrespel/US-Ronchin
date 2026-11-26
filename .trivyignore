@@ -288,3 +288,13 @@ CVE-2026-109908
 # OpenSSL and the API serves plain HTTP behind the reverse proxy. Revisit once Debian ships a
 # fixed openssl.
 CVE-2026-107494
+
+# CVE-2026-124851 (libzstd1 1.5.4+dfsg2-5, crafted zstd frames leaking up to 64 KiB of an
+# earlier decompression's buffer into the output) — open for bookworm with no fixed version;
+# only trixie-security has 1.5.7+dfsg-1+deb13u1 (DSA-6657-1). Exploiting it needs an attacker
+# who can both submit zstd-compressed data to something decompressing it with the system
+# libzstd and read the result back; nothing in the API does: Node bundles its own zstd, the API
+# accepts no compressed uploads, and headless Chrome (bundling its own zstd too) only ever
+# visits the trusted FFF domain. Revisit once Debian ships a fixed libzstd for bookworm, or
+# when the runtime image moves to trixie.
+CVE-2026-124851
